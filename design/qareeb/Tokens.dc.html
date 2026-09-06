@@ -1,0 +1,174 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <title>Design tokens</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600&amp;family=Noto+Sans+Hebrew:wght@400;500;600&amp;family=Noto+Sans+Arabic:wght@400;500;600&amp;display=swap">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; background: #FAF7F0; color: #193E2D;
+      font-family: "Noto Sans", "Noto Sans Hebrew", "Noto Sans Arabic", "Segoe UI", Arial, sans-serif;
+      font-size: 16px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+    [lang="he"], [lang="he"] * { font-family: "Noto Sans Hebrew", "Noto Sans", "Segoe UI", Arial, sans-serif; letter-spacing: 0; }
+    [lang="ar"], [lang="ar"] * { font-family: "Noto Sans Arabic", "Noto Sans", "Segoe UI", Arial, sans-serif; letter-spacing: 0; }
+    a { color: #20583B; } a:hover { color: #193E2D; }
+    h1, h2, h3, p { margin: 0; text-wrap: pretty; }
+    button { font: inherit; color: inherit; cursor: pointer; }
+    input, textarea, select { font: inherit; color: inherit; }
+    .h-page { font-size: 28px; line-height: 1.2; font-weight: 600; }
+    .h-desk { font-size: 36px; line-height: 1.15; font-weight: 600; }
+    .h-sec { font-size: 20px; line-height: 1.3; font-weight: 600; }
+    .small { font-size: 14px; line-height: 1.45; color: #626C61; }
+    .badge { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; line-height: 1.2;
+      padding: 4px 8px; border-radius: 6px; white-space: nowrap; }
+    .badge-open { background: #EDF2E4; color: #20583B; }
+    .badge-closed { background: #F1F0EA; color: #626C61; }
+    .badge-warm { background: #FBE5D5; color: #924220; }
+    .badge-err { background: #FDEDE9; color: #A3342B; }
+    .badge-placed { background: #FBE5D5; color: #924220; }
+    .card { background: #FFFEFA; border: 1px solid #E4E7DC; border-radius: 16px; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px;
+      padding: 0 20px; border-radius: 12px; font-weight: 600; font-size: 16px; border: 1px solid transparent; }
+    .btn-primary { background: #20583B; color: #FFFEFA; }
+    .btn-secondary { background: #FFFEFA; color: #193E2D; border-color: #E4E7DC; }
+    .btn-destructive { background: #FFFEFA; color: #A3342B; border-color: #E9C7C2; }
+    .btn-sm { min-height: 40px; padding: 0 14px; font-size: 14px; }
+    .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px;
+      border-radius: 12px; border: 1px solid #E4E7DC; background: #FFFEFA; }
+    .seg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 4px;
+      background: #FFFEFA; border: 1px solid #E4E7DC; border-radius: 14px; }
+    .seg button { min-height: 44px; border-radius: 10px; border: 0; background: transparent; font-weight: 500;
+      color: #626C61; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+    .seg button[aria-pressed="true"] { background: #EDF2E4; color: #20583B; font-weight: 600;
+      box-shadow: inset 0 0 0 1px #CFDDC2; }
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .label { font-size: 14px; font-weight: 500; color: #193E2D; }
+    .label .opt { font-weight: 400; color: #626C61; }
+    .input { min-height: 48px; padding: 12px 14px; border-radius: 12px; border: 1px solid #E4E7DC;
+      background: #FFFEFA; font-size: 16px; line-height: 1.5; width: 100%; }
+    .input.ph { color: #8B948A; }
+    .textarea { min-height: 110px; align-items: flex-start; }
+    .hint { font-size: 14px; color: #626C61; }
+    .divider { height: 1px; background: #E4E7DC; }
+    .num { font-variant-numeric: tabular-nums; }
+    .img-fallback { background: #EDF2E4; display: flex; align-items: center; justify-content: center; color: #8DA88F; }
+    .focus-ring { outline: 2px solid #20583B; outline-offset: 2px; }
+</style>
+</helmet>
+
+<div lang="en" dir="ltr" style="width: 880px; min-height: 844px; background: #FAF7F0; padding: 32px; display: flex; flex-direction: column; gap: 28px">
+  <div style="display: flex; align-items: center; justify-content: space-between">
+    <div style="display: flex; flex-direction: column; gap: 4px"><h1 class="h-desk" style="font-size: 32px">Qareeb design tokens</h1><p class="small">Light theme baseline. Colors, type, spacing, radii and semantic states defined once and shared by every screen.</p></div>
+    
+  <div style="display: flex; align-items: center; gap: 8px" role="img" aria-label="Qareeb">
+    <div style="width: 32px; height: 32px; border-radius: 10px; background: #20583B; color: #FFFEFA; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M5 19c0-8 5-13 14-13-1 9-6 13-14 13z"/><path d="M5 19c3-4 6-7 10-9"/></svg></div>
+    <span dir="ltr" style="font-size: 22px; font-weight: 600; letter-spacing: -0.01em; color: #193E2D; line-height: 1">qareeb</span>
+  </div>
+  </div>
+  <section style="display: flex; flex-direction: column; gap: 12px">
+    <h2 class="h-sec">Color</h2>
+    <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px">
+      
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div style="height: 56px; border-radius: 12px; background: #FAF7F0; border: 1px solid #E4E7DC; display: flex; align-items: flex-end; padding: 8px; color: #193E2D; font-size: 12px; font-weight: 500"><bdi dir="ltr">#FAF7F0</bdi></div>
+      <span class="small" style="font-size: 13px">Page background</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div style="height: 56px; border-radius: 12px; background: #FFFEFA; border: 1px solid #E4E7DC; display: flex; align-items: flex-end; padding: 8px; color: #193E2D; font-size: 12px; font-weight: 500"><bdi dir="ltr">#FFFEFA</bdi></div>
+      <span class="small" style="font-size: 13px">Surface</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div style="height: 56px; border-radius: 12px; background: #193E2D; border: 1px solid #E4E7DC; display: flex; align-items: flex-end; padding: 8px; color: #FFFEFA; font-size: 12px; font-weight: 500"><bdi dir="ltr">#193E2D</bdi></div>
+      <span class="small" style="font-size: 13px">Primary text</span>
+    </div>
+      
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div style="height: 56px; border-radius: 12px; background: #626C61; border: 1px solid #E4E7DC; display: flex; align-items: flex-end; padding: 8px; color: #FFFEFA; font-size: 12px; font-weight: 500"><bdi dir="ltr">#626C61</bdi></div>
+      <span class="small" style="font-size: 13px">Secondary text</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div style="height: 56px; border-radius: 12px; background: #20583B; border: 1px solid #E4E7DC; display: flex; align-items: flex-end; padding: 8px; color: #FFFEFA; font-size: 12px; font-weight: 500"><bdi dir="ltr">#20583B</bdi></div>
+      <span class="small" style="font-size: 13px">Primary action</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div style="height: 56px; border-radius: 12px; background: #EDF2E4; border: 1px solid #E4E7DC; display: flex; align-items: flex-end; padding: 8px; color: #193E2D; font-size: 12px; font-weight: 500"><bdi dir="ltr">#EDF2E4</bdi></div>
+      <span class="small" style="font-size: 13px">Soft selected</span>
+    </div>
+      
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div style="height: 56px; border-radius: 12px; background: #E4E7DC; border: 1px solid #E4E7DC; display: flex; align-items: flex-end; padding: 8px; color: #193E2D; font-size: 12px; font-weight: 500"><bdi dir="ltr">#E4E7DC</bdi></div>
+      <span class="small" style="font-size: 13px">Border / divider</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div style="height: 56px; border-radius: 12px; background: #FBE5D5; border: 1px solid #E4E7DC; display: flex; align-items: flex-end; padding: 8px; color: #924220; font-size: 12px; font-weight: 500"><bdi dir="ltr">#FBE5D5</bdi></div>
+      <span class="small" style="font-size: 13px">Warm accent bg</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div style="height: 56px; border-radius: 12px; background: #924220; border: 1px solid #E4E7DC; display: flex; align-items: flex-end; padding: 8px; color: #FFFEFA; font-size: 12px; font-weight: 500"><bdi dir="ltr">#924220</bdi></div>
+      <span class="small" style="font-size: 13px">Warm accent text</span>
+    </div>
+      
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div style="height: 56px; border-radius: 12px; background: #FDEDE9; border: 1px solid #E4E7DC; display: flex; align-items: flex-end; padding: 8px; color: #A3342B; font-size: 12px; font-weight: 500"><bdi dir="ltr">#FDEDE9</bdi></div>
+      <span class="small" style="font-size: 13px">Error bg</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div style="height: 56px; border-radius: 12px; background: #A3342B; border: 1px solid #E4E7DC; display: flex; align-items: flex-end; padding: 8px; color: #FFFEFA; font-size: 12px; font-weight: 500"><bdi dir="ltr">#A3342B</bdi></div>
+      <span class="small" style="font-size: 13px">Error text</span>
+    </div>
+    </div>
+  </section>
+  <section style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px">
+    <div style="display: flex; flex-direction: column; gap: 12px">
+      <h2 class="h-sec">Type · Noto Sans / Hebrew / Arabic</h2>
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <div><span class="h-desk">Desktop headline 36</span></div>
+        <div><span class="h-page">Mobile headline 28</span></div>
+        <div><span class="h-sec">Section heading 20</span></div>
+        <div>Body and inputs 16 / 1.5 — <span lang="he">דברים טובים. קרוב לבית.</span> <span lang="ar">أشياء طيّبة.</span></div>
+        <div class="small">Secondary copy 14</div>
+        <div><span class="badge badge-open">Badge 12</span></div>
+        <div style="font-size: 22px; font-weight: 600" class="num">Total <bdi dir="ltr" class="num">₪1,234.50</bdi> · <bdi dir="ltr">052-000-0000</bdi></div>
+      </div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 12px">
+      <h2 class="h-sec">Controls &amp; states</h2>
+      <div style="display: flex; flex-wrap: wrap; gap: 10px">
+        <button class="btn btn-primary">Primary 48</button>
+        <button class="btn btn-secondary">Secondary</button>
+        <button class="btn btn-destructive">Destructive</button>
+        <button class="btn btn-secondary" disabled style="color: #8B948A">Disabled</button>
+        <button class="icon-btn focus-ring" aria-label="Focused icon button"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M12 20.5s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 8a4.3 4.3 0 0 1 7.5 2.5c0 5.4-7.5 10-7.5 10z" /></svg></button>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px">
+        <span class="badge badge-placed">Placed</span><span class="badge badge-open"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="m5 12 5 5 9-10"/></svg> Accepted</span><span class="badge badge-err"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M6 6l12 12M18 6 6 18"/></svg> Rejected</span>
+        <span class="badge badge-warm">Pending approval</span><span class="badge badge-closed">Closed</span><span class="badge badge-err">Suspended</span>
+      </div>
+      <div class="seg" style="max-width: 320px"><button aria-pressed="true">Selected</button><button aria-pressed="false">Option</button></div>
+      <div class="field" style="max-width: 320px"><label class="label" for="tk">Labeled input <span class="opt">(optional)</span></label><div class="input ph" id="tk">Placeholder never the only label</div></div>
+      <div class="field" style="max-width: 320px"><label class="label" for="tk2" style="color: #A3342B">Contact phone</label><div class="input" id="tk2" style="border-color: #A3342B"><bdi dir="ltr">05</bdi></div><span class="hint" style="color: #A3342B">Enter a valid Israeli mobile number.</span></div>
+    </div>
+  </section>
+  <section style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px">
+    <div style="display: flex; flex-direction: column; gap: 12px">
+      <h2 class="h-sec">Spacing · 4px system</h2>
+      <div style="display: flex; align-items: flex-end; gap: 12px"><div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><div style="width: 4px; height: 4px; background: #20583B; border-radius: 2px"></div><span class="small" style="font-size: 12px">4</span></div><div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><div style="width: 8px; height: 8px; background: #20583B; border-radius: 2px"></div><span class="small" style="font-size: 12px">8</span></div><div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><div style="width: 12px; height: 12px; background: #20583B; border-radius: 2px"></div><span class="small" style="font-size: 12px">12</span></div><div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><div style="width: 16px; height: 16px; background: #20583B; border-radius: 2px"></div><span class="small" style="font-size: 12px">16</span></div><div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><div style="width: 20px; height: 20px; background: #20583B; border-radius: 2px"></div><span class="small" style="font-size: 12px">20</span></div><div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><div style="width: 24px; height: 24px; background: #20583B; border-radius: 2px"></div><span class="small" style="font-size: 12px">24</span></div><div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><div style="width: 32px; height: 32px; background: #20583B; border-radius: 2px"></div><span class="small" style="font-size: 12px">32</span></div></div>
+      <p class="hint">Gutters: 20px mobile (16 on very narrow), 32px desktop.</p>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 12px">
+      <h2 class="h-sec">Radii</h2>
+      <div style="display: flex; align-items: flex-end; gap: 12px"><div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><div style="width: 56px; height: 56px; background: #FFFEFA; border: 1px solid #E4E7DC; border-radius: 16px"></div><span class="small" style="font-size: 12px">Card 16</span></div><div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><div style="width: 56px; height: 56px; background: #FFFEFA; border: 1px solid #E4E7DC; border-radius: 12px"></div><span class="small" style="font-size: 12px">Input / button 12</span></div><div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><div style="width: 56px; height: 56px; background: #FFFEFA; border: 1px solid #E4E7DC; border-radius: 14px"></div><span class="small" style="font-size: 12px">Segmented 14</span></div><div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><div style="width: 56px; height: 56px; background: #FFFEFA; border: 1px solid #E4E7DC; border-radius: 6px"></div><span class="small" style="font-size: 12px">Badge 6</span></div></div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":880,"height":1100}}'>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>

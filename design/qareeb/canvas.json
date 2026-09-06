@@ -1,0 +1,88 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "title": "Discovery · EN",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "DiscoveryHebrew.dc.html",
+      "title": "Discovery · HE (RTL)",
+      "x": 480,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "DiscoveryArabic.dc.html",
+      "title": "Discovery · AR (RTL)",
+      "x": 960,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "BusinessDetail.dc.html",
+      "title": "Business detail",
+      "x": 1440,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "ProductOptions.dc.html",
+      "title": "Product options sheet",
+      "x": 1920,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Tokens.dc.html",
+      "title": "Design tokens",
+      "x": 2400,
+      "y": 0,
+      "w": 880,
+      "h": 1100
+    },
+    {
+      "file": "Checkout.dc.html",
+      "title": "Checkout · village address",
+      "x": 0,
+      "y": 980,
+      "w": 390,
+      "h": 1900
+    },
+    {
+      "file": "IncomingOrders.dc.html",
+      "title": "Business dashboard · incoming orders",
+      "x": 480,
+      "y": 980,
+      "w": 1440,
+      "h": 900
+    },
+    {
+      "file": "AdminApprovals.dc.html",
+      "title": "Admin · pending approvals",
+      "x": 480,
+      "y": 2000,
+      "w": 1440,
+      "h": 900
+    }
+  ],
+  "annotations": [
+    {
+      "id": "notes",
+      "x": 2400,
+      "y": 980,
+      "w": 420,
+      "text": "Qareeb visual baseline, drafted from the build prompt.\n\nAll names, phone numbers, prices and orders are sample data for the mockup only.\nBusiness photos are shown as the quiet leaf fallback until owners upload imagery.\nStatic mockups: controls illustrate states, they are not wired.\nFonts: Noto Sans / Noto Sans Hebrew / Noto Sans Arabic; PNG/PDF export falls back to system sans."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}
