@@ -57,7 +57,7 @@ const BASE_CSS = `
     .hint { font-size: 14px; color: ${T.muted}; }
     .divider { height: 1px; background: ${T.border}; }
     .num { font-variant-numeric: tabular-nums; }
-    .img-fallback { background: ${T.soft}; display: flex; align-items: center; justify-content: center; color: #8DA88F; }
+    .img-fallback { background: ${T.soft}; display: flex; align-items: center; justify-content: center; color: #626C61; }
     .focus-ring { outline: 2px solid ${T.primary}; outline-offset: 2px; }
 `;
 
@@ -145,7 +145,7 @@ const S = {
       { name: 'Beit Jann Bakery & Sweets', cat: 'Bakery · Restaurant' },
       { name: 'Dar Yousef Kitchen', cat: 'Home cooking · Restaurant' },
     ],
-    favLabel: 'Add to favorites',
+    favLabel: 'Add to favorites', navLabel: 'Main',
   },
   he: {
     lang: 'he', dir: 'rtl', langChip: 'עב', brandLabel: 'קריב, מרקטפלייס שכונתי',
@@ -155,29 +155,29 @@ const S = {
     around: 'בסביבה שלך', open: 'פתוח', closed: 'סגור · נפתח ב־17:00',
     fee: 'משלוח ₪10', min: 'מינימום ₪60', pickupOk: 'איסוף זמין', fee2: 'משלוח ₪8', min2: 'מינימום ₪40',
     fee3: 'משלוח ₪12', min3: 'מינימום ₪80',
-    nav: ['גלו', 'מועדפים', 'עגלה', 'חשבון'], cartItems: '2 פריטים', viewCart: 'לעגלה',
+    nav: ['גילוי', 'מועדפים', 'עגלה', 'חשבון'], cartItems: '2 פריטים', viewCart: 'לעגלה',
     biz: [
       { name: 'גריל אל־כרמל', cat: 'גריל · מסעדה' },
-      { name: 'מאפיית בית ג׳ן וממתקים', cat: 'מאפייה · מסעדה' },
+      { name: 'מאפייה וממתקים בית ג׳ן', cat: 'מאפייה · מסעדה' },
       { name: 'המטבח של דאר יוסף', cat: 'אוכל ביתי · מסעדה' },
     ],
-    favLabel: 'הוספה למועדפים',
+    favLabel: 'הוספה למועדפים', navLabel: 'ניווט ראשי',
   },
   ar: {
     lang: 'ar', dir: 'rtl', langChip: 'ع', brandLabel: 'قريب، سوق الحارة',
     deliveringTo: 'التوصيل إلى بيت جن', headline: 'أشياء طيّبة. قريبة من البيت.',
     sub: 'وجبات وحاجيات يومية من حارتك.',
     pickup: 'استلام', delivery: 'توصيل', restaurants: 'مطاعم', supermarkets: 'سوبرماركت',
-    around: 'حول حارتك', open: 'مفتوح', closed: 'مغلق · يفتح 17:00',
+    around: 'في حارتك', open: 'مفتوح', closed: 'مغلق · يفتح 17:00',
     fee: 'التوصيل ₪10', min: 'الحد الأدنى ₪60', pickupOk: 'الاستلام متاح', fee2: 'التوصيل ₪8', min2: 'الحد الأدنى ₪40',
     fee3: 'التوصيل ₪12', min3: 'الحد الأدنى ₪80',
-    nav: ['استكشف', 'المفضلة', 'السلة', 'حسابي'], cartItems: 'عنصران', viewCart: 'عرض السلة',
+    nav: ['استكشف', 'المفضلة', 'السلة', 'حسابي'], cartItems: 'صنفان', viewCart: 'عرض السلة',
     biz: [
       { name: 'مشاوي الكرمل', cat: 'مشاوي · مطعم' },
-      { name: 'مخبز بيت جن والحلويات', cat: 'مخبز · مطعم' },
+      { name: 'مخبز وحلويات بيت جن', cat: 'مخبز · مطعم' },
       { name: 'مطبخ دار يوسف', cat: 'طبخ بيتي · مطعم' },
     ],
-    favLabel: 'أضف إلى المفضلة',
+    favLabel: 'أضف إلى المفضلة', navLabel: 'التنقل الرئيسي',
   },
 };
 
@@ -245,7 +245,7 @@ const discovery = (L) => {
         <span style="display: inline-flex; align-items: center; gap: 12px"><span>${money('₪74')}</span><span style="font-weight: 500">${L.viewCart}</span>${I.chevronEnd(18)}</span>
       </button>
     </div>
-    <nav aria-label="Main" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 6px 12px 22px; background: ${T.surface}; border-block-start: 1px solid ${T.border}">
+    <nav aria-label="${L.navLabel}" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 6px 12px 22px; background: ${T.surface}; border-block-start: 1px solid ${T.border}">
       ${navItem(L.nav[0], I.compass(22), true)}${navItem(L.nav[1], I.heart(22), false)}
       <span style="position: relative; display: contents">${navItem(L.nav[2], I.cart(22), false)}</span>
       ${navItem(L.nav[3], I.user(22), false)}
@@ -748,7 +748,7 @@ const canvas = {
     { file: 'Tokens.dc.html', title: 'Design tokens', x: 2400, y: 0, w: 880, h: 1100 },
     { file: 'Checkout.dc.html', title: 'Checkout · village address', x: 0, y: 980, w: 390, h: 1900 },
     { file: 'IncomingOrders.dc.html', title: 'Business dashboard · incoming orders', x: 480, y: 980, w: 1440, h: 900 },
-    { file: 'AdminApprovals.dc.html', title: 'Admin · pending approvals', x: 480, y: 2000, w: 1440, h: 900 },
+    { file: 'AdminApprovals.dc.html', title: 'Admin · pending approvals', x: 480, y: 2040, w: 1440, h: 900 },
   ],
   annotations: [
     { id: 'notes', x: 2400, y: 980, w: 420, text: 'Qareeb visual baseline, drafted from the build prompt.\n\nAll names, phone numbers, prices and orders are sample data for the mockup only.\nBusiness photos are shown as the quiet leaf fallback until owners upload imagery.\nStatic mockups: controls illustrate states, they are not wired.\nFonts: Noto Sans / Noto Sans Hebrew / Noto Sans Arabic; PNG/PDF export falls back to system sans.' },
