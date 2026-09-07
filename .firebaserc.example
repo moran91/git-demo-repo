@@ -1,0 +1,7 @@
+{
+  "projects": {
+    "default": "qareeb-dev",
+    "dev": "qareeb-dev",
+    "prod": "qareeb-prod"
+  }
+}

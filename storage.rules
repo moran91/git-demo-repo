@@ -1,0 +1,39 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() { return request.auth != null; }
+    function notSuspended() { return request.auth.token.suspended != true; }
+    function membership(businessId) {
+      return firestore.get(/databases/(default)/documents/memberships/$(request.auth.uid + '_' + businessId)).data;
+    }
+    function isCatalogEditor(businessId, branchId) {
+      let m = membership(businessId);
+      return m.active == true && (m.role == 'owner' || m.role == 'manager') && (m.allBranches == true || branchId in m.branchIds);
+    }
+    function isOwnerOrManager(businessId) {
+      let m = membership(businessId);
+      return m.active == true && (m.role == 'owner' || m.role == 'manager');
+    }
+    function validImage() {
+      return request.resource.contentType.matches('image/(jpeg|png|webp)') && request.resource.size <= 5 * 1024 * 1024;
+    }
+
+    // Business logo/cover: businesses/{businessId}/{logo|cover}-{anything}
+    match /businesses/{businessId}/{file} {
+      allow read: if true; // public branding assets (only referenced from approved projections)
+      allow write: if signedIn() && notSuspended() && isOwnerOrManager(businessId) && validImage()
+        && (file.matches('logo.*') || file.matches('cover.*'));
+      allow delete: if signedIn() && notSuspended() && isOwnerOrManager(businessId);
+    }
+    // Product images: businesses/{businessId}/branches/{branchId}/products/{productId}/{file}
+    match /businesses/{businessId}/branches/{branchId}/products/{productId}/{file} {
+      allow read: if true;
+      allow write: if signedIn() && notSuspended() && isCatalogEditor(businessId, branchId) && validImage();
+      allow delete: if signedIn() && notSuspended() && isCatalogEditor(businessId, branchId);
+    }
+    // Everything else (including any private receipt data) is server-only.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

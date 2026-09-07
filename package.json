@@ -1,0 +1,34 @@
+{
+  "name": "qareeb-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Qareeb - neighborhood marketplace for restaurants and supermarkets in Israel (working brand).",
+  "workspaces": [
+    "packages/shared",
+    "functions",
+    "apps/web",
+    "scripts",
+    "tests/rules",
+    "e2e"
+  ],
+  "engines": { "node": ">=22 <23" },
+  "scripts": {
+    "build": "npm run build -w packages/shared && npm run build -w functions && npm run build -w apps/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test -w packages/shared && npm run test -w functions",
+    "test:rules": "npm run test -w tests/rules",
+    "test:e2e": "npm run test -w e2e",
+    "emulators": "firebase emulators:start --only auth,firestore,functions,storage,hosting --import ./.emulator-data --export-on-exit",
+    "emulators:ci": "firebase emulators:start --only auth,firestore,functions,storage",
+    "seed": "npm run seed -w scripts",
+    "dev": "npm run dev -w apps/web",
+    "deploy": "firebase deploy",
+    "deploy:hosting": "firebase deploy --only hosting",
+    "deploy:functions": "firebase deploy --only functions",
+    "deploy:rules": "firebase deploy --only firestore:rules,firestore:indexes,storage"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "qareeb-scripts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "seed": "node --experimental-strip-types src/seed.ts",
+    "bootstrap-admin": "node --experimental-strip-types src/bootstrap-admin.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "firebase-admin": "^14.3.0"
+  },
+  "devDependencies": {
+    "@qareeb/shared": "*",
+    "@types/node": "^26.4.1",
+    "typescript": "^5.9.0"
+  }
+}

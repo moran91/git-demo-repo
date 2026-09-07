@@ -1,0 +1,30 @@
+{
+  "name": "qareeb-functions",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "engines": { "node": "22" },
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "logs": "firebase functions:log"
+  },
+  "dependencies": {
+    "firebase-admin": "^14.3.0",
+    "firebase-functions": "^7.3.2",
+    "sharp": "^0.34.5",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@qareeb/shared": "*",
+    "firebase": "^12.18.0",
+    "@types/node": "^26.4.1",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.0"
+  }
+}

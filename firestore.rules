@@ -1,0 +1,179 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- helpers ----------
+    function signedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+    function isAdmin() { return signedIn() && request.auth.token.admin == true; }
+    function userDoc() { return get(/databases/$(database)/documents/users/$(uid())).data; }
+    function activeUser() {
+      return signedIn() && request.auth.token.suspended != true
+        && exists(/databases/$(database)/documents/users/$(uid()))
+        && userDoc().suspended != true;
+    }
+    function membershipDoc(businessId) {
+      return get(/databases/$(database)/documents/memberships/$(uid() + '_' + businessId)).data;
+    }
+    function hasMembership(businessId) {
+      return exists(/databases/$(database)/documents/memberships/$(uid() + '_' + businessId));
+    }
+    function isMember(businessId) {
+      return activeUser() && hasMembership(businessId) && membershipDoc(businessId).active == true;
+    }
+    function isOwner(businessId) {
+      return isMember(businessId) && membershipDoc(businessId).role == 'owner';
+    }
+    function coversBranch(businessId, branchId) {
+      let m = membershipDoc(businessId);
+      return isMember(businessId) && (m.allBranches == true || branchId in m.branchIds);
+    }
+    function canSeeFinancials(businessId) {
+      // Staff do not see financial reports: cash records and loyalty ledgers are owner/manager only.
+      return isMember(businessId) && membershipDoc(businessId).role in ['owner', 'manager'];
+    }
+
+    // ---------- public projections (server-written) ----------
+    match /publicBusinesses/{businessId} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /publicBranches/{branchId} {
+      allow read: if true;
+      allow write: if false;
+      match /categories/{categoryId} { allow read: if true; allow write: if false; }
+      match /products/{productId} { allow read: if true; allow write: if false; }
+    }
+    match /cities/{cityId} { allow read: if true; allow write: if false; }
+    match /config/platform { allow read: if true; allow write: if false; }
+
+    // ---------- users (private) ----------
+    match /users/{userId} {
+      allow read: if signedIn() && (uid() == userId || isAdmin());
+      allow write: if false; // profile mutations go through callables (roles, phoneVerified, suspension are server-only)
+
+      match /addresses/{addressId} {
+        allow read: if activeUser() && uid() == userId;
+        allow write: if false;
+      }
+      match /favorites/{favId} {
+        allow read: if activeUser() && uid() == userId;
+        allow create: if activeUser() && uid() == userId
+          && request.resource.data.keys().hasOnly(['id', 'kind', 'businessId', 'branchId', 'productId', 'createdAt'])
+          && request.resource.data.kind in ['business', 'product']
+          && request.resource.data.businessId is string
+          && request.resource.data.createdAt is string;
+        allow delete: if activeUser() && uid() == userId;
+        allow update: if false;
+      }
+      match /notifications/{notificationId} {
+        allow read: if activeUser() && uid() == userId;
+        allow update: if activeUser() && uid() == userId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+        allow delete: if activeUser() && uid() == userId;
+        allow create: if false;
+      }
+      match /deviceTokens/{token} {
+        allow read: if activeUser() && uid() == userId;
+        allow create, update: if activeUser() && uid() == userId
+          && request.resource.data.keys().hasOnly(['token', 'uid', 'platform', 'locale', 'createdAt', 'lastSeenAt', 'invalid'])
+          && request.resource.data.uid == userId
+          && request.resource.data.token == token
+          && request.resource.data.platform in ['web', 'android', 'ios']
+          && request.resource.data.invalid is bool;
+        allow delete: if activeUser() && uid() == userId;
+      }
+      match /loyalty/{doc=**} { allow read, write: if false; }
+    }
+
+    // ---------- memberships ----------
+    match /memberships/{membershipId} {
+      allow read: if activeUser() && (resource.data.uid == uid() || isAdmin() || isOwner(resource.data.businessId));
+      allow write: if false;
+    }
+    match /invitations/{id} { allow read, write: if false; }
+
+    // ---------- businesses (private, members only) ----------
+    match /businesses/{businessId} {
+      allow read: if isAdmin() || isMember(businessId);
+      allow write: if false;
+
+      match /approvalHistory/{id} {
+        allow read: if isAdmin() || isOwner(businessId);
+        allow write: if false;
+      }
+      match /branches/{branchId} {
+        allow read: if isAdmin() || coversBranch(businessId, branchId);
+        allow write: if false;
+        match /categories/{categoryId} {
+          allow read: if isAdmin() || coversBranch(businessId, branchId);
+          allow write: if false;
+        }
+        match /products/{productId} {
+          allow read: if isAdmin() || coversBranch(businessId, branchId);
+          allow write: if false;
+        }
+      }
+    }
+
+    // ---------- orders ----------
+    match /orders/{orderId} {
+      allow read: if isAdmin()
+        || (activeUser() && resource.data.customer.uid == uid())
+        || coversBranch(resource.data.businessId, resource.data.branchId);
+      allow write: if false;
+      match /events/{eventId} {
+        allow read: if isAdmin()
+          || (activeUser() && get(/databases/$(database)/documents/orders/$(orderId)).data.customer.uid == uid())
+          || coversBranch(get(/databases/$(database)/documents/orders/$(orderId)).data.businessId, get(/databases/$(database)/documents/orders/$(orderId)).data.branchId);
+        allow write: if false;
+      }
+    }
+    match /orderRefs/{id} { allow read, write: if false; }
+
+    match /cashRecords/{id} {
+      allow read: if isAdmin() || (canSeeFinancials(resource.data.businessId) && coversBranch(resource.data.businessId, resource.data.branchId));
+      allow write: if false;
+    }
+
+    // ---------- loyalty ----------
+    match /loyaltyAccounts/{id} {
+      allow read: if isAdmin() || (activeUser() && resource.data.uid == uid()) || canSeeFinancials(resource.data.businessId);
+      allow write: if false;
+    }
+    match /loyaltyLedger/{id} {
+      allow read: if isAdmin() || (activeUser() && resource.data.uid == uid()) || canSeeFinancials(resource.data.businessId);
+      allow write: if false;
+    }
+
+    // ---------- printing ----------
+    match /printers/{id} {
+      allow read: if isAdmin() || coversBranch(resource.data.businessId, resource.data.branchId);
+      allow write: if false;
+    }
+    match /printStations/{id} {
+      allow read: if isAdmin() || coversBranch(resource.data.businessId, resource.data.branchId);
+      allow write: if false;
+    }
+    match /printJobs/{jobId} {
+      allow read: if isAdmin() || coversBranch(resource.data.businessId, resource.data.branchId);
+      allow write: if false;
+      match /attempts/{attemptId} {
+        allow read: if isAdmin() || coversBranch(get(/databases/$(database)/documents/printJobs/$(jobId)).data.businessId, get(/databases/$(database)/documents/printJobs/$(jobId)).data.branchId);
+        allow write: if false;
+      }
+    }
+
+    // ---------- admin-only ----------
+    match /audit/{id} { allow read: if isAdmin(); allow write: if false; }
+    match /metricsDaily/{id} { allow read: if isAdmin(); allow write: if false; }
+
+    // ---------- server-only ----------
+    match /outbox/{id} { allow read, write: if false; }
+    match /idempotency/{id} { allow read, write: if false; }
+    match /otpChallenges/{id} { allow read, write: if false; }
+    match /rateLimits/{id} { allow read, write: if false; }
+
+    match /{document=**} { allow read, write: if false; }
+  }
+}
