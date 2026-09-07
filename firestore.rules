@@ -5,10 +5,10 @@ service cloud.firestore {
     // ---------- helpers ----------
     function signedIn() { return request.auth != null; }
     function uid() { return request.auth.uid; }
-    function isAdmin() { return signedIn() && request.auth.token.admin == true; }
+    function isAdmin() { return signedIn() && request.auth.token.get('admin', false) == true; }
     function userDoc() { return get(/databases/$(database)/documents/users/$(uid())).data; }
     function activeUser() {
-      return signedIn() && request.auth.token.suspended != true
+      return signedIn() && request.auth.token.get('suspended', false) != true
         && exists(/databases/$(database)/documents/users/$(uid()))
         && userDoc().suspended != true;
     }

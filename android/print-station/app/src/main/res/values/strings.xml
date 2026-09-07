@@ -1,0 +1,29 @@
+<resources>
+    <string name="app_name">Qareeb Print Station</string>
+    <string name="sign_in">Sign in</string>
+    <string name="email">Email</string>
+    <string name="password">Password</string>
+    <string name="branch">Branch</string>
+    <string name="printer">Printer</string>
+    <string name="paired_printer">Paired Bluetooth printer</string>
+    <string name="connect">Connect printer</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="test_print">Test print</string>
+    <string name="start_station">Start print station</string>
+    <string name="stop_station">Stop print station</string>
+    <string name="status_idle">Not running</string>
+    <string name="status_connected">Connected to %1$s</string>
+    <string name="status_disconnected">Printer not connected</string>
+    <string name="status_printing">Printing…</string>
+    <string name="status_revoked">Access revoked — station stopped</string>
+    <string name="status_offline">No connectivity — jobs wait on the server</string>
+    <string name="permission_needed">Bluetooth permission is required to connect to the printer.</string>
+    <string name="bluetooth_off">Bluetooth is off.</string>
+    <string name="another_station">Another device is the station for this printer. Take over?</string>
+    <string name="take_over">Take over</string>
+    <string name="notification_channel">Print station</string>
+    <string name="notification_text">Print station running for %1$s</string>
+    <string name="sign_out">Sign out</string>
+    <string name="stale_jobs">Older unprinted jobs are waiting. Review them in the web dashboard before printing.</string>
+    <string name="no_membership">Your account has no branch access.</string>
+</resources>

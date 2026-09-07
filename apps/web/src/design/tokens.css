@@ -1,0 +1,100 @@
+/*
+ * Qareeb design tokens — the single source of truth for colour, type, spacing, radii and motion.
+ * The light theme is the product theme. The dark palette is defined but only applied when the
+ * <html data-theme="dark"> attribute is set explicitly (never by prefers-color-scheme alone), so a
+ * browser theme can never recolour only part of the app.
+ */
+:root {
+  color-scheme: light;
+  --color-bg: #faf7f0;
+  --color-surface: #fffefa;
+  --color-text: #193e2d;
+  --color-text-muted: #626c61;
+  --color-primary: #20583b;
+  --color-on-primary: #fffefa;
+  --color-primary-hover: #1a4a32;
+  --color-soft: #edf2e4;
+  --color-border: #e4e7dc;
+  --color-border-strong: #c9d0bf;
+  --color-accent-text: #924220;
+  --color-accent-bg: #fbe5d5;
+  --color-danger-text: #a3342b;
+  --color-danger-bg: #fdede9;
+  --color-danger: #a3342b;
+  --color-success-text: #1f5a3a;
+  --color-success-bg: #e2f0e2;
+  --color-focus: #20583b;
+  --color-overlay: rgba(25, 62, 45, 0.45);
+  --color-skeleton: #ece9df;
+
+  --font-sans: 'Noto Sans Hebrew', 'Noto Sans Arabic', 'Noto Sans', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  --text-body: 16px;
+  --text-secondary: 14px;
+  --text-badge: 12px;
+  --text-heading: 20px;
+  --text-headline: 28px;
+  --text-headline-lg: 36px;
+  --leading: 1.5;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --gutter: 20px;
+
+  --radius-card: 16px;
+  --radius-control: 12px;
+  --radius-segment: 14px;
+  --radius-badge: 6px;
+  --radius-sheet: 20px;
+
+  --shadow-card: 0 1px 2px rgba(25, 62, 45, 0.06);
+  --shadow-float: 0 8px 24px rgba(25, 62, 45, 0.14);
+  --control-height: 48px;
+  --touch-min: 44px;
+  --duration: 180ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --bottom-nav-height: 64px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --max-content: 1200px;
+}
+@media (max-width: 360px) {
+  :root { --gutter: 16px; }
+}
+@media (min-width: 768px) {
+  :root { --gutter: 32px; --text-headline: 36px; }
+}
+@media (min-width: 1200px) {
+  :root { --text-headline: 40px; }
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --color-bg: #18201c;
+  --color-surface: #222d26;
+  --color-text: #f2f1e9;
+  --color-text-muted: #b4c0b5;
+  --color-primary: #add7a6;
+  --color-on-primary: #193323;
+  --color-primary-hover: #c1e3bb;
+  --color-soft: #303d2e;
+  --color-border: #3c4b40;
+  --color-border-strong: #56685b;
+  --color-accent-text: #ffc3a4;
+  --color-accent-bg: #4b3428;
+  --color-danger-text: #ffb4ab;
+  --color-danger-bg: #4a2521;
+  --color-danger: #ffb4ab;
+  --color-success-text: #add7a6;
+  --color-success-bg: #24382b;
+  --color-focus: #add7a6;
+  --color-overlay: rgba(0, 0, 0, 0.6);
+  --color-skeleton: #2c3831;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root { --duration: 0ms; }
+}

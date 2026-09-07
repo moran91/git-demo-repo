@@ -11,11 +11,13 @@
     "tests/rules",
     "e2e"
   ],
-  "engines": { "node": ">=22 <23" },
+  "engines": {
+    "node": ">=22 <23"
+  },
   "scripts": {
     "build": "npm run build -w packages/shared && npm run build -w functions && npm run build -w apps/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present",
+    "lint": "eslint .",
     "test": "npm run test -w packages/shared && npm run test -w functions",
     "test:rules": "npm run test -w tests/rules",
     "test:e2e": "npm run test -w e2e",
@@ -29,6 +31,9 @@
     "deploy:rules": "firebase deploy --only firestore:rules,firestore:indexes,storage"
   },
   "devDependencies": {
-    "typescript": "^5.9.0"
+    "eslint": "^10.10.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.69.0"
   }
 }

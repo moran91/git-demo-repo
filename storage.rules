@@ -2,7 +2,7 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     function signedIn() { return request.auth != null; }
-    function notSuspended() { return request.auth.token.suspended != true; }
+    function notSuspended() { return request.auth.token.get('suspended', false) != true; }
     function membership(businessId) {
       return firestore.get(/databases/(default)/documents/memberships/$(request.auth.uid + '_' + businessId)).data;
     }

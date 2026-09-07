@@ -52,7 +52,7 @@ Legend: [x] implemented and verified locally · [~] implemented, needs external/
 - [x] Domain unit tests (pricing, loyalty, hours, phone, receipt layout, ESC/POS encoding)
 - [x] Functions integration tests against emulator (orders, stock race, idempotency, loyalty, substitutions, printing)
 - [x] Rules tests
-- [x] Playwright e2e + screenshots (360/390/768/1440, he/ar/en)
+- [x] Playwright e2e (20 tests) + screenshots (360/390/768/1440, he/ar/en) in docs/screenshots
 - [~] Real Bluetooth printer hardware test — blocked: no hardware/printer model provided
 - [~] Live Firebase deployment — blocked: no project credentials in session
 - [~] Android APK build — blocked: Android SDK not downloadable in this environment

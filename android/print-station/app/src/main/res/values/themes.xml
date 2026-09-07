@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.Qareeb" parent="Theme.Material3.Light.NoActionBar">
+        <item name="colorPrimary">#20583B</item>
+        <item name="colorOnPrimary">#FFFEFA</item>
+        <item name="android:windowBackground">#FAF7F0</item>
+        <item name="colorSurface">#FFFEFA</item>
+        <item name="colorOnSurface">#193E2D</item>
+    </style>
+</resources>

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Bluetooth runtime permissions per https://developer.android.com/develop/connectivity/bluetooth/bt-permissions -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-feature android:name="android.hardware.bluetooth" android:required="true" />
+
+    <application android:label="@string/app_name" android:icon="@mipmap/ic_launcher" android:theme="@style/Theme.Qareeb" android:allowBackup="false" android:supportsRtl="true">
+        <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop">
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+        </activity>
+        <!-- Foreground service keeps the RFCOMM link and the job loop alive while the shop is open
+             (foregroundServiceType=connectedDevice per current Android rules). Printing stops when the
+             app is force-stopped, the device loses connectivity, or authorization cannot be refreshed. -->
+        <service android:name=".StationService" android:exported="false" android:foregroundServiceType="connectedDevice" />
+    </application>
+</manifest>

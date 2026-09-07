@@ -158,8 +158,12 @@ describe('approvals, suspension, memberships', () => {
   });
 
   it('admin metrics distinguish placed, accepted and cash-recorded values', async () => {
+    // Self-contained: one placed and one accepted order so the aggregates are non-trivial regardless of file order.
+    const a = await customer1.call<{ orderId: string }>('placeOrder', { ...deliveryBase, lines: [shawarmaLine()], idempotencyKey: key(), expectedCashDueAgorot: 9600 });
+    await customer1.call('placeOrder', { ...deliveryBase, lines: [shawarmaLine()], idempotencyKey: key(), expectedCashDueAgorot: 9600 });
+    await manager.call('decideOrder', { orderId: a.orderId, decision: 'accepted', expectedVersion: 1, idempotencyKey: key() });
     const m = await adminC.call<{ last30Days: { placedCount: number; placedValueAgorot: number; acceptedValueAgorot: number; cashRecordedAgorot: number }; agingPlacedOrders: number }>('getAdminMetrics', {});
-    expect(m.last30Days.placedCount).toBeGreaterThan(3);
+    expect(m.last30Days.placedCount).toBeGreaterThanOrEqual(2);
     expect(m.last30Days.placedValueAgorot).toBeGreaterThan(m.last30Days.acceptedValueAgorot);
     expect(m.last30Days.acceptedValueAgorot).toBeGreaterThan(0);
     expect(m.last30Days.cashRecordedAgorot).toBeGreaterThanOrEqual(0);
