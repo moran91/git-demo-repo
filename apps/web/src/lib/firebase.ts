@@ -13,7 +13,11 @@ export const firebaseConfig = {
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID as string,
   appId: import.meta.env.VITE_FIREBASE_APP_ID as string,
 };
-export const USE_EMULATORS = import.meta.env.VITE_USE_EMULATORS === '1';
+// Emulator wiring is allowed only in dev, or in a bundle explicitly built for the emulators.
+// Vite loads .env.local in production builds too, so the flag alone is not trustworthy here.
+export const USE_EMULATORS =
+  import.meta.env.VITE_USE_EMULATORS === '1' &&
+  (import.meta.env.DEV || import.meta.env.VITE_ALLOW_EMULATOR_BUILD === '1');
 export const FUNCTIONS_REGION = (import.meta.env.VITE_FUNCTIONS_REGION as string) || 'me-west1';
 export const VAPID_KEY = (import.meta.env.VITE_FCM_VAPID_KEY as string) || '';
 

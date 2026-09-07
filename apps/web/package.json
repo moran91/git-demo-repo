@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "build": "node scripts/check-env.mjs && tsc -p tsconfig.json --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "build:emulator": "QAREEB_ALLOW_EMULATOR_BUILD=1 VITE_ALLOW_EMULATOR_BUILD=1 npm run build"
   },
   "dependencies": {
     "@qareeb/shared": "*",

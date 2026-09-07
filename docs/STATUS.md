@@ -22,6 +22,24 @@ what remains blocked on external access or hardware._
   finalize trigger with the same fidelity as production — verify after first deploy.
 - **App Check**: wired for reCAPTCHA v3 when a site key is set.
 
+## Deployment blockers found and fixed (post-review)
+
+A deploy attempt failed with "imports from a `lib/` folder that doesn't exist". Two real defects, both mine:
+
+1. **`.gitignore` swallowed source directories.** The pattern `lib/` (no leading slash) matches any
+   directory named `lib` at any depth, so `functions/src/lib/` and `apps/web/src/lib/` (24 files) were
+   never committed. Every local check passed because it ran against the working tree, where the files
+   exist. Fixed by anchoring the patterns to `functions/lib/` and `apps/web/dist/` and committing the
+   files. **A clean clone now builds green** — that is the check that would have caught it.
+2. **Emulator config leaked into production bundles.** Vite loads `.env.local` in every mode, so the
+   quick-start emulator settings overrode `.env.production`; the built bundle contained `demo-api-key`,
+   `127.0.0.1:9099` and the emulator-only custom-token sign-in hook. A deploy would have "succeeded"
+   and served a dead site. Fixed with a build preflight (`apps/web/scripts/check-env.mjs`) that refuses
+   placeholder/emulator config, plus a runtime guard so `USE_EMULATORS` requires a dev build and the
+   test hook cannot exist in production output. Verified in both directions.
+
+Also added `scripts/deploy.sh` (auth check → rules/indexes → functions → hosting, in order).
+
 ## Blocked / not done here
 | Item | Why | What is needed |
 |---|---|---|

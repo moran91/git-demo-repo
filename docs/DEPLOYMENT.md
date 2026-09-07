@@ -5,6 +5,25 @@
 > (`firebase@12`, `firebase-admin@14`, `firebase-functions@7`, `firebase-tools@15`) and the emulator
 > suite. Re-check console menu labels against the official docs listed at the end before going live.
 
+## Quick path (after the one-time console setup in sections 1–6)
+
+```
+./scripts/deploy.sh <project-id>              # rules + indexes, functions, hosting, in order
+./scripts/deploy.sh <project-id> --rules-only # rules/indexes only (no build needed)
+```
+The script verifies authentication first, then runs `npm run build`, which refuses to produce a
+bundle from placeholder or emulator configuration.
+
+> **Trap: `apps/web/.env.local` also applies to production builds.**
+> Vite loads `.env.local` in *every* mode, so the emulator settings from the local quick start
+> (`VITE_USE_EMULATORS=1`, `demo-api-key`) silently override `.env.production` and produce a
+> deployable bundle that talks to `127.0.0.1`. Before deploying, move it aside:
+> ```
+> mv apps/web/.env.local apps/web/.env.local.bak
+> ```
+> `apps/web/scripts/check-env.mjs` (run by `npm run build`) now fails loudly on this instead of
+> shipping a broken site, and `USE_EMULATORS` additionally requires a dev build at runtime.
+
 ## 0. Prerequisites and cost expectations
 - A Google account with billing. Cloud Functions v2, Cloud Storage and outbound SMS require the
   **Blaze (pay-as-you-go)** plan. "Free for businesses" refers to platform fees only: Firebase
@@ -71,11 +90,13 @@ Console → Build → Authentication → Get started.
 
 ## 7. Web build and Hosting
 ```
-cp apps/web/.env.example apps/web/.env.production   # prod web config, VITE_USE_EMULATORS=0
+cp apps/web/.env.example apps/web/.env.production   # then fill in the REAL config, VITE_USE_EMULATORS=0
+mv apps/web/.env.local apps/web/.env.local.bak      # see the trap warning at the top of this file
 npm ci
-npm run build
-npm run deploy:hosting
+./scripts/deploy.sh <project-id>                    # or: npm run build && npm run deploy:hosting
 ```
+Get the real values from Firebase console → Project settings → General → Your apps → SDK setup and
+configuration. Deploying `.env.example` values produces a non-functional site; the preflight blocks it.
 `firebase.json` has the SPA rewrite (`** → /index.html`), immutable caching for hashed assets/fonts,
 `no-cache` for the service worker, and security headers. Deep links resolve to the app.
 Custom domain: Hosting → Add custom domain → DNS verification; add it to Auth authorized domains and
