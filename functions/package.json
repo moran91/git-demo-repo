@@ -22,7 +22,6 @@
     "zod": "^4.5.4"
   },
   "devDependencies": {
-    "@qareeb/shared": "*",
     "firebase": "^12.18.0",
     "@types/node": "^26.4.1",
     "esbuild": "^0.28.2",
