@@ -15,6 +15,7 @@ export function errorKey(e: unknown): TranslationKey {
       if (code === 'auth/too-many-requests') return 'auth.tooMany';
       if (code === 'auth/invalid-phone-number') return 'auth.phoneInvalid';
       if (code === 'auth/captcha-check-failed') return 'auth.captchaFailed';
+      if (code === 'auth/operation-not-allowed') return 'auth.smsUnavailable';
       if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') return 'auth.invalidCredentials';
       if (code === 'auth/email-already-in-use') return 'auth.emailInUse';
       if (code === 'auth/weak-password') return 'auth.weakPassword';
