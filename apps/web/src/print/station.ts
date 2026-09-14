@@ -45,15 +45,27 @@ export async function executeJob(claim: ClaimResult, stationId: string): Promise
     return 'failed';
   }
   stationStore.set({ status: 'printing', currentJobId: job.id, progress: null });
+  // Tracks whether bytes actually reached the printer. Everything after this point has already put
+  // paper through the machine, so it must never be reported as 'failed_before_send'.
+  let bytesSent = false;
   try {
     const bmp = await renderModel(job.receipt);
     const enc = encodeForProfile(bmp, claim.printer!.profileId, claim.printer!.cutSupported, claim.printer!.feedLinesAfter);
     stationStore.set({ progress: { sent: 0, total: enc.stripsTotal } });
     await sendEncoded(conn, enc, (sent, total) => stationStore.set({ progress: { sent, total } }));
+    bytesSent = true;
     await report('sent', { stripsSent: enc.stripsTotal, stripsTotal: enc.stripsTotal });
     stationStore.set({ status: 'connected', currentJobId: null, progress: null, lastError: null });
     return 'sent';
   } catch (e) {
+    if (bytesSent) {
+      // The receipt is on paper; only the report failed (network blip, stale fence). Reporting
+      // 'failed_before_send' here would tell the server no bytes were sent and it would re-queue the
+      // job — printing the same receipt twice. Leave it: the lease expires and the scheduled sweep
+      // moves it to needs_review, which is exactly the "never auto-retransmit" rule.
+      stationStore.set({ status: 'error', currentJobId: null, progress: null, lastError: 'report_failed' });
+      return 'sent';
+    }
     if (e instanceof PrintTransportError && e.kind === 'partial') {
       await report('partial', { error: e.kind, stripsSent: e.stripsSent, stripsTotal: e.stripsTotal });
       stationStore.set({ status: 'error', currentJobId: null, lastError: 'partial' });
@@ -107,9 +119,18 @@ export function stopStation() {
 export async function printSpecificJob(jobId: string): Promise<'sent' | 'failed' | 'partial' | 'no_station'> {
   const s = stationStore.get();
   if (!s.stationId) return 'no_station';
-  const claim = await call<ClaimResult>('claimPrintJob', { stationId: s.stationId, jobId, includeStale: true });
-  if (!claim.job) return 'failed';
-  return executeJob(claim, s.stationId);
+  // Serialise with the 4s claim loop. Without this a staff-triggered print could run concurrently
+  // with an automatic one and interleave two byte streams on the same BLE characteristic.
+  for (let waited = 0; inFlight && waited < 30_000; waited += 250) await new Promise((r) => setTimeout(r, 250));
+  if (inFlight) return 'failed';
+  inFlight = true;
+  try {
+    const claim = await call<ClaimResult>('claimPrintJob', { stationId: s.stationId, jobId, includeStale: true });
+    if (!claim.job) return 'failed';
+    return await executeJob(claim, s.stationId);
+  } finally {
+    inFlight = false;
+  }
 }
 
 window.addEventListener('beforeunload', () => {

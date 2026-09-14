@@ -45,6 +45,24 @@ test.describe('customer storefront', () => {
     await page.goto('/cart');
     await expect(page.getByText('Laffa, Fries inside')).toBeVisible();
     await expect(page.locator('.summary')).toContainText('₪86');
+    // Photo zoom: the thumbnail is a button that opens the enlarged image; Escape closes it.
+    await page.getByRole('button', { name: /Photo of Shawarma/ }).click();
+    await expect(page.getByRole('dialog', { name: /Photo of Shawarma/ }).locator('img')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    // Edit in place: the sheet opens prefilled, and saving replaces the same line (still one line).
+    await page.getByRole('button', { name: /Edit: Shawarma/ }).click();
+    const edit = page.getByRole('dialog');
+    await expect(edit.getByLabel('Laffa')).toBeChecked();
+    await expect(edit.getByLabel('Fries inside')).toBeChecked();
+    await expect(edit.getByRole('button', { name: /Save changes/ })).toContainText('₪86');
+    await edit.getByLabel('Fries inside').uncheck();
+    await edit.getByLabel('Item note').fill('extra tahini');
+    await edit.getByRole('button', { name: /Save changes/ }).click();
+    await expect(page.getByText('“extra tahini”')).toBeVisible();
+    await expect(page.locator('.list__item')).toHaveCount(1);
+    await expect(page.getByText('Laffa, Fries inside')).toHaveCount(0);
+    await expect(page.locator('.summary')).not.toContainText('₪86');
     await page.getByRole('button', { name: 'Go to checkout' }).click();
     // Guest → phone verification gate; cart survives sign-in
     await expect(page.getByText('Sign in with your phone to place the order')).toBeVisible();

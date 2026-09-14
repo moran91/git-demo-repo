@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { normalizeIsraeliPhone, type SavedAddress } from '@qareeb/shared';
+import { formatGrams, normalizeIsraeliPhone, placementSuffix, type SavedAddress } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
 import { cartStore, clearCart } from '@/lib/cart';
@@ -192,7 +192,7 @@ export function CheckoutPage() {
               <h2 id="loy-h">{t('checkout.loyalty')}</h2>
               <p>{t('checkout.loyaltyAvailable', { points: loyalty.available, business: L(state.meta.businessName, dl) })}</p>
               {loyalty.debt > 0 ? <Alert tone="warn">{t('checkout.loyaltyDebt')}</Alert> : (
-                <TextInput label={t('checkout.loyaltyRedeem')} type="number" inputMode="numeric" min={0} max={maxPoints} value={redeem} onChange={(e) => setRedeem(Math.max(0, Math.min(maxPoints, Number(e.target.value) || 0)))} hint={`${t('common.minimum')} 0 · max ${maxPoints}`} ltr />
+                <TextInput label={t('checkout.loyaltyRedeem')} type="number" inputMode="numeric" min={0} max={maxPoints} value={redeem} onChange={(e) => setRedeem(Math.max(0, Math.min(maxPoints, Number(e.target.value) || 0)))} hint={`${t('common.minimum')} 0 · ${t('common.maximum')} ${maxPoints}`} ltr />
               )}
               <p className="muted">{t('checkout.loyaltyRule', { percent: rules.maxDiscountPercent })}</p>
             </section>
@@ -204,7 +204,7 @@ export function CheckoutPage() {
           {quote ? <ul className="order-lines card">
             {quote.lines.map((l) => (
               <li key={l.lineId} className="order-line">
-                <span className="wrap-anywhere">{l.pricingMode === 'weight' ? `${(l.requestedGrams ?? 0) / 1000} kg` : `${l.quantity} ×`} {L(l.name, dl)}{l.variantName ? ` (${L(l.variantName, dl)})` : ''}{l.modifiers.length ? <span className="muted"> · {l.modifiers.map((m) => L(m.optionName, dl)).join(', ')}</span> : null}</span>
+                <span className="wrap-anywhere">{l.pricingMode === 'weight' ? formatGrams(l.requestedGrams ?? 0, locale) : `${l.quantity} ×`} {L(l.name, dl)}{l.variantName ? ` (${L(l.variantName, dl)})` : ''}{l.modifiers.length ? <span className="muted"> · {l.modifiers.map((m) => L(m.optionName, dl) + placementSuffix(m.placement, t)).join(', ')}</span> : null}</span>
                 <bdi className="num">{money(l.lineTotalAgorot, locale)}</bdi>
               </li>
             ))}

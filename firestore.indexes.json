@@ -41,6 +41,28 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "visible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "type",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "cityId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "pickupEnabled",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "publicBranches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "businessId",
           "order": "ASCENDING"
         },
@@ -369,6 +391,20 @@
           "order": "ASCENDING"
         },
         {
+          "fieldPath": "at",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "loyaltyLedger",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "uid",
+          "order": "ASCENDING"
+        },
+        {
           "fieldPath": "businessId",
           "order": "ASCENDING"
         },
@@ -610,6 +646,20 @@
         },
         {
           "fieldPath": "transport",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "cities",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "active",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "sortOrder",
           "order": "ASCENDING"
         }
       ]

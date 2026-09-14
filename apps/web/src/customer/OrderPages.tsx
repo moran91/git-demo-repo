@@ -1,5 +1,5 @@
 import { Link, useParams, useLocation } from 'react-router';
-import { formatPhoneDisplay, type CashRecord, type Order, type OrderEvent } from '@qareeb/shared';
+import { formatGrams, formatPhoneDisplay, placementSuffix, type Order, type OrderEvent } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
 import { useCollection, useDoc, orderBy, where, limit } from '@/lib/queries';
@@ -55,14 +55,16 @@ export function OrderPage() {
   const location = useLocation();
   const order = useDoc<Order>(user && orderId ? `orders/${orderId}` : null);
   const events = useCollection<OrderEvent>(user && orderId && order.data ? `orders/${orderId}/events` : null, [orderBy('at', 'asc'), limit(50)], [orderId, !!order.data]);
-  const cash = useDoc<CashRecord>(order.data?.cashRecordId ? `cashRecords/${order.data.cashRecordId}` : null);
   if (loading || order.loading) return <div className="stack" aria-busy="true"><Skeleton height={40} width="40%" /><Skeleton height={80} radius={16} /><Skeleton height={200} radius={16} /></div>;
   if (!user) return <EmptyState icon="user" title={t('account.guest')} action={<Link className="btn btn--primary" to="/signin">{t('common.signIn')}</Link>} />;
   if (!order.data) return <EmptyState icon="alert" title={t('common.notFound')} action={<Link className="btn btn--secondary" to="/orders">{t('orders.title')}</Link>} />;
   const o = order.data;
   const placedJustNow = (location.state as { placed?: boolean } | null)?.placed;
   const revised = o.revision > 0;
-  const cashRecord = cash.data && !cash.data.reversed ? cash.data : null;
+  // cashRecords is owner/manager-only in firestore.rules, so a customer's read of it always failed
+  // and every settled order fell back to "cash on delivery". Settlement state comes from the order:
+  // recordCash rejects any amount other than the cash due and then locks the order.
+  const cashPaidAgorot = o.cashRecordId && !o.cashReversedAt ? o.totals.cashDueAgorot : undefined;
   return (
     <div className="stack">
       {placedJustNow ? <Alert tone="success">{t('checkout.success')} — {t('checkout.successBody')}</Alert> : null}
@@ -98,8 +100,8 @@ export function OrderPage() {
             <li key={l.lineId} className={`order-line ${l.removed ? 'order-line--removed' : ''}`}>
               <span className="wrap-anywhere">
                 {l.removed ? <span className="badge badge--danger">{t('orders.removed')}</span> : l.substitutedFromLineId ? <span className="badge badge--accent">{t('orders.substituted')}</span> : null}{' '}
-                {l.pricingMode === 'weight' ? (l.actualGrams !== undefined ? `${t('orders.actualWeight')} ${l.actualGrams / 1000} kg` : `${t('orders.requestedWeight')} ${(l.requestedGrams ?? 0) / 1000} kg`) : `${l.quantity} ×`} {L(l.name)}{l.variantName ? ` (${L(l.variantName)})` : ''}
-                {l.modifiers.length ? <span className="order-line__mods"> {l.modifiers.map((m) => L(m.optionName)).join(', ')}</span> : null}
+                {l.pricingMode === 'weight' ? (l.actualGrams !== undefined ? `${t('orders.actualWeight')} ${formatGrams(l.actualGrams, locale)}` : `${t('orders.requestedWeight')} ${formatGrams(l.requestedGrams ?? 0, locale)}`) : `${l.quantity} ×`} {L(l.name)}{l.variantName ? ` (${L(l.variantName)})` : ''}
+                {l.modifiers.length ? <span className="order-line__mods"> {l.modifiers.map((m) => L(m.optionName) + placementSuffix(m.placement, t)).join(', ')}</span> : null}
                 {l.note ? <span className="muted"> “{l.note}”</span> : null}
               </span>
               <bdi className="num">{l.removed ? '' : money(l.lineTotalAgorot, locale)}</bdi>
@@ -107,7 +109,7 @@ export function OrderPage() {
           ))}
         </ul>
       </section>
-      <Summary totals={o.totals} mode={o.mode} cashReceived={cashRecord?.amountAgorot} />
+      <Summary totals={o.totals} mode={o.mode} cashReceived={cashPaidAgorot} rejected={o.status === 'rejected'} />
       {revised ? <div className="muted">{t('orders.original')} {t('common.total')}: <bdi className="num">{money(o.originalTotals.cashDueAgorot, locale)}</bdi></div> : null}
       {o.loyalty && o.loyalty.pointsReserved > 0 ? <div className="muted">{t('orders.loyaltyReserved')}: {o.loyalty.pointsReserved}</div> : null}
       {events.data.some((e) => e.type === 'cash_recorded') ? <div className="muted">{t('orders.loyaltyEarned')}: {(events.data.find((e) => e.type === 'cash_recorded')?.after as { pointsEarned?: number } | undefined)?.pointsEarned ?? 0}</div> : null}

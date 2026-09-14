@@ -33,7 +33,8 @@ what remains blocked on external access or hardware._
 | Native customer/business apps | Future work by design | Shared domain types + callables are app-agnostic |
 
 ## Known limitations / follow-ups
-- Product favourites are stored but the favourites page shows product IDs (business favourites are complete).
+- The favourites page now resolves product names from the public catalog, but no screen creates a
+  product favourite yet — only businesses can be favourited, so that section stays empty in practice.
 - Android renderer bundles the Hebrew Noto face and relies on system fonts for Arabic/Latin (documented).
 - Invitation emails are logged (emulator) rather than sent; production needs a transactional email path or
   Firebase's password-setup email flow wired to the invitation link.

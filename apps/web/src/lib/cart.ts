@@ -9,8 +9,23 @@ export interface CartMeta {
 export interface CartState {
   cart: Cart | null;
   meta: CartMeta | null;
-  /** Display snapshot per line so the cart page can render without refetching. */
-  lineMeta: Record<string, { name: Localized; variantName?: Localized; modifierNames: Localized[]; unitLabel: Localized; pricingMode: 'unit' | 'weight'; imagePath?: string }>;
+  /**
+   * Display snapshot per line so the cart page can render without refetching. The step/minimum
+   * constraints travel with it: without them the cart's steppers would offer amounts the server
+   * rejects, because the cart has no access to the product document.
+   */
+  lineMeta: Record<string, {
+    name: Localized;
+    variantName?: Localized;
+    modifierNames: Localized[];
+    unitLabel: Localized;
+    pricingMode: 'unit' | 'weight';
+    imagePath?: string;
+    weightStepGrams?: number;
+    minWeightGrams?: number;
+    quantityStep?: number;
+    minQuantity?: number;
+  }>;
 }
 
 /** Guest carts persist locally; a cart belongs to exactly one business AND one branch. */
@@ -25,7 +40,7 @@ export function cartBelongsTo(s: CartState, businessId: string, branchId: string
 }
 
 export function sameSelection(a: CartModifierSelection[], b: CartModifierSelection[]): boolean {
-  const norm = (m: CartModifierSelection[]) => m.map((x) => `${x.groupId}:${[...x.optionIds].sort().join(',')}`).sort().join('|');
+  const norm = (m: CartModifierSelection[]) => m.map((x) => `${x.groupId}:${[...x.optionIds].sort().map((id) => `${id}@${x.placements?.[id] ?? 'whole'}`).join(',')}`).sort().join('|');
   return norm(a) === norm(b);
 }
 
@@ -37,6 +52,28 @@ export function addLine(params: { businessId: string; branchId: string; mode: Fu
     if (existing) lines = base.lines.map((l) => (l.lineId === existing.lineId ? { ...l, quantity: l.quantity + params.line.quantity } : l));
     else lines = [...base.lines, params.line];
     return { cart: { ...base, lines, updatedAt: new Date().toISOString() }, meta: params.meta, lineMeta: { ...(cartBelongsTo(s, params.businessId, params.branchId) ? s.lineMeta : {}), [params.line.lineId]: params.lineMeta } };
+  });
+}
+
+/**
+ * Replace a line's contents in place (edit from the cart). Keeps the lineId and position so the
+ * quote/problem bookkeeping keyed by lineId stays valid; merges into an identical existing line.
+ */
+export function replaceLine(lineId: string, line: Omit<CartLine, 'lineId'>, lineMeta: CartState['lineMeta'][string]) {
+  cartStore.set((s) => {
+    if (!s.cart) return s;
+    const next: CartLine = { ...line, lineId };
+    const twin = s.cart.lines.find((l) => l.lineId !== lineId && l.productId === next.productId && l.variantId === next.variantId && sameSelection(l.modifiers, next.modifiers) && (l.note ?? '') === (next.note ?? '') && !l.requestedGrams && !next.requestedGrams);
+    let lines: CartLine[];
+    const meta = { ...s.lineMeta };
+    if (twin) {
+      lines = s.cart.lines.filter((l) => l.lineId !== lineId).map((l) => (l.lineId === twin.lineId ? { ...l, quantity: l.quantity + next.quantity } : l));
+      delete meta[lineId];
+    } else {
+      lines = s.cart.lines.map((l) => (l.lineId === lineId ? next : l));
+      meta[lineId] = lineMeta;
+    }
+    return { ...s, cart: { ...s.cart, lines, updatedAt: new Date().toISOString() }, lineMeta: meta };
   });
 }
 

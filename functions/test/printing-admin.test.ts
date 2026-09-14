@@ -105,8 +105,10 @@ describe('approvals, suspension, memberships', () => {
   it('pending business is hidden; admin approval publishes it; rejection hides it again', async () => {
     expect((await admin.db.collection('publicBusinesses').doc(IDS.pending).get()).exists).toBe(false);
     expect(await expectCode(ownerPending.call('decideApproval', { targetType: 'business', businessId: IDS.pending, state: 'approved', reason: 'self' }))).toBe('forbidden');
+    // Approving the business cascades to the branches that are still pending, so a single admin
+    // decision publishes the storefront.
     await adminC.call('decideApproval', { targetType: 'business', businessId: IDS.pending, state: 'approved', reason: 'Documents verified' });
-    expect((await admin.db.collection('publicBusinesses').doc(IDS.pending).get()).exists).toBe(false); // branch still pending
+    expect((await admin.db.collection('businesses').doc(IDS.pending).collection('branches').doc(IDS.pendingBranch).get()).data()!.approval).toBe('approved');
     await adminC.call('decideApproval', { targetType: 'branch', businessId: IDS.pending, branchId: IDS.pendingBranch, state: 'approved', reason: 'Visited the shop' });
     expect((await admin.db.collection('publicBusinesses').doc(IDS.pending).get()).exists).toBe(true);
     const pubBranch = (await admin.db.collection('publicBranches').doc(IDS.pendingBranch).get()).data()!;

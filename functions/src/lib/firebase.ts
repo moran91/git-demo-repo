@@ -38,6 +38,7 @@ export const col = {
   branch: (businessId: string, branchId: string) => db.collection('businesses').doc(businessId).collection('branches').doc(branchId),
   categories: (businessId: string, branchId: string) => db.collection('businesses').doc(businessId).collection('branches').doc(branchId).collection('categories'),
   products: (businessId: string, branchId: string) => db.collection('businesses').doc(businessId).collection('branches').doc(branchId).collection('products'),
+  modifierGroups: (businessId: string, branchId: string) => db.collection('businesses').doc(businessId).collection('branches').doc(branchId).collection('modifierGroups'),
   approvalHistory: (businessId: string) => db.collection('businesses').doc(businessId).collection('approvalHistory'),
   publicBusinesses: () => db.collection('publicBusinesses'),
   publicBusiness: (id: string) => db.collection('publicBusinesses').doc(id),

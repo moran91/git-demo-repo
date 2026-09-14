@@ -2,18 +2,56 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     function signedIn() { return request.auth != null; }
-    function notSuspended() { return request.auth.token.get('suspended', false) != true; }
-    function membership(businessId) {
-      return firestore.get(/databases/(default)/documents/memberships/$(request.auth.uid + '_' + businessId)).data;
+    // Nothing sets a `suspended` custom claim, so the claim alone never blocks anyone. The user
+    // document is the source of truth (as it is in firestore.rules), and checking it here closes the
+    // window in which a just-suspended member could keep uploading with a still-valid ID token.
+    function userPath() { return /databases/(default)/documents/users/$(request.auth.uid); }
+    function userDoc() { return firestore.get(userPath()).data; }
+    function notSuspended() {
+      return request.auth.token.get('suspended', false) != true
+        && firestore.exists(userPath())
+        && userDoc().suspended != true;
     }
+    // A platform admin has no membership document, so every membership lookup has to be guarded with
+    // `exists` first: `firestore.get` on a missing document is an evaluation error, which denies the
+    // whole request. firestore.rules and `requireMembership` in functions/src/lib/auth.ts both let an
+    // admin through; this file did not, so an admin's logo/cover upload failed with
+    // `storage/unauthorized` even though the callable that records the path afterwards succeeded.
+    //
+    // Like the server (and unlike firestore.rules) this requires BOTH the custom claim and the user
+    // document's own flag, so a stale claim on its own opens nothing. The users document is already
+    // read by notSuspended(), so the check is free.
+    function isAdmin() {
+      return request.auth.token.get('admin', false) == true
+        && firestore.exists(userPath())
+        && userDoc().isAdmin == true;
+    }
+    function membershipPath(businessId) {
+      return /databases/(default)/documents/memberships/$(request.auth.uid + '_' + businessId);
+    }
+    function hasMembership(businessId) { return firestore.exists(membershipPath(businessId)); }
+    function membership(businessId) { return firestore.get(membershipPath(businessId)).data; }
+    // The membership document is passed in rather than re-fetched per clause. Cross-service Rules
+    // cap an evaluation at TWO UNIQUE Firestore documents (not the ten of Cloud Firestore rules);
+    // repeated calls against the *same* path are cached and free, which is why `exists()` followed by
+    // `get()` on one path costs one document, not two. This file is already at the ceiling — it reads
+    // `users/{uid}` and `memberships/{uid}_{businessId}`. Reading any THIRD document (a
+    // `businesses/{businessId}` approval check, say) makes the rules service deny every upload with a
+    // bare 403 and no diagnostic, and the Rules simulator will not catch it because it only ever sees
+    // mocks. `tests/rules/storage.test.ts` fails the build if a third path appears here.
+    function memberEdits(m) { return m.active == true && (m.role == 'owner' || m.role == 'manager'); }
     function isCatalogEditor(businessId, branchId) {
-      let m = membership(businessId);
-      return m.active == true && (m.role == 'owner' || m.role == 'manager') && (m.allBranches == true || branchId in m.branchIds);
+      return (hasMembership(businessId) && memberCoversBranch(membership(businessId), branchId)) || isAdmin();
+    }
+    function memberCoversBranch(m, branchId) {
+      return memberEdits(m) && (m.allBranches == true || branchId in m.branchIds);
     }
     function isOwnerOrManager(businessId) {
-      let m = membership(businessId);
-      return m.active == true && (m.role == 'owner' || m.role == 'manager');
+      return (hasMembership(businessId) && memberEdits(membership(businessId))) || isAdmin();
     }
+    // Matches the logo/cover originals and the `_thumb`/`_display` variants the resize trigger
+    // derives from them. `matches` is a full-match RE2, so the trailing `.*` is required.
+    function brandingFile(file) { return file.matches('logo.*') || file.matches('cover.*'); }
     function validImage() {
       return request.resource.contentType.matches('image/(jpeg|png|webp)') && request.resource.size <= 5 * 1024 * 1024;
     }
@@ -22,8 +60,11 @@ service firebase.storage {
     match /businesses/{businessId}/{file} {
       allow read: if true; // public branding assets (only referenced from approved projections)
       allow write: if signedIn() && notSuspended() && isOwnerOrManager(businessId) && validImage()
-        && (file.matches('logo.*') || file.matches('cover.*'));
-      allow delete: if signedIn() && notSuspended() && isOwnerOrManager(businessId);
+        && brandingFile(file);
+      // Scoped to the same filenames `write` allows. `logo-x_thumb.webp` still matches `logo.*`, so
+      // replacing a logo can still clean up the variants the resize trigger derived from it; what
+      // this closes is deleting an unrelated object that merely sits under the business prefix.
+      allow delete: if signedIn() && notSuspended() && isOwnerOrManager(businessId) && brandingFile(file);
     }
     // Product images: businesses/{businessId}/branches/{branchId}/products/{productId}/{file}
     match /businesses/{businessId}/branches/{branchId}/products/{productId}/{file} {

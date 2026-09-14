@@ -113,6 +113,21 @@ export interface LoyaltyRules {
   maxDiscountPercent: number;
 }
 
+/** An owner-managed announcement shown above the menu on every branch's public page. */
+export interface Promotion {
+  id: string;
+  title: Localized;
+  body: Localized;
+  /** ISO date (YYYY-MM-DD, Asia/Jerusalem). Hidden from customers from the following day. */
+  endsAt?: string;
+  /** Hidden promotions stay in the owner's list but never reach the public projection. */
+  active: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+export const MAX_PROMOTIONS = 10;
+
 export interface Business {
   id: string;
   type: BusinessType;
@@ -127,6 +142,7 @@ export interface Business {
   approval: ApprovalState;
   approvalReason?: string;
   loyalty: LoyaltyRules;
+  promotions?: Promotion[];
   createdAt: string;
   updatedAt: string;
 }
@@ -191,6 +207,13 @@ export interface ModifierOption {
   sortOrder: number;
 }
 
+/**
+ * Where a pizza topping goes: 'whole' or a '+'-joined set of quarters ('tl','tr','bl','br'), e.g.
+ * 'tr+br' = right half, 'tl' = one quarter. Quarter is the minimum resolution. Any placement costs
+ * the same as the whole (matches the previous POS). See placement.ts for helpers.
+ */
+export type ToppingPlacement = string;
+
 export interface ModifierGroup {
   id: string;
   name: Localized;
@@ -199,6 +222,25 @@ export interface ModifierGroup {
   maxSelect: number;
   options: ModifierOption[];
   sortOrder: number;
+  /** Pizza toppings: the customer picks whole / half / quarter placement per chosen option (see ToppingPlacement). */
+  placement?: boolean;
+  /**
+   * Set when this group is linked to the branch's shared extras library
+   * (`businesses/{b}/branches/{br}/modifierGroups/{sharedGroupId}`). The product keeps a materialised
+   * copy so pricing, ordering and the public projection stay unchanged; the server re-copies the
+   * library content on every product save and fans out library edits to all linked products. Remove
+   * the field ("detach") to make the copy independent and editable per product.
+   */
+  sharedGroupId?: string;
+}
+
+/** Branch-level shared option group ("extras library" entry, e.g. pizza toppings reused by many products). */
+export interface SharedModifierGroup extends Omit<ModifierGroup, 'sharedGroupId'> {
+  businessId: string;
+  branchId: string;
+  archived: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Variant {
@@ -252,6 +294,8 @@ export interface Product {
 export interface CartModifierSelection {
   groupId: string;
   optionIds: string[];
+  /** Per-option placement for groups with `placement: true`; missing = whole. */
+  placements?: Record<string, ToppingPlacement>;
 }
 
 export interface CartLine {
@@ -283,6 +327,8 @@ export interface OrderLineModifierSnapshot {
   optionId: string;
   optionName: Localized;
   priceDeltaAgorot: Agorot;
+  /** Only set for placement groups (pizza toppings). */
+  placement?: ToppingPlacement;
 }
 
 export interface OrderLine {
@@ -374,6 +420,13 @@ export interface Order {
   /** Cash settlement pointer; the status stays 'accepted'. */
   cashRecordId?: string;
   cashSettledAt?: string;
+  /**
+   * Set when the settlement is reversed. The cashRecords collection is readable only by owners and
+   * managers, so customers and staff cannot see the reversal there — settlement state has to be
+   * derivable from the order itself. The amount is always `totals.cashDueAgorot`, because recordCash
+   * rejects any other amount and locks the order.
+   */
+  cashReversedAt?: string;
   /** Locks ordinary edits after settlement. */
   locked: boolean;
   /** Language the customer used when placing (for notifications). */

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { ref as sref, uploadBytes } from 'firebase/storage';
+import { ref as sref, uploadBytes, deleteObject } from 'firebase/storage';
 import { EMPTY_WEEK, LOYALTY_BOUNDS, hasAnyTranslation, hhmmToMinutes, makeId, minutesToHHMM, type Branch, type CashRecord, type DeliveryCityRule, type HoursOverride, type LoyaltyLedgerEntry, type OpeningInterval, type WeeklyHours } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
 import { storage } from '@/lib/firebase';
@@ -9,7 +9,8 @@ import { Button, TextInput, Select, Checkbox, Alert, IconButton, Badge, EmptySta
 import { Icon } from '@/design/Icon';
 import { money, formatLocalDateTime } from '@/lib/format';
 import { call } from '@/lib/api';
-import { errorKey } from '@/lib/errors';
+import { errorKey, uploadErrorKey } from '@/lib/errors';
+import { UPLOAD_ACCEPT, prepareImageUpload, recordUpload } from '@/lib/images';
 import { useCities } from '@/customer/hooks';
 import { StorageImage } from '@/customer/StorageImage';
 import { PageTitle, useDash } from './shell';
@@ -32,17 +33,22 @@ export function BranchForm({ initial, onSave, saving }: { initial: BranchDraft; 
   const set = (p: Partial<BranchDraft>) => setD((s) => ({ ...s, ...p }));
   const setInterval_ = (day: keyof WeeklyHours, i: number, patch: Partial<OpeningInterval>) => set({ hours: { ...d.hours, [day]: d.hours[day].map((iv, j) => (j === i ? { ...iv, ...patch } : iv)) } });
   const timeInput = (day: keyof WeeklyHours, i: number, key: 'startMin' | 'endMin') => (
-    <input type="time" className="input" style={{ width: 120 }} aria-label={key === 'startMin' ? t('branch.from') : t('branch.to')} value={minutesToHHMM(d.hours[day][i]![key])} onChange={(e) => { const m = hhmmToMinutes(e.target.value); if (m === null) return; if (key === 'endMin') { const start = d.hours[day][i]!.startMin; setInterval_(day, i, { endMin: m <= start ? m + 1440 : m }); } else setInterval_(day, i, { startMin: m, endMin: d.hours[day][i]!.endMin <= m ? d.hours[day][i]!.endMin + 1440 : d.hours[day][i]!.endMin }); }} />
+    <input type="time" className="input" aria-label={key === 'startMin' ? t('branch.from') : t('branch.to')} value={minutesToHHMM(d.hours[day][i]![key])} onChange={(e) => { const m = hhmmToMinutes(e.target.value); if (m === null) return; if (key === 'endMin') { const start = d.hours[day][i]!.startMin; setInterval_(day, i, { endMin: m <= start ? m + 1440 : m }); } else setInterval_(day, i, { startMin: m, endMin: d.hours[day][i]!.endMin <= m ? d.hours[day][i]!.endMin + 1440 : d.hours[day][i]!.endMin }); }} />
   );
   return (
     <form className="stack" noValidate onSubmit={(e) => { e.preventDefault(); setError(null); if (!hasAnyTranslation(d.name)) return setError(t('validation.atLeastOneLanguage')); if (!d.phone.trim()) return setError(t('validation.phone')); onSave(d); }}>
       {error ? <Alert tone="danger">{error}</Alert> : null}
       <section className="card stack">
         <LocalizedInput label={t('branch.nameLabel')} value={d.name} required onChange={(name) => set({ name })} />
-        <Select label={t('branch.city')} value={d.cityId} onChange={(e) => set({ cityId: e.target.value })}>{cities.map((c) => <option key={c.id} value={c.id}>{L(c.name)}</option>)}</Select>
         <LocalizedInput label={t('branch.location')} value={d.locationDescription} onChange={(locationDescription) => set({ locationDescription })} />
-        <TextInput label={t('branch.coords')} optional ltr placeholder="32.9628, 35.3822" value={d.lat !== undefined ? `${d.lat}, ${d.lng}` : ''} onChange={(e) => { const m = /^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/.exec(e.target.value); set(m ? { lat: Number(m[1]), lng: Number(m[2]) } : { lat: undefined, lng: undefined }); }} />
-        <TextInput label={t('branch.phone')} required ltr inputMode="tel" value={d.phone} onChange={(e) => set({ phone: e.target.value })} />
+        {/* City, phone and coordinates hold short fixed-format values. Stacked as full-width fields
+            they were three 830px boxes holding "בית ג׳ן", a phone number and a lat/lng pair; only the
+            translated name and location genuinely want the whole measure. */}
+        <div className="form-row">
+          <Select label={t('branch.city')} value={d.cityId} onChange={(e) => set({ cityId: e.target.value })}>{cities.map((c) => <option key={c.id} value={c.id}>{L(c.name)}</option>)}</Select>
+          <TextInput label={t('branch.phone')} required ltr inputMode="tel" value={d.phone} onChange={(e) => set({ phone: e.target.value })} />
+          <TextInput label={t('branch.coords')} optional ltr placeholder="32.9628, 35.3822" value={d.lat !== undefined ? `${d.lat}, ${d.lng}` : ''} onChange={(e) => { const m = /^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/.exec(e.target.value); set(m ? { lat: Number(m[1]), lng: Number(m[2]) } : { lat: undefined, lng: undefined }); }} />
+        </div>
       </section>
       <section className="card stack">
         <h2>{t('dash.hours')}</h2>
@@ -50,9 +56,8 @@ export function BranchForm({ initial, onSave, saving }: { initial: BranchDraft; 
         <div className="hours-grid">
           {(['0', '1', '2', '3', '4', '5', '6'] as const).map((day) => (
             <div key={day} className="hours-row">
-              <strong>{t(`branch.day.${day}`)}</strong>
+              <div className="hours-row__day"><strong>{t(`branch.day.${day}`)}</strong>{d.hours[day].length === 0 ? <span className="muted">{t('common.closed')}</span> : null}</div>
               <div className="stack--sm stack">
-                {d.hours[day].length === 0 ? <span className="muted">{t('common.closed')}</span> : null}
                 {d.hours[day].map((_, i) => (
                   <div key={i} className="interval">{timeInput(day, i, 'startMin')}<span>–</span>{timeInput(day, i, 'endMin')}<IconButton icon="x" label={t('common.remove')} onClick={() => set({ hours: { ...d.hours, [day]: d.hours[day].filter((_, j) => j !== i) } })} /></div>
                 ))}
@@ -63,11 +68,13 @@ export function BranchForm({ initial, onSave, saving }: { initial: BranchDraft; 
         </div>
         <h3>{t('branch.overrides')}</h3>
         {d.hoursOverrides.map((o, i) => (
-          <div key={i} className="row">
-            <input type="date" className="input" style={{ width: 170 }} aria-label={t('common.date')} value={o.date} onChange={(e) => set({ hoursOverrides: d.hoursOverrides.map((x, j) => (j === i ? { ...x, date: e.target.value } : x)) })} />
-            <Checkbox label={t('branch.closedAllDay')} checked={o.intervals.length === 0} onChange={(e) => set({ hoursOverrides: d.hoursOverrides.map((x, j) => (j === i ? { ...x, intervals: e.target.checked ? [] : [{ startMin: 540, endMin: 1320 }] } : x)) })} />
-            {o.intervals[0] ? <><input type="time" className="input" style={{ width: 120 }} aria-label={t('branch.from')} value={minutesToHHMM(o.intervals[0].startMin)} onChange={(e) => { const m = hhmmToMinutes(e.target.value); if (m !== null) set({ hoursOverrides: d.hoursOverrides.map((x, j) => (j === i ? { ...x, intervals: [{ ...x.intervals[0]!, startMin: m }] } : x)) }); }} /><input type="time" className="input" style={{ width: 120 }} aria-label={t('branch.to')} value={minutesToHHMM(o.intervals[0].endMin)} onChange={(e) => { const m = hhmmToMinutes(e.target.value); if (m !== null) set({ hoursOverrides: d.hoursOverrides.map((x, j) => (j === i ? { ...x, intervals: [{ ...x.intervals[0]!, endMin: m <= x.intervals[0]!.startMin ? m + 1440 : m }] } : x)) }); }} /></> : null}
-            <IconButton icon="trash" label={t('common.remove')} onClick={() => set({ hoursOverrides: d.hoursOverrides.filter((_, j) => j !== i) })} />
+          <div key={i} className="edit-row">
+            <div className="edit-row__main">
+              <input type="date" className="input" aria-label={t('common.date')} value={o.date} onChange={(e) => set({ hoursOverrides: d.hoursOverrides.map((x, j) => (j === i ? { ...x, date: e.target.value } : x)) })} />
+              <Checkbox label={t('branch.closedAllDay')} checked={o.intervals.length === 0} onChange={(e) => set({ hoursOverrides: d.hoursOverrides.map((x, j) => (j === i ? { ...x, intervals: e.target.checked ? [] : [{ startMin: 540, endMin: 1320 }] } : x)) })} />
+              {o.intervals[0] ? <div className="interval interval--pair"><input type="time" className="input" aria-label={t('branch.from')} value={minutesToHHMM(o.intervals[0].startMin)} onChange={(e) => { const m = hhmmToMinutes(e.target.value); if (m !== null) set({ hoursOverrides: d.hoursOverrides.map((x, j) => (j === i ? { ...x, intervals: [{ ...x.intervals[0]!, startMin: m }] } : x)) }); }} /><span>–</span><input type="time" className="input" aria-label={t('branch.to')} value={minutesToHHMM(o.intervals[0].endMin)} onChange={(e) => { const m = hhmmToMinutes(e.target.value); if (m !== null) set({ hoursOverrides: d.hoursOverrides.map((x, j) => (j === i ? { ...x, intervals: [{ ...x.intervals[0]!, endMin: m <= x.intervals[0]!.startMin ? m + 1440 : m }] } : x)) }); }} /></div> : null}
+            </div>
+            <div className="edit-row__foot"><IconButton icon="trash" label={t('common.remove')} onClick={() => set({ hoursOverrides: d.hoursOverrides.filter((_, j) => j !== i) })} /></div>
           </div>
         ))}
         <Button size="sm" variant="ghost" icon="plus" onClick={() => set({ hoursOverrides: [...d.hoursOverrides, { date: new Date().toISOString().slice(0, 10), intervals: [] }] })}>{t('branch.addOverride')}</Button>
@@ -75,17 +82,25 @@ export function BranchForm({ initial, onSave, saving }: { initial: BranchDraft; 
       <section className="card stack">
         <h2>{t('dash.deliveryAreas')}</h2>
         <Checkbox label={t('branch.pickup')} checked={d.pickupEnabled} onChange={(e) => set({ pickupEnabled: e.target.checked })} />
-        <Checkbox label={t('branch.delivery')} checked={d.deliveryEnabled} onChange={(e) => set({ deliveryEnabled: e.target.checked })} />
+        <Checkbox label={t('branch.delivery')} checked={d.deliveryEnabled} onChange={(e) => set({ deliveryEnabled: e.target.checked, deliveryCities: e.target.checked && d.deliveryCities.length === 0 ? [{ cityId: d.cityId, feeAgorot: 0, minSubtotalAgorot: 0 }] : d.deliveryCities })} />
         {d.deliveryEnabled ? (
           <>
             <p className="muted">{t('branch.minHint')}</p>
             {d.deliveryCities.map((r, i) => (
-              <div key={r.cityId} className="row">
-                <Select label={t('address.city')} value={r.cityId} onChange={(e) => set({ deliveryCities: d.deliveryCities.map((x, j) => (j === i ? { ...x, cityId: e.target.value } : x)) })}>{cities.map((c) => <option key={c.id} value={c.id}>{L(c.name)}</option>)}</Select>
-                <TextInput label={t('branch.fee')} type="number" ltr step="0.5" value={(r.feeAgorot / 100).toString()} onChange={(e) => set({ deliveryCities: d.deliveryCities.map((x, j) => (j === i ? { ...x, feeAgorot: Math.round(Number(e.target.value) * 100) } : x)) })} />
-                <TextInput label={t('branch.minSubtotal')} type="number" ltr step="1" value={(r.minSubtotalAgorot / 100).toString()} onChange={(e) => set({ deliveryCities: d.deliveryCities.map((x, j) => (j === i ? { ...x, minSubtotalAgorot: Math.round(Number(e.target.value) * 100) } : x)) })} />
-                <IconButton icon="trash" label={t('common.remove')} onClick={() => set({ deliveryCities: d.deliveryCities.filter((_, j) => j !== i) })} />
-                <span className="muted">{money(r.feeAgorot, locale)} · {money(r.minSubtotalAgorot, locale)}</span>
+              <div key={r.cityId} className="edit-row">
+                <div className="edit-row__main">
+                  {/* One grid for all three: the city select on its own line above two short number
+                      fields left the rule reading as a full-width control over a pair of stubs. */}
+                  <div className="form-row">
+                    <Select label={t('address.city')} value={r.cityId} onChange={(e) => set({ deliveryCities: d.deliveryCities.map((x, j) => (j === i ? { ...x, cityId: e.target.value } : x)) })}>{cities.filter((c) => c.id === r.cityId || !d.deliveryCities.some((x) => x.cityId === c.id)).map((c) => <option key={c.id} value={c.id}>{L(c.name)}</option>)}</Select>
+                    <TextInput label={`${t('branch.fee')} (₪)`} type="number" ltr step="0.5" value={(r.feeAgorot / 100).toString()} onChange={(e) => set({ deliveryCities: d.deliveryCities.map((x, j) => (j === i ? { ...x, feeAgorot: Math.round(Number(e.target.value) * 100) } : x)) })} />
+                    <TextInput label={`${t('branch.minSubtotal')} (₪)`} type="number" ltr step="1" value={(r.minSubtotalAgorot / 100).toString()} onChange={(e) => set({ deliveryCities: d.deliveryCities.map((x, j) => (j === i ? { ...x, minSubtotalAgorot: Math.round(Number(e.target.value) * 100) } : x)) })} />
+                  </div>
+                </div>
+                <div className="edit-row__foot">
+                  <span><bdi>{money(r.feeAgorot, locale)}</bdi> · <bdi>{money(r.minSubtotalAgorot, locale)}</bdi></span>
+                  <IconButton icon="trash" label={t('common.remove')} onClick={() => set({ deliveryCities: d.deliveryCities.filter((_, j) => j !== i) })} />
+                </div>
               </div>
             ))}
             <Button size="sm" variant="ghost" icon="plus" onClick={() => { const next = cities.find((c) => !d.deliveryCities.some((x) => x.cityId === c.id)); if (next) set({ deliveryCities: [...d.deliveryCities, { cityId: next.id, feeAgorot: 1000, minSubtotalAgorot: 5000 }] }); }}>{t('branch.addCity')}</Button>
@@ -130,17 +145,21 @@ export function BusinessProfilePage() {
   const { business, can, role } = useDash();
   const [d, setD] = useState({ type: business.type, name: business.name, description: business.description, defaultLocale: business.defaultLocale, publicPhone: business.publicPhone ?? '', publicEmail: business.publicEmail ?? '' });
   const [saving, setSaving] = useState(false);
-  const history = useCollection<{ id: string; targetType: string; branchId?: string; state: string; reason: string; at: string }>(`businesses/${business.id}/approvalHistory`, [orderBy('at', 'desc'), limit(20)], [business.id]);
+  const history = useCollection<{ id: string; targetType: string; branchId?: string; state: string; reason: string; at: string }>((role === 'owner' || role === 'admin') ? `businesses/${business.id}/approvalHistory` : null, [orderBy('at', 'desc'), limit(20)], [business.id]);
   const { locale } = useI18n();
+  const [uploading, setUploading] = useState<'logo' | 'cover' | null>(null);
   const upload = async (kind: 'logo' | 'cover', file: File) => {
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) return toast(t('catalog.photoHint'), 'danger');
+    setUploading(kind);
     try {
-      const path = `businesses/${business.id}/${kind}-${makeId(8)}.${file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg'}`;
-      await uploadBytes(sref(storage, path), file, { contentType: file.type });
-      await call('setBusinessImage', { businessId: business.id, kind, path });
+      const image = await prepareImageUpload(file);
+      const path = `businesses/${business.id}/${kind}-${makeId(8)}.${image.ext}`;
+      await uploadBytes(sref(storage, path), image.blob, { contentType: image.contentType });
+      await recordUpload(path, () => call('setBusinessImage', { businessId: business.id, kind, path }));
       toast(t('catalog.savedOk'));
-    } catch {
-      toast(t('catalog.photoFailed'), 'danger');
+    } catch (e) {
+      toast(t(uploadErrorKey(e)), 'danger');
+    } finally {
+      setUploading(null);
     }
   };
   if (!can('settings')) return <EmptyState icon="shield" title={t('error.forbidden')} />;
@@ -151,25 +170,34 @@ export function BusinessProfilePage() {
       {business.approval === 'pending' ? <Alert tone="info">{t('bizProfile.approvalPending')}</Alert> : business.approval === 'rejected' ? <Alert tone="danger">{t('bizProfile.approvalRejected', { reason: business.approvalReason ?? '' })}</Alert> : business.approval === 'suspended' ? <Alert tone="danger">{t('bizProfile.approvalSuspended', { reason: business.approvalReason ?? '' })}</Alert> : <Alert tone="success">{t('bizProfile.approvalApproved')}</Alert>}
       <section className="card stack">
         <h2>{t('catalog.photo')}</h2>
-        <div className="photo-area">
-          <div className="stack--sm stack"><span className="field__label">{t('bizProfile.logo')}</span><StorageImage path={business.logoPath} alt="" square fallbackLabel={t('discovery.imageFallback')} /><label className="btn btn--secondary btn--sm"><Icon name="image" size={16} /> {t('catalog.uploadPhoto')}<input type="file" className="visually-hidden" accept="image/jpeg,image/png,image/webp" onChange={(e) => e.target.files?.[0] && void upload('logo', e.target.files[0])} /></label></div>
-          <div className="stack--sm stack" style={{ flex: 1, minWidth: 240 }}><span className="field__label">{t('bizProfile.cover')}</span><StorageImage path={business.coverPath} size="display" alt="" wide fallbackLabel={t('discovery.imageFallback')} /><label className="btn btn--secondary btn--sm"><Icon name="image" size={16} /> {t('catalog.uploadPhoto')}<input type="file" className="visually-hidden" accept="image/jpeg,image/png,image/webp" onChange={(e) => e.target.files?.[0] && void upload('cover', e.target.files[0])} /></label></div>
+        <div className="photo-pair">
+          {(['logo', 'cover'] as const).map((kind) => (
+            <div key={kind} className={`photo-pair__item photo-pair__item--${kind}`}>
+              <span className="field__label">{t(kind === 'logo' ? 'bizProfile.logo' : 'bizProfile.cover')}</span>
+              <StorageImage path={kind === 'logo' ? business.logoPath : business.coverPath} size={kind === 'logo' ? 'thumb' : 'display'} alt="" square={kind === 'logo'} wide={kind === 'cover'} fallbackLabel={t('discovery.imageFallback')} />
+              <label className={`btn btn--secondary btn--sm ${uploading ? 'is-busy' : ''}`} aria-busy={uploading === kind || undefined}><Icon name="image" size={16} /> {uploading === kind ? t('catalog.photoUploading') : t('catalog.uploadPhoto')}<input type="file" className="visually-hidden" accept={UPLOAD_ACCEPT} disabled={!!uploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(kind, f); e.target.value = ''; }} /></label>
+            </div>
+          ))}
         </div>
       </section>
       {owner ? (
-        <form className="card stack" onSubmit={async (e) => { e.preventDefault(); if (!hasAnyTranslation(d.name)) return toast(t('validation.atLeastOneLanguage'), 'danger'); setSaving(true); try { await call('updateBusiness', { businessId: business.id, business: { ...d, publicPhone: d.publicPhone || undefined, publicEmail: d.publicEmail || undefined } }); toast(t('catalog.savedOk')); } catch (err) { toast(t(errorKey(err)), 'danger'); } finally { setSaving(false); } }}>
+        <form className="card stack" onSubmit={async (e) => { e.preventDefault(); if (!hasAnyTranslation(d.name)) return toast(t('validation.atLeastOneLanguage'), 'danger'); setSaving(true); try { await call('updateBusiness', { businessId: business.id, business: { ...d } }); toast(t('catalog.savedOk')); } catch (err) { toast(t(errorKey(err)), 'danger'); } finally { setSaving(false); } }}>
           <Segmented label={t('bizProfile.type')} value={d.type} onChange={(type) => setD({ ...d, type })} options={[{ value: 'restaurant', label: t('common.restaurant'), icon: 'utensils' }, { value: 'supermarket', label: t('common.supermarket'), icon: 'basket' }]} />
           <LocalizedInput label={t('common.name')} value={d.name} required onChange={(name) => setD({ ...d, name })} />
           <LocalizedInput label={t('business.about')} value={d.description} multiline onChange={(description) => setD({ ...d, description })} />
           <Select label={t('bizProfile.defaultLocale')} value={d.defaultLocale} onChange={(e) => setD({ ...d, defaultLocale: e.target.value as typeof d.defaultLocale })}><option value="he">עברית</option><option value="ar">العربية</option><option value="en">English</option></Select>
-          <div className="row"><TextInput label={t('bizProfile.publicPhone')} optional ltr value={d.publicPhone} onChange={(e) => setD({ ...d, publicPhone: e.target.value })} /><TextInput label={t('bizProfile.publicEmail')} optional ltr type="email" value={d.publicEmail} onChange={(e) => setD({ ...d, publicEmail: e.target.value })} /></div>
+          <div className="form-row form-cols--wide"><TextInput label={t('bizProfile.publicPhone')} optional ltr value={d.publicPhone} onChange={(e) => setD({ ...d, publicPhone: e.target.value })} /><TextInput label={t('bizProfile.publicEmail')} optional ltr type="email" value={d.publicEmail} onChange={(e) => setD({ ...d, publicEmail: e.target.value })} /></div>
           <Button type="submit" loading={saving}>{t('common.save')}</Button>
         </form>
       ) : null}
+      {/* Managers reach this page (they have `settings`) but firestore.rules keeps approvalHistory to
+          owners and admins, so the section was always empty for them — and the query errored. */}
+      {owner ? (
       <section className="card stack--sm stack">
         <h2>{t('bizProfile.history')}</h2>
         <ul className="list">{history.data.map((h) => <li key={h.id} className="list__item"><Badge tone={h.state === 'approved' ? 'success' : h.state === 'pending' ? 'accent' : 'danger'}>{t(`admin.state.${h.state as 'pending'}`)}</Badge><div className="list__grow">{h.targetType}{h.branchId ? ` · ${h.branchId}` : ''} · {h.reason}</div><span className="muted"><bdi>{formatLocalDateTime(h.at, locale)}</bdi></span></li>)}</ul>
       </section>
+      ) : null}
       <p className="muted">{L(business.name, business.defaultLocale)} · {t('admin.futureMonetization')}</p>
     </div>
   );
@@ -196,9 +224,9 @@ export function StaffPage() {
       <p className="muted">{t('staff.roleHelp')}</p>
       <form className="card stack" onSubmit={async (e) => { e.preventDefault(); setBusy(true); try { const r = await call<{ mode: string; link?: string }>('inviteMember', { businessId: business.id, email, role, allBranches: all, branchIds: all ? [] : branchIds }); toast(t('staff.invited')); if (r.link) setLink(r.link); setEmail(''); await load(); } catch (err) { toast(t(errorKey(err)), 'danger'); } finally { setBusy(false); } }}>
         <h2>{t('staff.invite')}</h2>
-        <div className="row"><TextInput label={t('common.email')} type="email" required ltr value={email} onChange={(e) => setEmail(e.target.value)} /><Select label={t('staff.role')} value={role} onChange={(e) => setRole(e.target.value as 'manager' | 'staff')}><option value="staff">{t('staff.role.staff')}</option><option value="manager">{t('staff.role.manager')}</option></Select></div>
+        <div className="form-row form-cols--wide"><TextInput label={t('common.email')} type="email" required ltr value={email} onChange={(e) => setEmail(e.target.value)} /><Select label={t('staff.role')} value={role} onChange={(e) => setRole(e.target.value as 'manager' | 'staff')}><option value="staff">{t('staff.role.staff')}</option><option value="manager">{t('staff.role.manager')}</option></Select></div>
         <Checkbox label={t('staff.allBranches')} checked={all} onChange={(e) => setAll(e.target.checked)} />
-        {!all ? <div className="row">{branches.map((b) => <Checkbox key={b.id} label={L(b.name, business.defaultLocale)} checked={branchIds.includes(b.id)} onChange={(e) => setBranchIds(e.target.checked ? [...branchIds, b.id] : branchIds.filter((x) => x !== b.id))} />)}</div> : null}
+        {!all ? <div className="form-row">{branches.map((b) => <Checkbox key={b.id} label={L(b.name, business.defaultLocale)} checked={branchIds.includes(b.id)} onChange={(e) => setBranchIds(e.target.checked ? [...branchIds, b.id] : branchIds.filter((x) => x !== b.id))} />)}</div> : null}
         <Button type="submit" loading={busy} disabled={!all && branchIds.length === 0}>{t('staff.invite')}</Button>
         {link ? <Alert tone="info"><span className="muted">{t('staff.inviteLinkNote')}</span><br /><a href={link} dir="ltr">{link}</a></Alert> : null}
       </form>
@@ -237,7 +265,7 @@ export function LoyaltySettingsPage() {
       {role === 'owner' || role === 'admin' ? (
         <form className="card stack" onSubmit={async (e) => { e.preventDefault(); setSaving(true); try { await call('setLoyaltyRules', { businessId: business.id, rules: r }); toast(t('catalog.savedOk')); } catch (err) { toast(t(errorKey(err)), 'danger'); } finally { setSaving(false); } }}>
           <Checkbox label={t('loyaltySettings.enable')} checked={r.enabled} onChange={(e) => setR({ ...r, enabled: e.target.checked })} />
-          <div className="row">
+          <div className="form-row form-cols--tight">
             <TextInput label={`${t('loyaltySettings.earnStep')} (₪)`} type="number" ltr min={LOYALTY_BOUNDS.earnPerAgorot.min / 100} max={LOYALTY_BOUNDS.earnPerAgorot.max / 100} value={(r.earnPerAgorot / 100).toString()} onChange={(e) => setR({ ...r, earnPerAgorot: Math.round(Number(e.target.value) * 100) })} />
             <TextInput label={t('loyaltySettings.pointsPerStep')} type="number" ltr min={1} max={100} value={r.pointsPerStep} onChange={(e) => setR({ ...r, pointsPerStep: Number(e.target.value) })} />
             <TextInput label={`${t('loyaltySettings.redeemValue')} (₪)`} type="number" ltr step="0.01" value={(r.redeemValueAgorot / 100).toString()} onChange={(e) => setR({ ...r, redeemValueAgorot: Math.round(Number(e.target.value) * 100) })} />

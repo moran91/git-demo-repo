@@ -55,6 +55,9 @@
   --shadow-card: 0 1px 2px rgba(25, 62, 45, 0.06);
   --shadow-float: 0 8px 24px rgba(25, 62, 45, 0.14);
   --control-height: 48px;
+  /* Height of a field's label + the gap under it: what a control with no label of its own has to
+   * clear to sit level with its neighbours' controls rather than with their labels. */
+  --label-band: calc(var(--text-secondary) * var(--leading) + var(--space-1));
   --touch-min: 44px;
   --duration: 180ms;
   --ease: cubic-bezier(0.2, 0, 0, 1);

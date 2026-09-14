@@ -11,6 +11,7 @@ import { CheckoutPage } from '@/customer/CheckoutPage';
 import { OrderPage, OrdersPage } from '@/customer/OrderPages';
 import { AccountPage, AddressesPage, FavoritesPage, NotificationsPage, LoyaltyPage } from '@/customer/AccountPages';
 import { PhoneAuthPage } from '@/customer/PhoneAuthPage';
+import { QrLanding } from '@/customer/QrLanding';
 import { NotFound, PageFallback } from '@/app/Shell';
 
 const BusinessRoutes = lazy(() => import('@/business/BusinessRoutes').then((m) => ({ default: m.BusinessRoutes })));
@@ -37,6 +38,7 @@ export function App() {
               <Route path="account/loyalty" element={<LoyaltyPage />} />
               <Route path="signin" element={<PhoneAuthPage />} />
             </Route>
+            <Route path="q/:businessId/:branchId?" element={<QrLanding />} />
             <Route path="business/*" element={<Suspense fallback={<PageFallback />}><BusinessRoutes /></Suspense>} />
             <Route path="admin/*" element={<Suspense fallback={<PageFallback />}><AdminRoutes /></Suspense>} />
             <Route path="explore" element={<Navigate to="/" replace />} />

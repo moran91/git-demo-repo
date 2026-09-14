@@ -9,6 +9,7 @@ import { LanguageSelect, OfflineBanner, UpdateBanner } from '@/app/Shell';
 import { money } from '@/lib/format';
 import { useCollection, where, limit } from '@/lib/queries';
 import { onForegroundMessage } from '@/lib/push';
+import { useHeightVar } from '@/lib/stickyVars';
 import { toast } from '@/design/components';
 
 export function CustomerLayout() {
@@ -45,11 +46,18 @@ export function CustomerLayout() {
   }, []);
 
   const hideCartBar = location.pathname.startsWith('/cart') || location.pathname.startsWith('/checkout') || location.pathname.startsWith('/signin');
+  const showCartBar = count > 0 && !hideCartBar;
+  // The floating cart bar is fixed above the bottom nav, so nothing anchored to the bottom edge knew how
+  // tall it was: the page reserved room for the nav only, and the bar landed on the last product row.
+  // --cart-bar-space is the bar's measured height plus its gap; base.css adds it to the page padding and
+  // to the toast offset. --topbar-height does the same at the top edge for the sticky category nav.
+  const barRef = useHeightVar<HTMLDivElement>('--cart-bar-space', 'var(--space-3)');
+  const topbarRef = useHeightVar<HTMLElement>('--topbar-height');
   return (
     <>
       <a className="skip-link" href="#main">{t('common.skipToContent')}</a>
       <UpdateBanner />
-      <header className="topbar">
+      <header className="topbar" ref={topbarRef}>
         <div className="topbar__inner">
           <Link to="/" className="brand">
             <BrandMark size={32} label={t('brand.logoLabel')} />
@@ -70,8 +78,8 @@ export function CustomerLayout() {
       <main id="main" className="page page--customer">
         <Outlet />
       </main>
-      {count > 0 && !hideCartBar ? (
-        <div className="cart-bar">
+      {showCartBar ? (
+        <div className="cart-bar" ref={barRef}>
           <button type="button" className="btn btn--primary" onClick={() => navigate('/cart')} aria-label={t('cart.summaryAria', { count, total: cartTotal !== null ? money(cartTotal, locale) : '' })}>
             <span className="icon-text"><Icon name="cart" size={18} /> {t('cart.viewCart')} · {count === 1 ? t('cart.item') : t('cart.items', { count })}</span>
             {cartTotal !== null ? <bdi className="price">{money(cartTotal, locale)}</bdi> : null}

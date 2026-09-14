@@ -156,6 +156,11 @@ function DialogInner({ onClose, title, children, footer, sheet, closeLabel }: { 
   const t = useT();
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  // Callers pass inline `onClose` arrows, so it changes every render. Read it through a ref: with
+  // `onClose` in the deps, every keystroke inside the dialog re-ran this effect (close → showModal),
+  // which blurred the focused input after each character.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
@@ -163,10 +168,10 @@ function DialogInner({ onClose, title, children, footer, sheet, closeLabel }: { 
     if (!d.open) d.showModal();
     const onCancel = (e: Event) => {
       e.preventDefault();
-      onClose();
+      onCloseRef.current();
     };
     const onClick = (e: MouseEvent) => {
-      if (e.target === d) onClose();
+      if (e.target === d) onCloseRef.current();
     };
     d.addEventListener('cancel', onCancel);
     d.addEventListener('click', onClick);
@@ -176,9 +181,62 @@ function DialogInner({ onClose, title, children, footer, sheet, closeLabel }: { 
       if (d.open) d.close();
       opener?.focus?.();
     };
-  }, [onClose]);
+  }, []);
+  // Swipe-to-dismiss (mobile bottom sheet): a downward touch drag from the header, or from the body
+  // while it is scrolled to the top, follows the finger and closes past a distance/velocity threshold.
+  useEffect(() => {
+    const d = ref.current;
+    if (!d || !sheet || !window.matchMedia('(max-width: 639px)').matches) return;
+    const body = d.querySelector<HTMLElement>('.dialog__body');
+    let startY = 0, startT = 0, dy = 0, active = false, decided = false, fromBody = false;
+    const onStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      const target = e.target as HTMLElement;
+      if (target.closest('.dialog__footer')) return;
+      fromBody = !!body && body.contains(target);
+      if (fromBody && (body!.scrollTop > 0 || target.closest('textarea, input[type="range"]'))) return;
+      startY = e.touches[0]!.clientY; startT = e.timeStamp; dy = 0; active = true; decided = false;
+      d.classList.remove('is-settling');
+    };
+    const onMove = (e: TouchEvent) => {
+      if (!active) return;
+      const y = e.touches[0]!.clientY - startY;
+      if (!decided) {
+        if (Math.abs(y) < 6) return;
+        decided = true;
+        if (y < 0) { active = false; return; } // upward: hand over to native scroll
+      }
+      dy = Math.max(0, y);
+      e.preventDefault();
+      d.style.transform = `translateY(${dy}px)`;
+    };
+    const onEnd = (e: TouchEvent) => {
+      if (!active) return;
+      active = false;
+      const v = dy / Math.max(1, e.timeStamp - startT);
+      if (dy > 96 || (dy > 24 && v > 0.5)) {
+        d.classList.add('is-settling');
+        d.style.transform = 'translateY(100%)';
+        window.setTimeout(() => onCloseRef.current(), 160);
+        return;
+      }
+      d.classList.add('is-settling');
+      d.style.transform = '';
+    };
+    d.addEventListener('touchstart', onStart, { passive: true });
+    d.addEventListener('touchmove', onMove, { passive: false });
+    d.addEventListener('touchend', onEnd);
+    d.addEventListener('touchcancel', onEnd);
+    return () => {
+      d.removeEventListener('touchstart', onStart);
+      d.removeEventListener('touchmove', onMove);
+      d.removeEventListener('touchend', onEnd);
+      d.removeEventListener('touchcancel', onEnd);
+    };
+  }, [sheet]);
   return (
     <dialog ref={ref} className={`dialog ${sheet ? 'dialog--sheet' : ''}`} aria-labelledby={titleId}>
+      {sheet ? <div className="dialog__grabber" aria-hidden="true" /> : null}
       <div className="dialog__header">
         <h2 id={titleId}>{title}</h2>
         <IconButton icon="x" label={closeLabel ?? t('common.close')} onClick={onClose} />
@@ -246,10 +304,14 @@ export function ToastRegion() {
 }
 
 /* ---------- Stepper ---------- */
-export function Stepper({ value, min = 0, max = 999, step = 1, onChange, decLabel, incLabel, format }: { value: number; min?: number; max?: number; step?: number; onChange: (v: number) => void; decLabel: string; incLabel: string; format?: (v: number) => string }) {
+export function Stepper({ value, min = 0, max = 999, step = 1, onChange, onRemove, decLabel, incLabel, removeLabel, format, size = 'md' }: { value: number; min?: number; max?: number; step?: number; onChange: (v: number) => void; onRemove?: () => void; decLabel: string; incLabel: string; removeLabel?: string; format?: (v: number) => string; size?: 'sm' | 'md' }) {
+  // Stepping below the minimum removes the line when the caller allows it, so the decrement button
+  // turns into a trash can at the floor instead of going dead.
+  const atFloor = value - step < min;
+  const removes = atFloor && !!onRemove;
   return (
-    <div className="stepper">
-      <button type="button" aria-label={decLabel} onClick={() => onChange(Math.max(min, value - step))} disabled={value - step < min}><Icon name="minus" size={18} /></button>
+    <div className={`stepper stepper--${size}`}>
+      <button type="button" className={removes ? 'stepper__remove' : undefined} aria-label={removes ? removeLabel ?? decLabel : decLabel} onClick={() => (removes ? onRemove!() : onChange(Math.max(min, value - step)))} disabled={atFloor && !onRemove}><Icon name={removes ? 'trash' : 'minus'} size={18} /></button>
       <output aria-live="polite" className="num">{format ? format(value) : value}</output>
       <button type="button" aria-label={incLabel} onClick={() => onChange(Math.min(max, value + step))} disabled={value + step > max}><Icon name="plus" size={18} /></button>
     </div>

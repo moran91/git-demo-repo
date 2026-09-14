@@ -98,6 +98,10 @@ export function detectDir(text: string, fallback: 'rtl' | 'ltr'): 'rtl' | 'ltr' 
   for (const ch of text) {
     const c = ch.codePointAt(0) ?? 0;
     if ((c >= 0x0590 && c <= 0x08ff) || (c >= 0xfb1d && c <= 0xfdff) || (c >= 0xfe70 && c <= 0xfeff)) return 'rtl';
+    // U+00D7 (×) and U+00F7 (÷) sit inside the Latin range but are maths symbols, not letters
+    // (bidi class ON). Treating them as strong LTR made "2 × שווארמה" lay out left-to-right while
+    // every other line on the same Hebrew ticket laid out right-to-left.
+    if (c === 0x00d7 || c === 0x00f7) continue;
     if ((c >= 0x41 && c <= 0x5a) || (c >= 0x61 && c <= 0x7a) || (c >= 0x00c0 && c <= 0x024f)) return 'ltr';
   }
   return fallback;

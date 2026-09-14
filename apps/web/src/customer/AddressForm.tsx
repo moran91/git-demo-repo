@@ -39,7 +39,7 @@ export function AddressForm({ initial, onSubmit, submitLabel, submitting, showDe
   };
   return (
     <form
-      className="stack"
+      className="stack form-cols--wide"
       noValidate
       onSubmit={(e) => {
         e.preventDefault();
@@ -69,7 +69,7 @@ export function AddressForm({ initial, onSubmit, submitLabel, submitting, showDe
       <Select label={t('address.city')} required value={v.cityId} onChange={(e) => set({ cityId: e.target.value })} error={errors.cityId}>
         {cities.map((c) => <option key={c.id} value={c.id}>{L(c.name)}</option>)}
       </Select>
-      <div className="two-col">
+      <div className="form-row">
         <TextInput label={t('address.recipientName')} required value={v.recipientName} onChange={(e) => set({ recipientName: e.target.value })} error={errors.recipientName} autoComplete="name" />
         <TextInput label={t('address.recipientPhone')} required value={v.recipientPhone} onChange={(e) => set({ recipientPhone: e.target.value })} error={errors.recipientPhone} inputMode="tel" autoComplete="tel" ltr hint={t('auth.phoneHint')} />
       </div>
@@ -77,11 +77,11 @@ export function AddressForm({ initial, onSubmit, submitLabel, submitting, showDe
       <details className="card card--flat">
         <summary style={{ cursor: 'pointer', fontWeight: 500, minHeight: 44, display: 'flex', alignItems: 'center' }}>{t('address.optionalFields')} <span className="muted" style={{ marginInlineStart: 8 }}>· {t('address.optionalFieldsHint')}</span></summary>
         <div className="stack" style={{ marginTop: 12 }}>
-          <div className="two-col">
+          <div className="form-row">
             <TextInput label={t('address.street')} optional value={v.street ?? ''} onChange={(e) => set({ street: e.target.value || undefined })} />
             <TextInput label={t('address.building')} optional value={v.buildingNumber ?? ''} onChange={(e) => set({ buildingNumber: e.target.value || undefined })} />
           </div>
-          <div className="row">
+          <div className="form-row">
             <TextInput label={t('address.apartment')} optional value={v.apartment ?? ''} onChange={(e) => set({ apartment: e.target.value || undefined })} />
             <TextInput label={t('address.floor')} optional value={v.floor ?? ''} onChange={(e) => set({ floor: e.target.value || undefined })} />
             <TextInput label={t('address.entrance')} optional value={v.entrance ?? ''} onChange={(e) => set({ entrance: e.target.value || undefined })} />

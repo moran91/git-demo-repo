@@ -1,12 +1,13 @@
 import { onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { z } from 'zod';
-import { categoryInputSchema, cleanLocalized, idSchema, productInputSchema, makeId, type Branch, type Business, type Category, type Product } from '@qareeb/shared';
+import { categoryInputSchema, cleanLocalized, idSchema, productInputSchema, sharedModifierGroupInputSchema, makeId, type Branch, type Business, type Category, type ModifierGroup, type Product, type SharedModifierGroup } from '@qareeb/shared';
 import { REGION, col, db, nowIso, storage } from '../lib/firebase.js';
 import { handled, fail } from '../lib/errors.js';
 import { parse } from '../lib/validate.js';
 import { requireCaller, requireMembership } from '../lib/auth.js';
-import { projectCategoryInTx, projectProductInTx, reprojectCatalog } from '../lib/projections.js';
+import { isPubliclyVisible, projectCategoryInTx, projectProductInTx, reprojectCatalog, toPublicProduct } from '../lib/projections.js';
 import { writeAudit } from '../lib/audit.js';
+import { deleteImageWithVariants } from '../lib/images.js';
 
 const opts = { region: REGION } as const;
 const CATALOG_ROLES = ['owner', 'manager'] as const;
@@ -80,17 +81,29 @@ export const reorderCategories = onCall(opts, handled(async (req: CallableReques
   return { ok: true };
 }));
 
-function buildProduct(existing: Product | undefined, input: z.infer<typeof productInputSchema>, ids: { id: string; branchId: string; businessId: string }, now: string): Product {
+/** The product-side copy of a library group: library content, product-side identity and position. */
+function materializeShared(g: Pick<ModifierGroup, 'id' | 'sortOrder'>, s: SharedModifierGroup): ModifierGroup {
+  return { id: g.id, sortOrder: g.sortOrder, sharedGroupId: s.id, name: s.name, required: s.required, minSelect: s.minSelect, maxSelect: s.maxSelect, options: s.options.map((o) => ({ ...o })), placement: s.placement };
+}
+
+function buildProduct(existing: Product | undefined, input: z.infer<typeof productInputSchema>, ids: { id: string; branchId: string; businessId: string }, now: string, shared: Map<string, SharedModifierGroup>): Product {
   if (input.pricingMode === 'weight' && input.variants.length > 0) fail('invalid_argument', { issues: [{ path: 'variants', message: 'weight_items_cannot_have_variants' }] });
   if (input.pricingMode === 'weight' && input.modifierGroups.length > 0) fail('invalid_argument', { issues: [{ path: 'modifierGroups', message: 'weight_items_cannot_have_modifiers' }] });
   const variants = input.variants.map((v, i) => ({ ...v, id: v.id ?? makeId(8), name: cleanLocalized(v.name), sortOrder: v.sortOrder ?? i }));
-  const modifierGroups = input.modifierGroups.map((g, i) => ({
-    ...g,
-    id: g.id ?? makeId(8),
-    name: cleanLocalized(g.name),
-    sortOrder: g.sortOrder ?? i,
-    options: g.options.map((o, j) => ({ ...o, id: o.id ?? makeId(8), name: cleanLocalized(o.name), sortOrder: o.sortOrder ?? j })),
-  }));
+  const modifierGroups: ModifierGroup[] = input.modifierGroups.map((g, i) => {
+    const id = g.id ?? makeId(8);
+    // Array order is authoritative: client-side add/remove/move can leave stale or duplicate sortOrders.
+    const sortOrder = i;
+    if (g.sharedGroupId) {
+      // Linked groups are owned by the library: whatever the client sent for the content is replaced
+      // by the library's current version, so the product can never drift from it while linked.
+      const s = shared.get(g.sharedGroupId);
+      if (!s || s.archived) fail('invalid_argument', { issues: [{ path: 'modifierGroups', message: 'unknown_shared_group' }] });
+      return materializeShared({ id, sortOrder }, s);
+    }
+    const { sharedGroupId: _none, ...rest } = g;
+    return { ...rest, id, name: cleanLocalized(g.name), sortOrder, options: g.options.map((o, j) => ({ ...o, id: o.id ?? makeId(8), name: cleanLocalized(o.name), sortOrder: o.sortOrder ?? j })) };
+  });
   const uniq = (arr: string[]) => new Set(arr).size === arr.length;
   if (!uniq(variants.map((v) => v.id)) || !uniq(modifierGroups.map((g) => g.id)) || modifierGroups.some((g) => !uniq(g.options.map((o) => o.id)))) {
     fail('invalid_argument', { issues: [{ path: 'ids', message: 'duplicate_ids' }] });
@@ -145,8 +158,11 @@ export const saveProduct = onCall(opts, handled(async (req: CallableRequest<unkn
       if (count.size >= 1000) fail('invalid_argument', { issues: [{ path: 'product', message: 'too_many_products' }] });
     }
     const existing = existingSnap.data() as Product | undefined;
+    const sharedIds = [...new Set(input.product.modifierGroups.map((g) => g.sharedGroupId).filter((x): x is string => !!x))];
+    const sharedSnaps = await Promise.all(sharedIds.map((id) => tx.get(col.modifierGroups(input.businessId, input.branchId).doc(id))));
+    const shared = new Map(sharedSnaps.filter((s) => s.exists).map((s) => [s.id, s.data() as SharedModifierGroup]));
     const now = nowIso();
-    const p = buildProduct(existing, input.product, { id: ref.id, branchId: input.branchId, businessId: input.businessId }, now);
+    const p = buildProduct(existing, input.product, { id: ref.id, branchId: input.branchId, businessId: input.businessId }, now, shared);
     tx.set(ref, p);
     projectProductInTx(tx, ctx.business, ctx.branch, p);
     return p;
@@ -220,7 +236,8 @@ export const adjustStock = onCall(opts, handled(async (req: CallableRequest<unkn
 /** Records the uploaded image path (client uploads to businesses/{businessId}/branches/{branchId}/products/{productId}/...). */
 export const setProductImage = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
   const c = await requireCaller(req);
-  const input = parse(z.object({ businessId: idSchema, branchId: idSchema, productId: idSchema, path: z.string().max(400).nullable() }).strict(), req.data);
+  // `path` is stripped when the client sends null (see stripNulls), so absent also means "clear".
+  const input = parse(z.object({ businessId: idSchema, branchId: idSchema, productId: idSchema, path: z.string().max(400).nullable().optional() }).strict(), req.data);
   await requireMembership(c, input.businessId, [...CATALOG_ROLES], input.branchId);
   const prefix = `businesses/${input.businessId}/branches/${input.branchId}/products/${input.productId}/`;
   if (input.path && !input.path.startsWith(prefix)) fail('invalid_argument', { issues: [{ path: 'path', message: 'wrong_tenant_path' }] });
@@ -244,7 +261,7 @@ export const setProductImage = onCall(opts, handled(async (req: CallableRequest<
     tx.set(ref, next);
     projectProductInTx(tx, ctx.business, ctx.branch, next);
   });
-  if (removed) await storage.bucket().file(removed).delete({ ignoreNotFound: true }).catch(() => undefined);
+  if (removed) await deleteImageWithVariants(removed);
   return { ok: true };
 }));
 
@@ -286,10 +303,97 @@ export const copyToBranch = onCall(opts, handled(async (req: CallableRequest<unk
     const categoryId = catMap.get(p.categoryId);
     if (!categoryId) continue;
     // Images are not duplicated (tenant path is branch-scoped); the copy starts without a photo.
-    batch.set(ref, { ...p, id: ref.id, branchId: input.toBranchId, categoryId, imagePath: undefined, stockQty: p.trackInventory ? 0 : undefined, createdAt: now, updatedAt: now } satisfies Product);
+    // Library links are branch-scoped; the copy keeps the current content as independent groups.
+    const modifierGroups = p.modifierGroups.map(({ sharedGroupId: _s, ...g }) => g);
+    batch.set(ref, { ...p, id: ref.id, branchId: input.toBranchId, categoryId, modifierGroups, imagePath: undefined, stockQty: p.trackInventory ? 0 : undefined, createdAt: now, updatedAt: now } satisfies Product);
     copied++;
   }
   await batch.commit();
   await reprojectCatalog(input.businessId, input.toBranchId);
   return { copied };
+}));
+
+// ---------- shared extras library ----------
+
+/** Rewrites the materialised copy in every product linked to `group`; returns how many were updated. */
+async function syncLinkedProducts(businessId: string, branchId: string, group: SharedModifierGroup): Promise<number> {
+  const [bSnap, brSnap, prods] = await Promise.all([col.business(businessId).get(), col.branch(businessId, branchId).get(), col.products(businessId, branchId).get()]);
+  if (!bSnap.exists || !brSnap.exists) return 0;
+  const visible = isPubliclyVisible(bSnap.data() as Business, brSnap.data() as Branch);
+  const now = nowIso();
+  const linked = prods.docs.map((d) => d.data() as Product).filter((p) => p.modifierGroups.some((g) => g.sharedGroupId === group.id));
+  // 2 writes per product (private + public); stay under the 500-op batch limit.
+  for (let i = 0; i < linked.length; i += 200) {
+    const batch = db.batch();
+    for (const p of linked.slice(i, i + 200)) {
+      const next: Product = { ...p, modifierGroups: p.modifierGroups.map((g) => (g.sharedGroupId === group.id ? materializeShared(g, group) : g)), updatedAt: now };
+      batch.set(col.products(businessId, branchId).doc(p.id), next);
+      const pub = col.publicProducts(branchId).doc(p.id);
+      if (visible && !next.archived) batch.set(pub, toPublicProduct(next));
+      else batch.delete(pub);
+    }
+    await batch.commit();
+  }
+  return linked.length;
+}
+
+export const saveSharedModifierGroup = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
+  const c = await requireCaller(req);
+  const input = parse(z.object({ businessId: idSchema, branchId: idSchema, groupId: idSchema.optional(), group: sharedModifierGroupInputSchema }).strict(), req.data);
+  await requireMembership(c, input.businessId, [...CATALOG_ROLES], input.branchId);
+  const ref = input.groupId ? col.modifierGroups(input.businessId, input.branchId).doc(input.groupId) : col.modifierGroups(input.businessId, input.branchId).doc();
+  const group = await db.runTransaction(async (tx) => {
+    await loadContext(tx, input.businessId, input.branchId);
+    const existingSnap = await tx.get(ref);
+    if (input.groupId && !existingSnap.exists) fail('not_found');
+    if (!input.groupId) {
+      const count = await tx.get(col.modifierGroups(input.businessId, input.branchId).limit(200));
+      if (count.size >= 200) fail('invalid_argument', { issues: [{ path: 'group', message: 'too_many_groups' }] });
+    }
+    const existing = existingSnap.data() as SharedModifierGroup | undefined;
+    const options = input.group.options.map((o, j) => ({ ...o, id: o.id ?? makeId(8), name: cleanLocalized(o.name), sortOrder: o.sortOrder ?? j }));
+    if (new Set(options.map((o) => o.id)).size !== options.length) fail('invalid_argument', { issues: [{ path: 'ids', message: 'duplicate_ids' }] });
+    const now = nowIso();
+    const g: SharedModifierGroup = {
+      id: ref.id,
+      businessId: input.businessId,
+      branchId: input.branchId,
+      name: cleanLocalized(input.group.name),
+      required: input.group.required,
+      minSelect: input.group.minSelect,
+      maxSelect: input.group.maxSelect,
+      options,
+      placement: input.group.placement,
+      sortOrder: input.group.sortOrder ?? existing?.sortOrder ?? 0,
+      archived: existing?.archived ?? false,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    tx.set(ref, g);
+    return g;
+  });
+  // Fan-out happens after the library write so a product saved concurrently re-reads the new version.
+  const linkedProducts = input.groupId ? await syncLinkedProducts(input.businessId, input.branchId, group) : 0;
+  return { group, linkedProducts };
+}));
+
+export const setSharedModifierGroupArchived = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
+  const c = await requireCaller(req);
+  const input = parse(z.object({ businessId: idSchema, branchId: idSchema, groupId: idSchema, archived: z.boolean() }).strict(), req.data);
+  await requireMembership(c, input.businessId, [...CATALOG_ROLES], input.branchId);
+  await db.runTransaction(async (tx) => {
+    await loadContext(tx, input.businessId, input.branchId);
+    const ref = col.modifierGroups(input.businessId, input.branchId).doc(input.groupId);
+    const snap = await tx.get(ref);
+    if (!snap.exists) fail('not_found');
+    if (input.archived) {
+      // Like categories: an archived library group must not leave dangling links behind.
+      const prods = await tx.get(col.products(input.businessId, input.branchId).where('archived', '==', false));
+      if (prods.docs.some((d) => (d.data() as Product).modifierGroups.some((g) => g.sharedGroupId === input.groupId))) {
+        fail('invalid_argument', { issues: [{ path: 'group', message: 'shared_group_in_use' }] });
+      }
+    }
+    tx.set(ref, { ...(snap.data() as SharedModifierGroup), archived: input.archived, updatedAt: nowIso() });
+  });
+  return { ok: true };
 }));

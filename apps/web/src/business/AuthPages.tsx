@@ -91,10 +91,37 @@ export function VerifyEmailPage() {
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [sentAgain, setSentAgain] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  /**
+   * An invitation parked here (acceptInvitation requires a verified email) has to be finished once
+   * the address is verified. Without this the invited manager/staff lands on /business with no
+   * membership at all and the invitation stays pending forever.
+   */
+  const finishPendingInvite = async (): Promise<boolean> => {
+    let pending: { id?: string; token?: string } | null = null;
+    try {
+      const raw = sessionStorage.getItem('qareeb.pendingInvite');
+      if (raw) pending = JSON.parse(raw) as { id?: string; token?: string };
+    } catch {
+      /* ignore */
+    }
+    if (!pending?.id || !pending.token) return false;
+    try {
+      const r = await call<{ businessId?: string }>('acceptInvitation', { id: pending.id, token: pending.token });
+      try { sessionStorage.removeItem('qareeb.pendingInvite'); } catch { /* ignore */ }
+      await refreshProfile();
+      navigate(r.businessId ? `/business/${r.businessId}` : '/business/new');
+      return true;
+    } catch (err) {
+      setError(t(errorKey(err)));
+      return false;
+    }
+  };
   return (
     <AuthFrame title={t('auth.verifyEmailTitle')} body={t('auth.verifyEmailBody', { email: user?.email ?? '' })}>
       <div className="card stack">
-        <Button block loading={busy} onClick={async () => { setBusy(true); await user?.reload(); await user?.getIdToken(true); await refreshProfile(); setBusy(false); if (auth.currentUser?.emailVerified) navigate('/business'); }}>{t('auth.iVerified')}</Button>
+        {error ? <Alert tone="danger">{error}</Alert> : null}
+        <Button block loading={busy} onClick={async () => { setBusy(true); setError(null); await user?.reload(); await user?.getIdToken(true); await refreshProfile(); if (auth.currentUser?.emailVerified) { const done = await finishPendingInvite(); setBusy(false); if (!done) navigate('/business'); return; } setBusy(false); }}>{t('auth.iVerified')}</Button>
         <Button block variant="secondary" disabled={sentAgain} onClick={async () => { if (user) { await sendEmailVerification(user); setSentAgain(true); } }}>{t('auth.resendVerification')}</Button>
         {sentAgain ? <Alert tone="success">{t('auth.resetSent')}</Alert> : null}
       </div>

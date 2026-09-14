@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { doc, deleteDoc, setDoc } from 'firebase/firestore';
-import { evaluateOpen, type City, type Favorite, type HoursOverride, type WeeklyHours } from '@qareeb/shared';
+import { evaluateOpen, type City, type Favorite, type HoursOverride, type Promotion, type WeeklyHours } from '@qareeb/shared';
 import { db } from '@/lib/firebase';
 import { useCollection, useDoc, orderBy, where, limit } from '@/lib/queries';
 import { useAuth } from '@/lib/auth';
@@ -39,6 +39,7 @@ export interface PublicBusiness {
   loyaltyEnabled: boolean;
   loyaltyMaxDiscountPercent: number;
   loyaltyRedeemValueAgorot: number;
+  promotions?: Promotion[];
 }
 
 /** Ticks every 30s so open/closed state follows server-defined hours without a reload. */
@@ -57,8 +58,8 @@ export function useOpenState(branch: Pick<PublicBranch, 'hours' | 'hoursOverride
 }
 
 export function useCities() {
-  const { data, loading } = useCollection<City>('cities', [where('active', '==', true), orderBy('sortOrder'), limit(100)]);
-  return { cities: data, loading };
+  const { data, loading, error } = useCollection<City>('cities', [where('active', '==', true), orderBy('sortOrder'), limit(100)]);
+  return { cities: data, loading, error };
 }
 
 export function useCity(cityId: string) {
@@ -66,9 +67,12 @@ export function useCity(cityId: string) {
 }
 
 export function useDiscovery(cityId: string, mode: 'pickup' | 'delivery', kind: 'restaurant' | 'supermarket') {
+  // Delivery is filtered implicitly (deliveryCityIds is empty unless deliveryEnabled), but pickup was
+  // not, so branches with pickup switched off were listed under "collect" and turned the customer
+  // away once they opened them.
   const constraints = mode === 'delivery'
     ? [where('visible', '==', true), where('type', '==', kind), where('deliveryCityIds', 'array-contains', cityId), limit(60)]
-    : [where('visible', '==', true), where('type', '==', kind), where('cityId', '==', cityId), limit(60)];
+    : [where('visible', '==', true), where('type', '==', kind), where('cityId', '==', cityId), where('pickupEnabled', '==', true), limit(60)];
   return useCollection<PublicBranch>('publicBranches', constraints, [cityId, mode, kind]);
 }
 

@@ -55,6 +55,7 @@ const paths: Record<string, string> = {
   sun: 'M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M12 2v2 M12 20v2 M4 12H2 M22 12h-2 M5 5l1.5 1.5 M17.5 17.5L19 19 M5 19l1.5-1.5 M17.5 6.5L19 5',
   more: 'M6 12h.5 M12 12h.5 M18 12h.5',
   tag: 'M3 12l9-9h9v9l-9 9-9-9z M15 8h.5',
+  qr: 'M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M14 14h3v3h-3z M20 14v.5 M17 20h3 M20 17v.5',
   building: 'M4 21V5l8-2v18 M12 9h8v12 M8 8h.5 M8 12h.5 M8 16h.5 M16 13h.5 M16 17h.5',
 };
 

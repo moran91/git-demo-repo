@@ -38,7 +38,16 @@ export function PrintOrderButton({ order }: { order: Order }) {
       setBusy(false);
     }
   };
-  const localModel = (): ReceiptModel => buildOrderReceipt(order, { template, locale: selected?.receiptLocale ?? business.defaultLocale, paperWidthMm: selected?.paperWidthMm ?? 80, printableDots: selected?.printableDots ?? 576, isRevised: order.revision > 0 });
+  // The server path (enqueuePrint) passes the settled amount, so omitting it here made the OS-print
+  // and preview receipts tell the customer to pay again for an order already settled.
+  const localModel = (): ReceiptModel => buildOrderReceipt(order, {
+    template,
+    locale: selected?.receiptLocale ?? business.defaultLocale,
+    paperWidthMm: selected?.paperWidthMm ?? 80,
+    printableDots: selected?.printableDots ?? 576,
+    isRevised: order.revision > 0,
+    cashReceivedAgorot: order.cashRecordId && !order.cashReversedAt ? order.totals.cashDueAgorot : undefined,
+  });
   return (
     <>
       <Button size="sm" variant="secondary" icon="printer" onClick={() => setOpen(true)}>{t('dash.printOrder')}</Button>

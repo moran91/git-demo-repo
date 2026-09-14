@@ -28,7 +28,8 @@
     "deploy": "firebase deploy",
     "deploy:hosting": "firebase deploy --only hosting",
     "deploy:functions": "firebase deploy --only functions",
-    "deploy:rules": "firebase deploy --only firestore:rules,firestore:indexes,storage"
+    "deploy:rules": "firebase deploy --only firestore:rules,firestore:indexes,storage",
+    "check:storage-upload": "npm run check:storage-upload -w scripts"
   },
   "devDependencies": {
     "eslint": "^10.10.0",

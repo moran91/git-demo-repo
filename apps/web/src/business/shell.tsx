@@ -21,12 +21,17 @@ export interface DashCtx {
   role: MembershipRole | 'admin';
   can: (perm: Perm) => boolean;
 }
-export type Perm = 'orders' | 'cash' | 'catalog' | 'settings' | 'staff' | 'financials' | 'printers_config' | 'print';
+/**
+ * `financials` = viewing cash records and the loyalty ledger, which firestore.rules grants to owners
+ * AND managers ("staff do not see financial reports"). `reverse_cash` is separate because reversing a
+ * recorded payment is owner-only on the server, so a manager must not be offered the button.
+ */
+export type Perm = 'orders' | 'cash' | 'catalog' | 'settings' | 'staff' | 'financials' | 'reverse_cash' | 'printers_config' | 'print';
 
 const ROLE_PERMS: Record<MembershipRole | 'admin', Perm[]> = {
-  owner: ['orders', 'cash', 'catalog', 'settings', 'staff', 'financials', 'printers_config', 'print'],
-  admin: ['orders', 'cash', 'catalog', 'settings', 'staff', 'financials', 'printers_config', 'print'],
-  manager: ['orders', 'cash', 'catalog', 'settings', 'printers_config', 'print'],
+  owner: ['orders', 'cash', 'catalog', 'settings', 'staff', 'financials', 'reverse_cash', 'printers_config', 'print'],
+  admin: ['orders', 'cash', 'catalog', 'settings', 'staff', 'financials', 'reverse_cash', 'printers_config', 'print'],
+  manager: ['orders', 'cash', 'catalog', 'settings', 'financials', 'printers_config', 'print'],
   staff: ['orders', 'cash', 'print'],
 };
 
@@ -40,7 +45,7 @@ export function useDash(): DashCtx {
 /** Picks the business/branch from the route and enforces membership client-side (server enforces again). */
 export function DashboardShell() {
   const t = useT();
-  const { L } = useI18n();
+  const { L, dir } = useI18n();
   const { user, memberships, isAdmin, loading, signOut } = useAuth();
   const { businessId, branchId } = useParams();
   const navigate = useNavigate();
@@ -78,8 +83,10 @@ export function DashboardShell() {
     { to: `${base}/printers`, icon: 'printer', label: t('dash.printers') },
     { to: `${base}/cash`, icon: 'wallet', label: t('dash.cash'), perm: 'financials' },
     { to: `${base}/loyalty`, icon: 'star', label: t('dash.loyalty'), perm: 'financials' },
+    { to: `${base}/promotions`, icon: 'tag', label: t('dash.promotions'), perm: 'settings' },
     { to: `${base}/staff`, icon: 'users', label: t('dash.staff'), perm: 'staff' },
     { to: `${base}/business`, icon: 'store', label: t('dash.business'), perm: 'settings' },
+    { to: `${base}/qr`, icon: 'qr', label: t('dash.qr'), perm: 'settings' },
   ];
   const sidebar = (
     <>
@@ -105,7 +112,7 @@ export function DashboardShell() {
         {drawer ? (
           <>
             <button type="button" className="drawer-backdrop" aria-label={t('common.close')} onClick={() => setDrawer(false)} />
-            <aside className="dash__sidebar dash__sidebar--drawer" role="dialog" aria-modal="true" aria-label={t('common.menu')}>{sidebar}</aside>
+            <aside className="dash__sidebar dash__sidebar--drawer" style={dir === 'rtl' ? { right: 0, left: 'auto' } : { left: 0, right: 'auto' }} role="dialog" aria-modal="true" aria-label={t('common.menu')}>{sidebar}</aside>
           </>
         ) : null}
         <header className="dash__header">
@@ -113,14 +120,17 @@ export function DashboardShell() {
             <IconButton icon="menu" label={t('common.menu')} onClick={() => setDrawer(true)} className="dash__menu-btn" aria-expanded={drawer} />
           </span>
           <BusinessSwitcher currentBusinessId={businessId!} />
-          <select className="select" value={branch.id} aria-label={t('dash.switchBranch')} onChange={(e) => navigate(`/business/${businessId}/${e.target.value}/orders`)}>
-            {branches.map((b) => <option key={b.id} value={b.id}>{L(b.name, business.data!.defaultLocale)}</option>)}
-          </select>
-          <PauseControl />
-          <div style={{ marginInlineStart: 'auto' }} className="row">
+          <div className="dash__header-end row">
             {branch.approval !== 'approved' ? <Badge tone={branch.approval === 'pending' ? 'accent' : 'danger'}>{t(`admin.state.${branch.approval}`)}</Badge> : null}
             {business.data.approval !== 'approved' ? <Badge tone={business.data.approval === 'pending' ? 'accent' : 'danger'}>{t(`admin.state.${business.data.approval}`)}</Badge> : null}
           </div>
+          {/* Zero-height flex item: on a phone the branch picker and the pause button get a full row of
+              their own instead of wrapping at whatever point they happen to run out of space. */}
+          <span className="dash__header-break" aria-hidden="true" />
+          <select className="select dash__branch" value={branch.id} aria-label={t('dash.switchBranch')} onChange={(e) => navigate(`/business/${businessId}/${e.target.value}/orders`)}>
+            {branches.map((b) => <option key={b.id} value={b.id}>{L(b.name, business.data!.defaultLocale)}</option>)}
+          </select>
+          <PauseControl />
         </header>
         <main className="dash__main" id="main">
           <OfflineBanner />
@@ -186,12 +196,12 @@ function PauseControl() {
   const [busy, setBusy] = useState(false);
   if (!can('settings')) return null;
   return (
-    <Button size="sm" variant={branch.ordersPaused ? 'primary' : 'secondary'} icon={branch.ordersPaused ? 'refresh' : 'clock'} loading={busy} onClick={async () => { setBusy(true); try { await call('setOrdersPaused', { businessId: business.id, branchId: branch.id, paused: !branch.ordersPaused }); } catch (e) { toast(t(errorKey(e)), 'danger'); } finally { setBusy(false); } }}>
+    <Button variant={branch.ordersPaused ? 'primary' : 'secondary'} icon={branch.ordersPaused ? 'refresh' : 'clock'} loading={busy} onClick={async () => { setBusy(true); try { await call('setOrdersPaused', { businessId: business.id, branchId: branch.id, paused: !branch.ordersPaused }); } catch (e) { toast(t(errorKey(e)), 'danger'); } finally { setBusy(false); } }}>
       {branch.ordersPaused ? t('dash.resumeOrders') : t('dash.pauseOrders')}
     </Button>
   );
 }
 
 export function PageTitle({ title, children }: { title: string; children?: ReactNode }) {
-  return <div className="dash__title"><h1>{title}</h1><div className="row">{children}</div></div>;
+  return <div className="dash__title"><h1>{title}</h1><div className="actions">{children}</div></div>;
 }

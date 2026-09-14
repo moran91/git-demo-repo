@@ -113,7 +113,17 @@ service cloud.firestore {
           allow read: if isAdmin() || coversBranch(businessId, branchId);
           allow write: if false;
         }
+        match /modifierGroups/{groupId} {
+          allow read: if isAdmin() || coversBranch(businessId, branchId);
+          allow write: if false;
+        }
       }
+    }
+    // Collection-group reads (admin approvals queue lists pending branches across all businesses).
+    // Nested `match` blocks above do not cover collectionGroup queries; this one does, admin-only.
+    match /{path=**}/branches/{branchId} {
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     // ---------- orders ----------

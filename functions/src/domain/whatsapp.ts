@@ -13,7 +13,10 @@ import { rateLimit } from '../lib/ratelimit.js';
  * is issued only after Twilio reports `approved`, bound to the challenge's phone number.
  * Docs: https://www.twilio.com/docs/verify/whatsapp
  */
-const opts = { region: REGION, secrets: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_VERIFY_SERVICE_SID'] as string[] };
+// Secrets are only bound when WHATSAPP_OTP=1 (functions/.env): binding them unconditionally makes
+// `firebase deploy` fail on projects where the Twilio secrets were never created.
+const WHATSAPP_OTP_ENABLED = process.env.WHATSAPP_OTP === '1';
+const opts = { region: REGION, ...(WHATSAPP_OTP_ENABLED ? { secrets: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_VERIFY_SERVICE_SID'] as string[] } : {}) };
 
 function twilioConfig() {
   const sid = process.env.TWILIO_ACCOUNT_SID;

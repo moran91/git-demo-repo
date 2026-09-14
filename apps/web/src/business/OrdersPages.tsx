@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { collection, orderBy as fbOrderBy, query, where as fbWhere } from 'firebase/firestore';
-import { formatPhoneDisplay, type CashRecord, type Order, type OrderEvent, type Product } from '@qareeb/shared';
+import { formatPhoneDisplay, revisionAgreementReason, type CashRecord, type Order, type OrderEvent, type Product } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
 import { useCollection, useDoc, usePaged, where, orderBy, limit } from '@/lib/queries';
 import { db } from '@/lib/firebase';
@@ -100,7 +100,7 @@ export function OrderHistoryPage() {
             {paged.items.map((o) => (
               <tr key={o.id}>
                 <td><span className="order-card__ref" style={{ fontSize: 16 }}>{o.reference}</span><div className="muted">{o.mode === 'delivery' ? t('common.delivery') : t('common.pickup')}</div></td>
-                <td><OrderStatusBadge status={o.status} />{o.cashRecordId ? <div className="badge badge--success" style={{ marginTop: 4 }}>{t('receipt.cashReceived')}</div> : null}</td>
+                <td><OrderStatusBadge status={o.status} />{o.cashRecordId && !o.cashReversedAt ? <div className="badge badge--success" style={{ marginTop: 4 }}>{t('receipt.cashReceived')}</div> : null}</td>
                 <td>{o.contactName}<div className="muted">{L(o.lines.map((l) => l.name)[0] ?? {})}{o.lines.length > 1 ? ` +${o.lines.length - 1}` : ''}</div></td>
                 <td><bdi>{formatLocalDateTime(o.placedAt, locale)}</bdi></td>
                 <td><bdi className="price">{money(o.totals.cashDueAgorot, locale)}</bdi></td>
@@ -131,6 +131,10 @@ export function OrderDetailPage() {
   if (order.loading) return <Skeleton height={300} radius={16} />;
   if (!order.data || order.data.branchId !== branch.id) return <EmptyState icon="alert" title={t('common.notFound')} />;
   const o = order.data;
+  // Staff cannot read cashRecords (owner/manager only), so settlement state has to come from the
+  // order or the person who took the money sees no confirmation at all. The cash record is still
+  // read for the "recorded by" detail, and simply stays absent for staff.
+  const cashPaidAgorot = o.cashRecordId && !o.cashReversedAt ? o.totals.cashDueAgorot : undefined;
   const cashRecord = cash.data && !cash.data.reversed ? cash.data : null;
   const doRecordCash = async () => {
     setBusy(true);
@@ -155,7 +159,7 @@ export function OrderDetailPage() {
           <OrderCard order={o} detailLink={false} />
           <section className="card stack">
             <h2>{t('checkout.summary')}</h2>
-            <Summary totals={o.totals} mode={o.mode} cashReceived={cashRecord?.amountAgorot} />
+            <Summary totals={o.totals} mode={o.mode} cashReceived={cashPaidAgorot} rejected={o.status === 'rejected'} />
             {o.revision > 0 ? <div className="muted">{t('orders.original')}: <bdi>{money(o.originalTotals.cashDueAgorot, locale)}</bdi> · {t('common.version')} {o.version} · rev {o.revision}</div> : null}
             {o.locked ? <Alert tone="info">{t('dash.locked')}</Alert> : null}
             {o.status !== 'rejected' && !o.locked && can('orders') ? <Button variant="secondary" icon="edit" onClick={() => setRevise(true)}>{t('dash.revise')}</Button> : null}
@@ -165,8 +169,8 @@ export function OrderDetailPage() {
                 <Button icon="wallet" disabled={o.totals.isEstimated} onClick={() => setRecordCash(true)}>{t('dash.recordCash')}</Button>
               </>
             ) : null}
-            {cashRecord ? <div className="alert alert--success"><Icon name="check" size={18} /><div>{t('dash.cashRecorded', { amount: money(cashRecord.amountAgorot, locale) })}<div className="muted">{t('dash.cashRecordedBy', { name: cashRecord.recordedBy === o.decidedBy ? t('dash.actorYou') : cashRecord.recordedBy.slice(0, 6), time: formatLocalDateTime(cashRecord.recordedAt, locale) })}</div></div></div> : null}
-            {cashRecord && can('financials') ? <Button variant="danger" size="sm" onClick={() => setReverse(true)}>{t('dash.reverseCash')}</Button> : null}
+            {cashPaidAgorot !== undefined ? <div className="alert alert--success"><Icon name="check" size={18} /><div>{t("dash.cashRecorded", { amount: money(cashPaidAgorot, locale) })}{cashRecord ? <div className="muted">{t('dash.cashRecordedBy', { name: cashRecord.recordedBy === o.decidedBy ? t('dash.actorYou') : cashRecord.recordedBy.slice(0, 6), time: formatLocalDateTime(cashRecord.recordedAt, locale) })}</div> : o.cashSettledAt ? <div className="muted"><bdi>{formatLocalDateTime(o.cashSettledAt, locale)}</bdi></div> : null}</div></div> : null}
+            {cashPaidAgorot !== undefined && can("reverse_cash") ? <Button variant="danger" size="sm" onClick={() => setReverse(true)}>{t('dash.reverseCash')}</Button> : null}
           </section>
         </div>
         <section className="card stack">
@@ -207,7 +211,8 @@ function ReviseDialog({ order, onClose }: { order: Order; onClose: () => void })
   const [busy, setBusy] = useState(false);
   const set = (lineId: string, c: Change | null) => setChanges((s) => { const n = { ...s }; if (c) n[lineId] = c; else delete n[lineId]; return n; });
   const list = Object.values(changes);
-  const needsAgreement = list.some((c) => c.action === 'remove' || c.action === 'substitute' || (c.action === 'set_quantity' && (c.quantity ?? 0) > (order.lines.find((l) => l.lineId === c.lineId)?.quantity ?? 0)));
+  // The same function reviseOrder uses, so the dialog cannot drift from what the server enforces.
+  const needsAgreement = list.some((c) => revisionAgreementReason(order.lines.find((l) => l.lineId === c.lineId), c) !== null);
   const submit = async () => {
     setBusy(true);
     try {
@@ -229,7 +234,7 @@ function ReviseDialog({ order, onClose }: { order: Order; onClose: () => void })
           return (
             <div key={l.lineId} className="card stack--sm stack">
               <strong>{L(l.name)}{l.variantName ? ` (${L(l.variantName)})` : ''} · {l.pricingMode === 'weight' ? `${l.actualGrams ?? l.requestedGrams} g` : `${l.quantity} ×`}</strong>
-              <div className="row">
+              <div className="row row--end">
                 {l.pricingMode === 'weight' ? (
                   <TextInput label={t('dash.setActualWeight')} type="number" inputMode="numeric" min={0} ltr value={c?.action === 'set_actual_weight' ? c.actualGrams ?? '' : ''} onChange={(e) => set(l.lineId, e.target.value ? { lineId: l.lineId, action: 'set_actual_weight', actualGrams: Number(e.target.value) } : null)} />
                 ) : (
@@ -242,7 +247,7 @@ function ReviseDialog({ order, onClose }: { order: Order; onClose: () => void })
                 {products.data.filter((p) => p.available).map((p) => <option key={p.id} value={p.id}>{L(p.name, business.defaultLocale)}</option>)}
               </Select>
               {c?.action === 'substitute' ? (() => { const p = products.data.find((x) => x.id === c.replacementProductId); if (!p) return null; return (
-                <div className="row">
+                <div className="form-row">
                   {p.variants.length ? <Select label={t('product.size')} value={c.replacementVariantId ?? ''} onChange={(e) => set(l.lineId, { ...c, replacementVariantId: e.target.value })}>{p.variants.map((v) => <option key={v.id} value={v.id}>{L(v.name, business.defaultLocale)}</option>)}</Select> : null}
                   {p.pricingMode === 'weight' ? <TextInput label={t('common.weight')} type="number" ltr value={c.replacementGrams ?? ''} onChange={(e) => set(l.lineId, { ...c, replacementGrams: Number(e.target.value) })} /> : <TextInput label={t('common.quantity')} type="number" ltr value={c.replacementQuantity ?? 1} onChange={(e) => set(l.lineId, { ...c, replacementQuantity: Number(e.target.value) })} />}
                 </div>

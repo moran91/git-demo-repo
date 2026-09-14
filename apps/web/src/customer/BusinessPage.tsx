@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router';
 import { formatPhoneDisplay, minutesToHHMM, type Category, type Product } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
@@ -10,9 +10,13 @@ import { cartStore } from '@/lib/cart';
 import { money } from '@/lib/format';
 import { telHref } from '@/lib/format';
 import { ErrorView } from '@/app/Shell';
-import { useFavorites, useOpenState, type PublicBranch, type PublicBusiness } from './hooks';
+import { useCity, useFavorites, useOpenState, type PublicBranch, type PublicBusiness } from './hooks';
 import { StorageImage } from './StorageImage';
 import { ProductSheet } from './ProductSheet';
+import { PhotoLightbox } from './PhotoLightbox';
+import { useHeightVar } from '@/lib/stickyVars';
+import { useScrollSpy } from '@/lib/scrollSpy';
+import { formatDay, promotionExpired } from '@/lib/promotions';
 
 export type PublicProduct = Product & { inStock: boolean; stockLeft?: number };
 
@@ -22,6 +26,7 @@ export function BusinessPage() {
   const { L, locale } = useI18n();
   const navigate = useNavigate();
   const prefs = discoveryStore.use();
+  const city = useCity(prefs.cityId);
   const business = useDoc<PublicBusiness>(businessId ? `publicBusinesses/${businessId}` : null);
   const branches = useCollection<PublicBranch>('publicBranches', [where('businessId', '==', businessId ?? '_'), where('visible', '==', true), limit(30)], [businessId]);
   const branch = branches.data.find((b) => b.id === branchId) ?? null;
@@ -33,8 +38,11 @@ export function BusinessPage() {
   const open = useOpenState(branch);
   const { ids, toggle, signedIn } = useFavorites();
   const [active, setActive] = useState<PublicProduct | null>(null);
-  const [activeCat, setActiveCat] = useState<string | null>(null);
+  const [photo, setPhoto] = useState<{ path: string; alt: string } | null>(null);
   const cart = cartStore.use();
+  // The category nav is sticky under the topbar; publishing its height lets a #cat- anchor jump clear
+  // both bars instead of parking the heading behind them.
+  const catNavRef = useHeightVar<HTMLElement>('--cat-nav-height');
 
   const grouped = useMemo(() => {
     const map = new Map<string, PublicProduct[]>();
@@ -44,6 +52,24 @@ export function BusinessPage() {
     }
     return map;
   }, [products.data]);
+
+  // A category only earns a pill once its products have arrived. Gating on categories.data alone
+  // rendered an empty 16px pill bar during the product fetch — a visible flash, and the height that
+  // the sticky-chrome measurement latched onto.
+  const shownCategories = categories.data.filter((c) => grouped.has(c.id));
+  const sectionIds = useMemo(() => shownCategories.map((c) => `cat-${c.id}`), [categories.data, grouped]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Scroll-spy: the pill for the section currently under the sticky chrome is highlighted, and
+  // the pill row scrolls sideways so that pill stays in view.
+  const activeCat = useScrollSpy(sectionIds)?.replace(/^cat-/, '') ?? null;
+  const navEl = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const nav = navEl.current;
+    if (!nav || !activeCat) return;
+    const pill = nav.querySelector<HTMLElement>(`a[href="#cat-${CSS.escape(activeCat)}"]`);
+    if (!pill) return;
+    const target = pill.offsetLeft - (nav.clientWidth - pill.offsetWidth) / 2;
+    nav.scrollTo({ left: target, behavior: 'smooth' });
+  }, [activeCat]);
 
   if (business.loading || branches.loading) {
     return <div className="stack" aria-busy="true"><Skeleton height={0} style={{ aspectRatio: '16/9' }} radius={16} /><Skeleton height={32} width="60%" /><Skeleton height={80} radius={16} /></div>;
@@ -58,20 +84,21 @@ export function BusinessPage() {
   const deliveryRule = branch.deliveryCities.find((d) => d.cityId === prefs.cityId);
   const modeMismatch = prefs.mode === 'delivery' ? !deliveryRule : branch.cityId !== prefs.cityId || !branch.pickupEnabled;
   const isFav = ids.has(biz.id);
+  const promotions = (biz.promotions ?? []).filter((p) => !promotionExpired(p));
 
   return (
     <div className="stack">
       <header className="biz-header">
         <div className="biz-header__cover">
-          <StorageImage path={biz.coverPath} size="display" alt="" wide fallbackLabel={t('discovery.imageFallback')} />
+          <StorageImage path={biz.coverPath} size="display" alt="" wide priority fallbackLabel={t('discovery.imageFallback')} />
         </div>
         <div className="row row--between" style={{ alignItems: 'flex-start' }}>
           <div className="stack--sm stack" style={{ minWidth: 0 }}>
             <h1 className="wrap-anywhere" lang={biz.defaultLocale}>{name}</h1>
             {biz.description ? <p className="muted wrap-anywhere">{L(biz.description, biz.defaultLocale)}</p> : null}
             <div className="row">
-              {branch.ordersPaused ? <Badge tone="accent" icon="clock">{t('common.paused')}</Badge> : open.open ? <Badge tone="success" icon="check">{t('business.openNow')}{open.closesInMin !== undefined ? ` · ${t('discovery.closesAt', { time: minutesToHHMM(new Date().getHours() * 60 + new Date().getMinutes() + open.closesInMin) })}` : ''}</Badge> : <Badge tone="muted" icon="clock">{t('business.closedNow')}{open.opensInMin !== undefined ? ` · ${t('discovery.opensAt', { time: minutesToHHMM(new Date().getHours() * 60 + new Date().getMinutes() + open.opensInMin) })}` : ''}</Badge>}
-              <span className="muted icon-text"><Icon name="pin" size={16} /> {L(branch.locationDescription, biz.defaultLocale)}</span>
+              {branch.ordersPaused ? <Badge tone="accent" icon="clock">{t('common.paused')}</Badge> : open.open ? <Badge tone="success" icon="check">{t('business.openNow')}{open.closesInMin !== undefined ? ` · ${t('discovery.closesAt', { time: minutesToHHMM(new Date().getHours() * 60 + new Date().getMinutes() + open.closesInMin).replace(/^0/, "") })}` : ''}</Badge> : <Badge tone="muted" icon="clock">{t('business.closedNow')}{open.opensInMin !== undefined ? ` · ${t('discovery.opensAt', { time: minutesToHHMM(new Date().getHours() * 60 + new Date().getMinutes() + open.opensInMin).replace(/^0/, "") })}` : ''}</Badge>}
+              {L(branch.locationDescription, biz.defaultLocale) ? <span className="muted icon-text"><Icon name="pin" size={16} /> {L(branch.locationDescription, biz.defaultLocale)}</span> : null}
             </div>
           </div>
           <IconButton icon="heart" label={isFav ? t('discovery.unfavorite') : t('discovery.favorite')} pressed={isFav} onClick={async () => { if (!signedIn) { navigate('/signin'); return; } await toggle({ id: biz.id, kind: 'business', businessId: biz.id }).catch(() => toast(t('common.errorGeneric'), 'danger')); }} />
@@ -88,30 +115,57 @@ export function BusinessPage() {
           ) : null}
         </div>
         {!orderable ? <Alert tone="warn">{branch.ordersPaused ? t('checkout.paused') : t('business.notOrderable')}</Alert> : null}
-        {orderable && modeMismatch ? <Alert tone="info">{prefs.mode === 'delivery' ? t('business.noDeliveryToCity', { city: L((prefs as unknown as { cityName?: Record<string, string> }).cityName ?? {}) || prefs.cityId }) : t('checkout.pickupUnavailable')} <Button size="sm" variant="ghost" onClick={() => discoveryStore.set({ mode: prefs.mode === 'delivery' ? 'pickup' : 'delivery' })}>{t('checkout.changeMode')}</Button></Alert> : null}
+        {orderable && modeMismatch ? <Alert tone="info">{prefs.mode === 'delivery' ? t('business.noDeliveryToCity', { city: city.data ? L(city.data.name) : prefs.cityId }) : t('checkout.pickupUnavailable')} <Button size="sm" variant="ghost" onClick={() => discoveryStore.set({ mode: prefs.mode === 'delivery' ? 'pickup' : 'delivery' })}>{t('checkout.changeMode')}</Button></Alert> : null}
       </header>
 
-      {categories.data.length > 0 ? (
-        <nav className="cat-nav" aria-label={t('business.categories')}>
-          {categories.data.filter((c) => grouped.has(c.id)).map((c) => (
-            <a key={c.id} href={`#cat-${c.id}`} className={activeCat === c.id ? 'active' : ''} onClick={() => setActiveCat(c.id)}>{L(c.name, biz.defaultLocale)}</a>
+      {promotions.length > 0 ? (
+        <section className="promo-strip" aria-label={t('promotions.section')}>
+          {promotions.map((p) => (
+            <article key={p.id} className="promo">
+              <div className="promo__head">
+                <Icon name="tag" size={18} />
+                <span className="promo__kicker">{t('promotions.badge')}</span>
+                {p.endsAt ? <span className="promo__until"><bdi>{t('promotions.until', { date: formatDay(p.endsAt) })}</bdi></span> : null}
+              </div>
+              <h2 className="promo__title wrap-anywhere" lang={biz.defaultLocale}>{L(p.title, biz.defaultLocale)}</h2>
+              {L(p.body, biz.defaultLocale) ? <p className="promo__body wrap-anywhere">{L(p.body, biz.defaultLocale)}</p> : null}
+            </article>
+          ))}
+        </section>
+      ) : null}
+
+      {shownCategories.length > 0 ? (
+        <nav className="cat-nav" ref={(el) => { navEl.current = el; catNavRef(el); }} aria-label={t('business.categories')}>
+          {shownCategories.map((c) => (
+            <a key={c.id} href={`#cat-${c.id}`} className={activeCat === c.id ? 'active' : ''} aria-current={activeCat === c.id ? 'true' : undefined}>{L(c.name, biz.defaultLocale)}</a>
           ))}
         </nav>
       ) : null}
 
       {products.loading ? <div className="product-grid" aria-busy="true">{[0, 1, 2, 3].map((i) => <div key={i} className="product"><Skeleton height={96} width={96} radius={12} /><div className="stack--sm stack"><Skeleton height={18} width="70%" /><Skeleton height={14} width="90%" /><Skeleton height={18} width="30%" /></div></div>)}</div> : null}
       {!products.loading && products.data.length === 0 ? <EmptyState icon="basket" title={t('business.noProducts')} /> : null}
-      {categories.data.filter((c) => grouped.has(c.id)).map((c) => (
+      {shownCategories.map((c) => (
         <section key={c.id} id={`cat-${c.id}`} aria-labelledby={`cat-h-${c.id}`} className="stack">
           <h2 id={`cat-h-${c.id}`}>{L(c.name, biz.defaultLocale)}</h2>
           <div className="product-grid">
             {grouped.get(c.id)!.map((p) => {
               const unavailable = !p.available || !p.inStock;
-              const priceLabel = p.pricingMode === 'weight' ? `${money(p.priceAgorot, locale)} / ${t('common.perKg').replace('per ', '')}` : p.variants.length ? `${money(Math.min(...p.variants.map((v) => v.priceAgorot)), locale)}+` : money(p.priceAgorot, locale);
+              // The unit is appended once by the footer below. Building it in here too printed it
+              // twice — `.replace('per ', '')` is a no-op in he/ar, and even in English produced
+              // "₪8.90 / kg per kg".
+              const priceLabel = p.pricingMode === 'weight' ? money(p.priceAgorot, locale) : p.variants.length ? `${money(Math.min(...p.variants.map((v) => v.priceAgorot)), locale)}+` : money(p.priceAgorot, locale);
               const inCart = cart.cart?.branchId === branch.id ? cart.cart.lines.filter((l) => l.productId === p.id).reduce((n, l) => n + (l.requestedGrams ? 1 : l.quantity), 0) : 0;
               return (
-                <article key={p.id} className={`product ${unavailable ? 'product--unavailable' : ''}`}>
-                  <StorageImage path={p.imagePath} alt={t('product.photoAlt', { name: L(p.name, biz.defaultLocale) })} square className="product__img" fallbackLabel={t('discovery.imageFallback')} />
+                <article
+                  key={p.id}
+                  className={`product ${unavailable ? 'product--unavailable' : ''} ${!(unavailable || !orderable || modeMismatch) ? 'product--clickable' : ''}`}
+                  onClick={(e) => { if (unavailable || !orderable || modeMismatch) return; if ((e.target as HTMLElement).closest('button, a')) return; setActive(p); }}
+                  onKeyDown={(e) => { if (e.target !== e.currentTarget) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (!(unavailable || !orderable || modeMismatch)) setActive(p); } }}
+                  tabIndex={!(unavailable || !orderable || modeMismatch) ? 0 : undefined}
+                  role={!(unavailable || !orderable || modeMismatch) ? 'button' : undefined}
+                  aria-label={!(unavailable || !orderable || modeMismatch) ? L(p.name, biz.defaultLocale) : undefined}
+                >
+                  <StorageImage path={p.imagePath} alt={t('product.photoAlt', { name: L(p.name, biz.defaultLocale) })} square className="product__img" fallbackLabel={t('discovery.imageFallback')} onClick={() => { if (!(unavailable || !orderable || modeMismatch)) setActive(p); else if (p.imagePath) setPhoto({ path: p.imagePath, alt: t('product.photoAlt', { name: L(p.name, biz.defaultLocale) }) }); }} />
                   <div className="product__body">
                     <h3 className="wrap-anywhere">{L(p.name, biz.defaultLocale)}</h3>
                     {L(p.description, biz.defaultLocale) ? <p className="muted wrap-anywhere">{L(p.description, biz.defaultLocale)}</p> : null}
@@ -136,6 +190,7 @@ export function BusinessPage() {
         </section>
       ))}
       {active ? <ProductSheet product={active} business={biz} branch={branch} mode={prefs.mode} cityId={prefs.cityId} onClose={() => setActive(null)} /> : null}
+      {photo ? <PhotoLightbox path={photo.path} alt={photo.alt} onClose={() => setPhoto(null)} /> : null}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { formatPhoneDisplay, type Order } from '@qareeb/shared';
+import { formatGrams, formatPhoneDisplay, placementSuffix, type Order } from '@qareeb/shared';
+import { PizzaIcon } from '@/customer/PizzaPlacement';
 import { useI18n, useT } from '@/lib/i18n';
 import { Button, Badge, Dialog, TextArea, toast, Alert } from '@/design/components';
 import { Icon } from '@/design/Icon';
@@ -26,9 +27,9 @@ export function OrderLines({ order, compact }: { order: Order; compact?: boolean
         <li key={l.lineId} className={`order-line ${l.removed ? 'order-line--removed' : ''}`}>
           <span className="wrap-anywhere">
             {l.removed ? <span className="badge badge--danger">{t('orders.removed')}</span> : l.substitutedFromLineId ? <span className="badge badge--accent">{t('orders.substituted')}</span> : null}{' '}
-            <strong>{l.pricingMode === 'weight' ? (l.actualGrams !== undefined ? `${l.actualGrams} g` : `${l.requestedGrams ?? 0} g`) : `${l.quantity} ×`}</strong> {L(l.name)}{l.variantName ? ` (${L(l.variantName)})` : ''}
-            {l.pricingMode === 'weight' && l.actualGrams !== undefined ? <span className="muted"> · {t('orders.requestedWeight')} {l.requestedGrams} g</span> : null}
-            {l.modifiers.length ? <div className="order-line__mods">+ {l.modifiers.map((m) => L(m.optionName)).join(', ')}</div> : null}
+            <strong>{l.pricingMode === 'weight' ? (l.actualGrams !== undefined ? formatGrams(l.actualGrams, locale) : formatGrams(l.requestedGrams ?? 0, locale)) : `${l.quantity} ×`}</strong> {L(l.name)}{l.variantName ? ` (${L(l.variantName)})` : ''}
+            {l.pricingMode === 'weight' && l.actualGrams !== undefined ? <span className="muted"> · {t("orders.requestedWeight")} {formatGrams(l.requestedGrams ?? 0, locale)}</span> : null}
+            {l.modifiers.length ? <div className="order-line__mods">+ {l.modifiers.map((m, i) => <span key={m.optionId + i}>{i ? ', ' : ''}{m.placement && m.placement !== 'whole' ? <PizzaIcon placement={m.placement} size={18} label={placementSuffix(m.placement, t)} /> : null} {L(m.optionName)}{placementSuffix(m.placement, t)}</span>)}</div> : null}
             {l.note ? <div className="order-line__mods">“{l.note}”</div> : null}
           </span>
           {!compact ? <bdi className="num">{l.removed ? '' : money(l.lineTotalAgorot, locale)}</bdi> : null}

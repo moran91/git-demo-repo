@@ -1,5 +1,5 @@
-import { getMessaging, getToken, isSupported, onMessage, type Messaging } from 'firebase/messaging';
-import { doc, setDoc } from 'firebase/firestore';
+import { deleteToken, getMessaging, getToken, isSupported, onMessage, type Messaging } from 'firebase/messaging';
+import { deleteDoc, doc, setDoc } from 'firebase/firestore';
 import type { Locale } from '@qareeb/shared';
 import { app, db, VAPID_KEY } from './firebase';
 
@@ -42,8 +42,34 @@ export async function enablePush(uid: string, locale: Locale, registration: Serv
   return 'granted';
 }
 
+/**
+ * Unregisters this device from the signed-out account. Without it the token stays under the previous
+ * user's deviceTokens and the server keeps pushing their order notifications to this device — which
+ * the next person to sign in on it would receive.
+ */
+export async function disablePush(uid: string): Promise<void> {
+  let token: string | null = null;
+  try {
+    token = localStorage.getItem('qareeb.push.token');
+  } catch {
+    /* ignore */
+  }
+  if (token) {
+    await deleteDoc(doc(db, `users/${uid}/deviceTokens/${token}`)).catch(() => undefined);
+    const m = await getMsg().catch(() => null);
+    if (m) await deleteToken(m).catch(() => undefined);
+  }
+  try {
+    localStorage.removeItem('qareeb.push.token');
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function onForegroundMessage(cb: (title: string, body: string, link: string) => void): Promise<() => void> {
   const m = await getMsg();
   if (!m) return () => undefined;
-  return onMessage(m, (p) => cb(p.notification?.title ?? '', p.notification?.body ?? '', p.data?.link ?? '/'));
+  // Notifications are sent data-only (see functions/src/lib/outbox.ts); the notification fallbacks
+  // keep any older in-flight message rendering correctly.
+  return onMessage(m, (p) => cb(p.data?.title ?? p.notification?.title ?? '', p.data?.body ?? p.notification?.body ?? '', p.data?.link ?? '/'));
 }

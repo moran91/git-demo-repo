@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { clampRedemption, computeTotals, maxLoyaltyDiscount, pointsEarned, priceLine, resolveModifiers } from '../src/pricing.js';
 import { weightLineTotal, formatILSPlain } from '../src/money.js';
 import type { Product } from '../src/types.js';
+import { normalizePlacement } from '../src/placement.js';
+import { toppingPlacementSchema } from '../src/schemas.js';
 
 const base: Product = {
   id: 'p1', branchId: 'b1', businessId: 'biz', categoryId: 'c', name: { he: 'שווארמה' }, description: {}, dietaryText: {},
@@ -75,5 +77,42 @@ describe('loyalty math', () => {
     expect(formatILSPlain(1250)).toBe('₪12.50');
     expect(formatILSPlain(1200)).toBe('₪12');
     expect(formatILSPlain(-5)).toBe('-₪0.05');
+  });
+});
+
+describe('pizza topping placement', () => {
+  const pizza: Product = {
+    ...base,
+    modifierGroups: [
+      { id: 'top', name: { he: 'תוספות מעל' }, required: false, minSelect: 1, maxSelect: 10, sortOrder: 0, placement: true, options: [
+        { id: 'corn', name: { he: 'תירס' }, priceDeltaAgorot: 300, available: true, sortOrder: 0 },
+        { id: 'olive', name: { he: 'זיתים' }, priceDeltaAgorot: 300, available: true, sortOrder: 1 },
+      ] },
+      { id: 'cheese', name: { he: 'גבינות' }, required: false, minSelect: 1, maxSelect: 3, sortOrder: 1, options: [
+        { id: 'bulg', name: { he: 'בולגרית' }, priceDeltaAgorot: 800, available: true, sortOrder: 0 },
+      ] },
+    ],
+  };
+  it('records placement per topping, defaults to whole, and never changes the price', () => {
+    const r = resolveModifiers(pizza, [{ groupId: 'top', optionIds: ['corn', 'olive'], placements: { corn: 'bl+tl' } }, { groupId: 'cheese', optionIds: ['bulg'], placements: { bulg: 'right' } }]);
+    expect(r).toMatchObject({ ok: true, delta: 1400 });
+    if (!r.ok) return;
+    expect(r.snapshots.map((s) => [s.optionId, s.placement])).toEqual([['corn', 'tl+bl'], ['olive', 'whole'], ['bulg', undefined]]);
+  });
+  it('a half topping costs the same as a whole one', () => {
+    const whole = priceLine(pizza, { lineId: 'l', productId: 'p1', modifiers: [{ groupId: 'top', optionIds: ['corn'] }], quantity: 1, expectedUnitPriceAgorot: 3800 });
+    const half = priceLine(pizza, { lineId: 'l', productId: 'p1', modifiers: [{ groupId: 'top', optionIds: ['corn'], placements: { corn: 'tr' } }], quantity: 1, expectedUnitPriceAgorot: 3800 });
+    expect(whole.line?.lineTotalAgorot).toBe(3800);
+    expect(half.line?.lineTotalAgorot).toBe(3800);
+    expect(half.line?.modifiers[0]?.placement).toBe('tr');
+  });
+});
+
+describe('legacy placement values', () => {
+  it('maps left/right from older clients to quarter sets', () => {
+    expect(normalizePlacement('left')).toBe('tl+bl');
+    expect(normalizePlacement('right')).toBe('tr+br');
+    expect(toppingPlacementSchema.safeParse('right').success).toBe(true);
+    expect(toppingPlacementSchema.safeParse('middle').success).toBe(false);
   });
 });

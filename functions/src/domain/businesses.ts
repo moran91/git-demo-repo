@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { createHash, randomBytes } from 'node:crypto';
 import {
   DEFAULT_LOYALTY_RULES,
+  MAX_PROMOTIONS,
   branchInputSchema,
   businessInputSchema,
   cleanLocalized,
@@ -10,14 +11,17 @@ import {
   loyaltyRulesInputSchema,
   membershipInputSchema,
   normalizeIsraeliPhone,
+  promotionInputSchema,
   type Branch,
   type Business,
   type Membership,
+  type Promotion,
 } from '@qareeb/shared';
-import { APP_ORIGIN, REGION, auth, col, db, nowIso } from '../lib/firebase.js';
+import { APP_ORIGIN, FieldValue, REGION, auth, col, db, nowIso, storage } from '../lib/firebase.js';
 import { handled, fail } from '../lib/errors.js';
 import { parse } from '../lib/validate.js';
 import { requireCaller, requireMembership, requireVerifiedEmail } from '../lib/auth.js';
+import { deleteImageWithVariants } from '../lib/images.js';
 import { projectBranchInTx, reprojectBusiness } from '../lib/projections.js';
 import { writeAudit } from '../lib/audit.js';
 import { enqueueEvent } from '../lib/outbox.js';
@@ -69,8 +73,16 @@ export const updateBusiness = onCall(opts, handled(async (req: CallableRequest<u
     if (input.business.description) patch.description = cleanLocalized(input.business.description);
     if (input.business.defaultLocale) patch.defaultLocale = input.business.defaultLocale;
     if (input.business.type) patch.type = input.business.type;
-    if (input.business.publicPhone !== undefined) patch.publicPhone = input.business.publicPhone ? normalizeIsraeliPhone(input.business.publicPhone) ?? input.business.publicPhone : undefined;
-    if (input.business.publicEmail !== undefined) patch.publicEmail = input.business.publicEmail;
+    // An emptied field must be deleted, not set to `undefined`: the client runs with
+    // ignoreUndefinedProperties, so assigning undefined silently left the old value in place — and
+    // publicPhone/publicEmail are copied into the world-readable projection, so an owner could never
+    // take a phone number back down.
+    if (input.business.publicPhone !== undefined) {
+      patch.publicPhone = (input.business.publicPhone ? normalizeIsraeliPhone(input.business.publicPhone) ?? input.business.publicPhone : FieldValue.delete()) as Business['publicPhone'];
+    }
+    if (input.business.publicEmail !== undefined) {
+      patch.publicEmail = (input.business.publicEmail || FieldValue.delete()) as Business['publicEmail'];
+    }
     tx.set(ref, patch, { merge: true });
   });
   await reprojectBusiness(input.businessId);
@@ -80,11 +92,28 @@ export const updateBusiness = onCall(opts, handled(async (req: CallableRequest<u
 /** Sets the logo/cover path after the client uploaded to the tenant-scoped Storage path. */
 export const setBusinessImage = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
   const c = await requireCaller(req);
-  const input = parse(z.object({ businessId: idSchema, kind: z.enum(['logo', 'cover']), path: z.string().max(400).nullable() }).strict(), req.data);
+  // `path` is stripped when the client sends null (see stripNulls), so absent also means "clear".
+  const input = parse(z.object({ businessId: idSchema, kind: z.enum(['logo', 'cover']), path: z.string().max(400).nullable().optional() }).strict(), req.data);
   await requireMembership(c, input.businessId, ['owner', 'manager']);
   if (input.path && !input.path.startsWith(`businesses/${input.businessId}/`)) fail('invalid_argument', { issues: [{ path: 'path', message: 'wrong_tenant_path' }] });
-  await col.business(input.businessId).set({ [input.kind === 'logo' ? 'logoPath' : 'coverPath']: input.path ?? null, updatedAt: nowIso() }, { merge: true });
+  if (input.path) {
+    // Same server-side re-check `setProductImage` does. Without it the client can record a path to
+    // an object that was never written — or that `onImageUploaded` has just deleted for a bad
+    // content type — leaving a business whose logo resolves to nothing on every storefront.
+    const [meta] = await storage.bucket().file(input.path).getMetadata().catch(() => [undefined]);
+    if (!meta) fail('invalid_argument', { issues: [{ path: 'path', message: 'missing_object' }] });
+    const ct = String(meta.contentType ?? '');
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(ct) || Number(meta.size ?? 0) > 5 * 1024 * 1024) {
+      fail('invalid_argument', { issues: [{ path: 'path', message: 'invalid_image' }] });
+    }
+  }
+  const field = input.kind === 'logo' ? 'logoPath' : 'coverPath';
+  // Mirrors setProductImage: the object a replaced/cleared path pointed at is removed rather than
+  // orphaned. Nothing did this before, so every logo change leaked the original and both variants.
+  const previous = (await col.business(input.businessId).get()).get(field) as string | undefined;
+  await col.business(input.businessId).set({ [field]: input.path ?? null, updatedAt: nowIso() }, { merge: true });
   await reprojectBusiness(input.businessId);
+  if (previous && previous !== input.path) await deleteImageWithVariants(previous);
   return { ok: true };
 }));
 
@@ -106,6 +135,60 @@ export const setLoyaltyRules = onCall(opts, handled(async (req: CallableRequest<
   return { ok: true };
 }));
 
+/** Upsert one promotion. Owners and managers; the list is capped so the storefront strip stays short. */
+export const savePromotion = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
+  const c = await requireCaller(req);
+  const input = parse(z.object({ businessId: idSchema, promotionId: idSchema.optional(), promotion: promotionInputSchema }).strict(), req.data);
+  await requireMembership(c, input.businessId, ['owner', 'manager']);
+  const saved = await db.runTransaction(async (tx) => {
+    const ref = col.business(input.businessId);
+    const snap = await tx.get(ref);
+    if (!snap.exists) fail('not_found');
+    const b = snap.data() as Business;
+    const list = [...(b.promotions ?? [])];
+    const idx = input.promotionId ? list.findIndex((p) => p.id === input.promotionId) : -1;
+    if (input.promotionId && idx < 0) fail('not_found');
+    if (idx < 0 && list.length >= MAX_PROMOTIONS) fail('invalid_argument', { issues: [{ path: 'promotion', message: 'too_many_promotions' }] });
+    const now = nowIso();
+    const before = idx >= 0 ? list[idx] : undefined;
+    const next: Promotion = {
+      id: before?.id ?? col.businesses().doc().id,
+      title: cleanLocalized(input.promotion.title),
+      body: cleanLocalized(input.promotion.body),
+      // `endsAt` is optional; spread-in only when present so a cleared date is removed instead of stored as undefined.
+      ...(input.promotion.endsAt ? { endsAt: input.promotion.endsAt } : {}),
+      active: input.promotion.active,
+      sortOrder: before?.sortOrder ?? (list.length ? Math.max(...list.map((p) => p.sortOrder)) + 1 : 0),
+      createdAt: before?.createdAt ?? now,
+      updatedAt: now,
+    };
+    if (idx >= 0) list[idx] = next; else list.push(next);
+    tx.set(ref, { promotions: list, updatedAt: now }, { merge: true });
+    writeAudit(tx, { actorUid: c.uid, action: idx >= 0 ? 'promotion.update' : 'promotion.create', targetType: 'business', targetId: input.businessId, before, after: next });
+    return next;
+  });
+  await reprojectBusiness(input.businessId);
+  return { promotion: saved };
+}));
+
+export const removePromotion = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
+  const c = await requireCaller(req);
+  const input = parse(z.object({ businessId: idSchema, promotionId: idSchema }).strict(), req.data);
+  await requireMembership(c, input.businessId, ['owner', 'manager']);
+  await db.runTransaction(async (tx) => {
+    const ref = col.business(input.businessId);
+    const snap = await tx.get(ref);
+    if (!snap.exists) fail('not_found');
+    const b = snap.data() as Business;
+    const before = (b.promotions ?? []).find((p) => p.id === input.promotionId);
+    if (!before) fail('not_found');
+    tx.set(ref, { promotions: (b.promotions ?? []).filter((p) => p.id !== input.promotionId), updatedAt: nowIso() }, { merge: true });
+    writeAudit(tx, { actorUid: c.uid, action: 'promotion.remove', targetType: 'business', targetId: input.businessId, before });
+  });
+  await reprojectBusiness(input.businessId);
+  return { ok: true };
+}));
+
 function normaliseBranchInput(input: z.infer<typeof branchInputSchema>) {
   const phone = normalizeIsraeliPhone(input.phone);
   if (!phone) fail('invalid_argument', { issues: [{ path: 'phone', message: 'invalid_phone' }] });
@@ -114,7 +197,10 @@ function normaliseBranchInput(input: z.infer<typeof branchInputSchema>) {
     if (seen.has(d.cityId)) fail('invalid_argument', { issues: [{ path: 'deliveryCities', message: 'duplicate_city' }] });
     seen.add(d.cityId);
   }
-  return { ...input, phone, name: cleanLocalized(input.name), locationDescription: cleanLocalized(input.locationDescription) };
+  // Delivery enabled with no delivery areas would hide the branch in delivery mode; default to the
+  // branch's own city (no fee, no minimum) so the owner can refine instead of silently disappearing.
+  const deliveryCities = input.deliveryEnabled && input.deliveryCities.length === 0 ? [{ cityId: input.cityId, feeAgorot: 0, minSubtotalAgorot: 0 }] : input.deliveryCities;
+  return { ...input, phone, deliveryCities, name: cleanLocalized(input.name), locationDescription: cleanLocalized(input.locationDescription) };
 }
 
 export const createBranch = onCall(opts, handled(async (req: CallableRequest<unknown>) => {

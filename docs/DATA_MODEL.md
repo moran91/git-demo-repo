@@ -15,6 +15,7 @@ integer grams. IDs are Firestore auto-ids unless noted.
 | `businesses/{id}` | server | members, admin | Private business record incl. `approval`, `loyalty` rules (versioned) |
 | `businesses/{id}/branches/{bid}` | server | members covering branch, admin | Hours (Asia/Jerusalem minutes, overnight allowed), delivery cities, pause, approval |
 | `…/branches/{bid}/categories`, `…/products` | server | same | Private catalog incl. exact stock (`stockQty` units, or grams for weight items; per-variant for variants) |
+| `…/branches/{bid}/modifierGroups/{gid}` | server | same | Shared extras library (toppings etc.). Products link a group via `modifierGroups[].sharedGroupId` and keep a materialised copy; `saveSharedModifierGroup` fans edits out to every linked product. Removing `sharedGroupId` detaches the copy for per-product edits |
 | `businesses/{id}/approvalHistory` | server | owner, admin | Audit of approval changes |
 | `publicBusinesses/{id}`, `publicBranches/{bid}`, `publicBranches/{bid}/{categories,products}` | server projection | everyone | Discovery/catalog; exists only when approved; stock exposed as capped `stockLeft` + `inStock` |
 | `orders/{id}` | server | customer, branch members, admin | Snapshots of identity, lines, address, totals, loyalty rules; `status ∈ {placed, accepted, rejected}`; `version`, `revision`, `locked` |

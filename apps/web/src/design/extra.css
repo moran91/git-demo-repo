@@ -40,17 +40,51 @@
 .biz-header { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-4); }
 .biz-header__cover { margin-inline: calc(-1 * var(--gutter)); }
 @media (min-width: 900px) { .biz-header__cover { margin-inline: 0; border-radius: var(--radius-card); overflow: hidden; } .biz-header__cover .img-frame--wide { border-radius: var(--radius-card); } }
-.cat-nav { display: flex; gap: var(--space-2); overflow-x: auto; padding-block: var(--space-2); margin-inline: calc(-1 * var(--gutter)); padding-inline: var(--gutter); position: sticky; top: 56px; background: var(--color-bg); z-index: 20; scrollbar-width: none; }
+/* --topbar-height is measured by CustomerLayout. The sticky offset used to be a hardcoded 56px against
+ * a topbar that is really 61px, so 5px of the category nav slid under it — and on a notched device the
+ * topbar grows by the safe-area inset and swallowed the nav whole. */
+.cat-nav { display: flex; gap: var(--space-2); overflow-x: auto; padding-block: var(--space-2); margin-inline: calc(-1 * var(--gutter)); padding-inline: var(--gutter); position: sticky; top: var(--topbar-height, 56px); background: var(--color-bg); z-index: 20; scrollbar-width: none; }
+/* Anchor jumps land under the topbar + the category nav that is stuck beneath it, so the heading and the
+ * top of the first product were hidden by the very chrome the link was in. */
+section[id^='cat-'] { scroll-margin-top: calc(var(--topbar-height, 56px) + var(--cat-nav-height, 56px) + var(--space-2)); }
 .cat-nav a { flex: none; padding: var(--space-2) var(--space-4); border-radius: 999px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); text-decoration: none; font-weight: 500; min-height: 40px; display: inline-flex; align-items: center; }
 .cat-nav a.active { background: var(--color-soft); border-color: var(--color-primary); color: var(--color-primary); }
+/* Promotions: owner-managed cards above the menu. Accent tokens (peach / rust) so they read as an offer,
+ * not a warning. A horizontal swipe strip on phones; a grid once there is room for whole cards. */
+.promo-strip { display: flex; gap: var(--space-3); overflow-x: auto; margin-inline: calc(-1 * var(--gutter)); padding-inline: var(--gutter); padding-bottom: var(--space-1); scroll-snap-type: x mandatory; scrollbar-width: none; }
+.promo-strip::-webkit-scrollbar { display: none; }
+.promo { flex: 0 0 min(300px, 80vw); scroll-snap-align: start; display: flex; flex-direction: column; gap: 6px; padding: 14px var(--space-4); border-radius: var(--radius-card); background: var(--color-accent-bg); color: var(--color-accent-text); }
+.promo:only-child { flex-basis: 100%; }
+.promo__head { display: flex; align-items: center; gap: var(--space-2); }
+.promo__kicker { font-size: var(--text-badge); font-weight: 500; letter-spacing: 0.02em; }
+.promo__until { margin-inline-start: auto; font-size: var(--text-badge); opacity: 0.85; }
+.promo__title { font-size: var(--text-heading); line-height: 1.3; font-weight: 600; color: inherit; }
+.promo__body { font-size: var(--text-secondary); }
+@media (min-width: 640px) { .promo-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; margin-inline: 0; padding-inline: 0; } .promo { flex-basis: auto; } }
+@media (min-width: 1100px) { .promo-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.promo-icon { width: 40px; height: 40px; border-radius: var(--radius-control); background: var(--color-accent-bg); color: var(--color-accent-text); display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.promo-icon--off { background: var(--color-bg); border: 1px solid var(--color-border); color: var(--color-text-muted); }
 .product-grid { display: grid; gap: var(--space-3); grid-template-columns: 1fr; }
 @media (min-width: 640px) { .product-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (min-width: 1100px) { .product-grid { grid-template-columns: repeat(3, 1fr); } }
 .product { display: grid; grid-template-columns: 96px 1fr; gap: var(--space-3); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-card); padding: var(--space-3); align-items: start; }
 .product__img { width: 96px; height: 96px; }
+/* Cart line: image | body. Actions sit on the title line; stepper and price share one non-wrapping row. */
+.cart-line { align-items: flex-start; }
+.cart-line__img { width: 72px; height: 72px; flex: none; }
+.cart-line__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.cart-line__head { display: flex; align-items: flex-start; gap: 0; }
+.cart-line__head > strong { flex: 1; min-width: 0; line-height: 1.35; padding-top: 6px; }
+.cart-line__head > .btn--icon { width: 36px; min-width: 36px; height: 36px; min-height: 36px; color: var(--color-text-muted); }
+.cart-line__head > .btn--icon:hover { color: var(--color-text); }
+.cart-line__foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: nowrap; margin-top: var(--space-1); }
+.cart-line__foot .price { white-space: nowrap; }
+.field--inline { flex-direction: row; align-items: center; justify-content: space-between; gap: var(--space-3); padding-block: var(--space-2); }
 .product__body { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
 .product__footer { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-top: auto; flex-wrap: wrap; }
 .product--unavailable { opacity: 0.7; }
+.product--clickable { cursor: pointer; }
+.product--clickable:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 
 /* cart & checkout */
 .summary { display: flex; flex-direction: column; gap: var(--space-2); }
@@ -62,7 +96,7 @@
 .address-card.is-selected { background: var(--color-soft); border-color: var(--color-primary); }
 .address-card__desc { font-weight: 500; }
 .checkout-layout { display: grid; gap: var(--space-6); }
-@media (min-width: 900px) { .checkout-layout { grid-template-columns: 1.4fr 1fr; align-items: start; } .checkout-layout > aside { position: sticky; top: 72px; } }
+@media (min-width: 900px) { .checkout-layout { grid-template-columns: 1.4fr 1fr; align-items: start; } .checkout-layout > aside { position: sticky; top: calc(var(--topbar-height, 56px) + var(--space-4)); } }
 .status-banner { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4); border-radius: var(--radius-card); border: 1px solid var(--color-border); background: var(--color-surface); }
 .status-banner--placed { background: var(--color-accent-bg); color: var(--color-accent-text); border-color: transparent; }
 .status-banner--accepted { background: var(--color-success-bg); color: var(--color-success-text); border-color: transparent; }
@@ -73,20 +107,128 @@
 .auth-card { max-width: 440px; margin-inline: auto; }
 .otp-input { letter-spacing: 0.35em; font-size: 24px; text-align: center; direction: ltr; }
 
+/* ---------- form layout ---------- */
+/* Form fields used to be laid out with `.row` (a wrapping flex row for inline bits). A `.field` has no
+ * intrinsic width, so each one sized itself to its own label: ragged columns on a desktop, and on a
+ * phone one control per line, each a different width. `.form-row` is a real grid — a single
+ * full-width column on a phone, equal columns once there is room.
+ *
+ * Fields align at the TOP. Bottom alignment lines up the boxes, which is the same thing as lining up
+ * the controls only while every field is the same height: a field carrying a hint or an error under
+ * its control is taller, and `end` then pushed its input ABOVE its neighbours' — the address form's
+ * phone field sat 50px high next to the name field. Multiple columns exist only from 560px up, where
+ * these labels are a single line, so aligning the tops aligns the controls and anything below a
+ * control grows downwards on its own. */
+.form-row { display: grid; gap: var(--space-3) var(--space-4); grid-template-columns: minmax(0, 1fr); align-items: start; }
+/* auto-FILL, not auto-fit: auto-fit collapses the tracks an item does not occupy, so a four-field
+ * row and the two-field row under it in the same form ended up with different column widths and
+ * never lined up. auto-fill keeps the empty tracks, so every row in a form shares one grid. */
+@media (min-width: 560px) { .form-row { grid-template-columns: repeat(auto-fill, minmax(var(--form-col, 180px), 1fr)); } }
+/* These set one inherited custom property, so they work on a single row or on the form that holds
+ * several — one declaration then keeps every row in that form on the same column grid. */
+.form-cols--tight { --form-col: 130px; }
+.form-cols--wide { --form-col: 240px; }
+/* A checkbox or a lone button in a field row has no label of its own, so top-aligning it with the
+ * fields beside it parks it level with THEIR labels, a whole band above the inputs it belongs with.
+ * Offsetting it by the label band puts it back on the control line. Only from 560px up: below that a
+ * field row is a single column and there is nothing to line up with. */
+@media (min-width: 560px) {
+  .form-row > .checkbox { margin-block-start: calc(var(--label-band) + (var(--control-height) - var(--touch-min)) / 2); }
+  .form-row > .btn { margin-block-start: var(--label-band); }
+}
+.form-row > .btn { min-height: var(--control-height); }
+
+/* One editable entry in a list of them (a delivery area, a variant, an opening-hours override): its
+ * fields in a `.form-row`, and the remove control pinned to the corner instead of taking a field slot. */
+.edit-row { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-bg); }
+.edit-row--plain { border: 0; padding: 0; background: transparent; border-radius: 0; }
+.edit-row__main { min-width: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+/* The remove control lives on its own line rather than beside the fields: sat next to them it lined up
+ * with whichever label happened to be first and read as belonging to that one field. */
+.edit-row__foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); color: var(--color-text-muted); font-size: var(--text-secondary); border-top: 1px solid var(--color-border); padding-top: var(--space-2); }
+.edit-row--plain > .edit-row__foot { border-top: 0; padding-top: 0; }
+.edit-row__foot > :only-child { margin-inline-start: auto; }
+
 /* ---------- dashboard shell ---------- */
-.dash { display: grid; min-height: 100dvh; grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
-@media (min-width: 900px) { .dash { grid-template-columns: 260px 1fr; grid-template-rows: auto 1fr; } .dash__sidebar { grid-row: 1 / span 2; } .dash__header { grid-column: 2; } .dash__main { grid-column: 2; } }
+/* `minmax(0, 1fr)` and `min-width: 0` on purpose: a bare `1fr` track is `minmax(auto, 1fr)`, so the
+ * history table's min-content width grew the column past the phone's viewport. The document then
+ * scrolled sideways, RTL opened at the far (left) edge, and the fixed drawer landed on the wrong side
+ * once mobile Chrome zoomed out to fit the overflow. Wide content scrolls inside `.table-wrap`. */
+.dash { display: grid; min-height: 100dvh; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
+@media (min-width: 900px) { .dash { grid-template-columns: 260px minmax(0, 1fr); grid-template-rows: auto 1fr; } .dash__sidebar { grid-row: 1 / span 2; } .dash__header { grid-column: 2; } .dash__main { grid-column: 2; } }
 .dash__sidebar { background: var(--color-surface); border-inline-end: 1px solid var(--color-border); padding: var(--space-4); display: none; flex-direction: column; gap: var(--space-2); }
 @media (min-width: 900px) { .dash__sidebar { display: flex; position: sticky; top: 0; height: 100dvh; overflow-y: auto; } }
-.dash__sidebar--drawer { display: flex; position: fixed; inset-block: 0; inset-inline-start: 0; width: min(320px, 85vw); z-index: 50; box-shadow: var(--shadow-float); overflow-y: auto; }
+/* Physical offsets on purpose: the drawer is a fixed box, and its side is decided by the document
+ * direction, not by the logical-property support of whichever mobile engine renders it. A phone
+ * showed the RTL drawer sliding in from the left with the logical form. */
+.dash__sidebar--drawer { display: flex; position: fixed; top: 0; bottom: 0; left: 0; right: auto; height: 100dvh; width: 320px; max-width: 85vw; z-index: 50; box-shadow: var(--shadow-float); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; }
+[dir='rtl'] .dash__sidebar--drawer { left: auto; right: 0; }
 .drawer-backdrop { position: fixed; inset: 0; background: var(--color-overlay); z-index: 49; border: 0; }
 .dash__nav a { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3); border-radius: var(--radius-control); color: var(--color-text); text-decoration: none; font-weight: 500; min-height: var(--touch-min); }
 .dash__nav a.active { background: var(--color-soft); color: var(--color-primary); }
 .dash__nav a .badge { margin-inline-start: auto; }
-.dash__header { position: sticky; top: 0; z-index: 30; background: var(--color-surface); border-bottom: 1px solid var(--color-border); padding: var(--space-2) var(--gutter); display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; min-height: 64px; }
-.dash__header .select { min-height: var(--touch-min); width: auto; max-width: 260px; }
-.dash__main { padding: var(--space-5) var(--gutter) var(--space-10); max-width: 1400px; width: 100%; }
+/* The header's items used to wrap wherever they happened to run out of room, so on a phone the branch
+ * select and the pause button broke apart mid-row and left a ragged gap. `.dash__header-break` is a
+ * zero-height flex item that forces the wrap at a chosen point (and disappears once one row fits). */
+.dash__header { min-width: 0; position: sticky; top: 0; z-index: 30; background: var(--color-surface); border-bottom: 1px solid var(--color-border); padding: var(--space-2) var(--gutter); display: flex; align-items: center; gap: var(--space-2) var(--space-3); flex-wrap: wrap; min-height: 64px; }
+.dash__header-break { flex-basis: 100%; height: 0; margin: 0; }
+@media (min-width: 900px) { .dash__header-break { display: none; } .dash__header .dash__header-end { order: 1; } }
+/* An explicit flex-basis so where the row breaks does not depend on how long the branch name is:
+ * with `flex-basis: auto` a wide select pushed the pause button onto a line of its own at one
+ * branch name and not at another. Below 360px neither fits beside the other, so each takes a
+ * full-width row instead of leaving a short stub. */
+.dash__header .select { min-height: var(--touch-min); flex: 1 1 96px; width: auto; min-width: 0; max-width: 260px; }
+/* The branch select and the pause button share a row, so they must share a height: `.select` adds
+ * 12px of vertical padding to its 44px minimum (50px), while the pause button was `btn--sm` (40px).
+ * Both are pinned to the 44px touch height; the select spends its padding only on the inline axis. */
+.dash__header .select, .dash__header > .btn { height: var(--touch-min); min-height: var(--touch-min); padding-block: 0; box-sizing: border-box; }
+.dash__header > .btn { flex: none; }
+/* On a phone the pair gets its own row (see `.dash__header-break`): the select takes whatever the
+ * pause button leaves, and below 360px neither fits beside the other, so each takes the full row. */
+@media (max-width: 899px) { .dash__header .dash__branch { flex: 1 1 0; max-width: none; } }
+@media (max-width: 359px) { .dash__header .dash__branch, .dash__header > .btn { flex: 1 1 100%; max-width: none; } }
+.dash__header .dash__header-end { margin-inline-start: auto; flex: none; }
+.dash__main { padding: var(--space-5) var(--gutter) var(--space-10); max-width: 1400px; width: 100%; min-width: 0; }
+/* A form gets a readable measure. Stretched across the full 1400px dashboard its fields sat in a
+ * narrow band at the inline start with half the row empty, and its submit button ran the whole
+ * width — the page read as unfinished rather than as a form. Tables keep the full width. */
+@media (min-width: 900px) { .dash__main form { max-width: 860px; } }
 .dash__title { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-5); }
+.dash__title > h1 { flex: 1 1 auto; min-width: 0; }
+.dash__title > .actions { flex: 0 1 auto; justify-content: flex-end; }
+.dash__title > .actions:empty { display: none; }
+/* ---------- action toolbars ----------
+ * A group of buttons after a heading or at the end of a list row. `.row` (12px gaps, whatever height
+ * each control brought along) was used for these with per-site inline gaps, so a checkbox (44px band),
+ * `btn--sm` (40px) and an icon button (44px circle) sat on one line at three heights, and when the line
+ * wrapped, the leftover button hung alone at one end. Every control here is one height (40px, the
+ * `btn--sm` height; icon buttons keep their 44px touch circle but are centred) with one 8px gap, and on
+ * a phone the text buttons stretch to fill their line so a wrapped toolbar reads as a block, not a stub. */
+.actions { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; min-width: 0; }
+.actions > .btn:not(.btn--icon) { min-height: 40px; }
+.actions > .checkbox { padding-block: 0; min-height: 40px; align-items: center; }
+.actions > .checkbox input { margin: 0; }
+.actions > .badge { align-self: center; }
+.actions--icons { gap: var(--space-1); flex-wrap: nowrap; }
+@media (max-width: 639px) {
+  .dash__title { align-items: stretch; }
+  .dash__title > h1 { flex-basis: 100%; }
+  .dash__title > .actions { flex: 1 1 100%; justify-content: flex-start; }
+  .dash__title > .actions > .checkbox { flex-basis: 100%; }
+  .section-head > .actions { justify-content: flex-start; }
+  /* Icon buttons lead the line: a lone trailing icon on a line of its own read as a leftover. */
+  .actions > .btn--icon { order: -1; }
+  .actions > .btn:not(.btn--icon):not(.btn--ghost) { flex: 1 1 auto; justify-content: center; }
+}
+/* Heading + toolbar at the top of a card or list section. Wrapped, the toolbar spans the full width
+ * and keeps its buttons at the inline end (under the heading's far edge), so the two lines share an
+ * edge instead of a heading at one side and a stray button at the other. */
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-3); flex-wrap: wrap; }
+.section-head > h2, .section-head > h3 { flex: 1 1 auto; min-width: 0; }
+.section-head > .actions { flex: 1 1 auto; justify-content: flex-end; margin-inline-start: auto; }
+.section-head > .badge { flex: none; }
+.section-head > .btn { flex: none; margin-inline-start: auto; min-height: 40px; }
+.section-head > h2.row, .section-head > h3.row { gap: var(--space-2); }
 .order-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-card); padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
 .order-card--placed { border-color: var(--color-accent-text); box-shadow: 0 0 0 1px var(--color-accent-bg); }
 .order-card__head { display: flex; justify-content: space-between; gap: var(--space-3); align-items: flex-start; flex-wrap: wrap; }
@@ -104,12 +246,54 @@
 .metric { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-card); padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-1); }
 .metric__value { font-size: var(--text-heading); font-weight: 600; }
 .metric__label { color: var(--color-text-muted); font-size: var(--text-secondary); }
+/* The day name used to hold a fixed 90px column, which left ~190px for two 110px time inputs plus a
+ * remove button: every interval wrapped onto two lines with the dash and the × orphaned. Below 480px
+ * the day name now takes its own line and the interval fills the width. */
 .hours-grid { display: grid; gap: var(--space-2); }
-.hours-row { display: grid; grid-template-columns: 90px 1fr; gap: var(--space-2); align-items: start; }
-.interval { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
-.interval input { width: 110px; }
-.photo-area { display: flex; gap: var(--space-4); align-items: center; flex-wrap: wrap; }
-.photo-area .img-frame { width: 120px; height: 120px; }
+.hours-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-1) var(--space-3); align-items: start; padding-block: var(--space-2); border-bottom: 1px solid var(--color-border); }
+.hours-row:last-child { border-bottom: 0; }
+/* The day name and, when a day is closed, its marker sit on one line: as a lone child of the
+ * interval stack the word 'closed' hung under the day name looking like a dropped field. */
+.hours-row__day { display: flex; align-items: baseline; gap: var(--space-2); }
+.hours-row .btn--ghost, .card > .btn--ghost, .edit-row .btn--ghost { align-self: start; }
+@media (min-width: 480px) {
+  .hours-row { grid-template-columns: 90px minmax(0, 1fr); align-items: start; }
+  /* The day name lines up with the day's FIRST interval. Centring the row instead centred it on the
+   * whole stack, so it drifted down between the interval and the 'add range' button below it. */
+  .hours-row__day { align-items: center; min-height: var(--control-height); }
+}
+.interval { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto; gap: var(--space-2); align-items: center; }
+.interval input { width: 100%; min-width: 0; }
+.interval--pair { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+/* The tracks are 1fr only because a 360px phone has no room to spare. Given more width they must stop
+ * growing: a time control filling half a 700px card is a 300px box holding "22:30" with the clock icon
+ * stranded at the far edge. 180px is comfortable for a 12-hour value and no more. */
+@media (min-width: 480px) {
+  .interval { grid-template-columns: minmax(0, 180px) auto minmax(0, 180px) auto; justify-content: start; }
+  .interval--pair { grid-template-columns: minmax(0, 180px) auto minmax(0, 180px); }
+  .edit-row .input[type='date'] { max-width: 220px; }
+}
+/* On a 320px phone the two time controls, the dash and the remove button share ~256px; at the
+ * normal gap each control fell to 89px, which clips a 12-hour value like `10:30 AM`. */
+@media (max-width: 400px) { .interval { column-gap: var(--space-1); } }
+.interval > span { color: var(--color-text-muted); }
+/* Product dialog: [thumbnail, controls]. */
+.photo-area { display: grid; gap: var(--space-4); grid-template-columns: minmax(0, 1fr); align-items: start; }
+@media (min-width: 560px) { .photo-area { grid-template-columns: 160px minmax(0, 1fr); } }
+.photo-area .img-frame--square { width: 120px; height: 120px; }
+.photo-area .btn { width: 100%; }
+@media (min-width: 560px) { .photo-area .btn { width: auto; } }
+@media (max-width: 559px) {
+  .photo-area--inline { grid-template-columns: 120px minmax(0, 1fr); align-items: start; gap: var(--space-3); }
+}
+/* Business profile: logo (1:1) and cover (16:9) side by side. The columns are 9fr and 16fr so both
+ * frames come out the same height at every width — previously a fixed 120px square sat next to a
+ * full-width cover and the two never lined up. Each column is label / frame / button. */
+.photo-pair { display: grid; grid-template-columns: minmax(0, 9fr) minmax(0, 16fr); gap: var(--space-4); align-items: start; max-width: 720px; }
+.photo-pair__item { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.photo-pair__item .img-frame { width: 100%; height: auto; border-radius: var(--radius-control); }
+.photo-pair__item .btn { width: 100%; }
+@media (max-width: 359px) { .photo-pair { grid-template-columns: minmax(0, 1fr); } .photo-pair__item--logo { max-width: 200px; } }
 .print-preview { background: #fff; color: #000; padding: 16px; border: 1px solid var(--color-border); border-radius: var(--radius-control); overflow: auto; max-height: 70vh; display: flex; justify-content: center; }
 .print-preview img { image-rendering: pixelated; max-width: 100%; }
 .job-row { display: flex; gap: var(--space-3); align-items: center; padding: var(--space-3) 0; border-bottom: 1px solid var(--color-border); flex-wrap: wrap; }
@@ -125,15 +309,78 @@
 .tabs button { background: transparent; border: 0; border-bottom: 2px solid transparent; padding: var(--space-3) var(--space-3); font-weight: 500; color: var(--color-text-muted); cursor: pointer; min-height: var(--touch-min); white-space: nowrap; }
 .tabs button[aria-selected='true'] { color: var(--color-primary); border-bottom-color: var(--color-primary); }
 .offline-banner { background: var(--color-accent-bg); color: var(--color-accent-text); text-align: center; padding: var(--space-2) var(--gutter); font-size: var(--text-secondary); display: flex; gap: var(--space-2); justify-content: center; align-items: center; }
-.update-banner { position: fixed; top: var(--space-3); inset-inline: var(--gutter); z-index: 70; background: var(--color-text); color: var(--color-bg); border-radius: var(--radius-control); padding: var(--space-3) var(--space-4); display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); box-shadow: var(--shadow-float); }
+/* Pinned at top:12px this sat on top of the sticky topbar and blanked out the brand and the language
+ * select. It now hangs below the topbar — measured on the customer shell, falling back to the
+ * dashboard header's 64px min-height on the business shell, which publishes no measurement. */
+.update-banner { position: fixed; top: calc(var(--topbar-height, 64px) + var(--space-3)); inset-inline: var(--gutter); z-index: 70; background: var(--color-text); color: var(--color-bg); border-radius: var(--radius-control); padding: var(--space-3) var(--space-4); display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); box-shadow: var(--shadow-float); }
 @media (min-width: 900px) { .update-banner { inset-inline: auto var(--gutter); max-width: 420px; } }
 .update-banner .btn { min-height: 40px; }
 .receipt-print { display: none; }
 @media print {
-  body > #root > *:not(.receipt-print) { display: none !important; }
+  body > #root > *:not(.receipt-print):not(.qr-print) { display: none !important; }
   .receipt-print { display: block; font-family: var(--font-sans); width: 72mm; margin: 0 auto; font-size: 12pt; color: #000; }
   .receipt-print h1 { font-size: 18pt; text-align: center; }
   .receipt-print .r-box { border: 2px solid #000; padding: 8px; margin: 6px 0; font-weight: 600; font-size: 14pt; }
   .receipt-print .r-row { display: flex; justify-content: space-between; gap: 8px; }
   .receipt-print hr { border: 0; border-top: 1px dashed #000; }
 }
+
+/* Pizza topping placement: tappable quarters + preset icons inside a chosen option row. */
+.choice-block.has-extra > .choice { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.placement { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); border: 1px solid var(--color-primary); border-top: 0; border-radius: 0 0 var(--radius-control) var(--radius-control); background: var(--color-soft); }
+.placement__side { display: flex; flex-direction: column; gap: 4px; }
+.placement__presets { display: flex; gap: 4px; flex-wrap: wrap; }
+.placement__preset { border: 1px solid var(--color-border); background: var(--color-surface); border-radius: 8px; padding: 3px; cursor: pointer; line-height: 0; }
+.placement__preset.is-active { border-color: var(--color-primary); box-shadow: 0 0 0 2px var(--color-soft); }
+.placement__label { font-size: var(--text-secondary); color: var(--color-text-muted); }
+.pizza { display: inline-block; vertical-align: middle; flex: none; }
+.pizza__crust { fill: var(--color-surface); stroke: var(--color-text-muted); stroke-width: 3; }
+.pizza__wedge { fill: transparent; }
+.pizza__q.is-on .pizza__wedge { fill: var(--color-primary); opacity: 0.85; }
+.pizza__dot { fill: var(--color-surface); }
+.pizza__cut { stroke: var(--color-text-muted); stroke-width: 2; opacity: 0.6; pointer-events: none; }
+.pizza--interactive .pizza__q { cursor: pointer; }
+.pizza--interactive .pizza__q:focus-visible .pizza__wedge { stroke: var(--color-primary); stroke-width: 3; }
+
+/* ---------- Photo zoom ---------- */
+button.img-frame--zoomable { border: 0; padding: 0; cursor: zoom-in; font: inherit; flex-shrink: 0; }
+button.img-frame--zoomable:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.lightbox { position: fixed; inset: 0; margin: 0; border: 0; width: 100vw; height: 100dvh; max-width: none; max-height: none; background: rgba(0, 0, 0, 0.92); color: #fff; padding: var(--space-4); cursor: zoom-out; }
+.lightbox[open] { display: flex; align-items: center; justify-content: center; }
+.lightbox::backdrop { background: transparent; }
+.lightbox__img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: var(--radius-control); cursor: default; box-shadow: var(--shadow-float); }
+.lightbox__close { position: absolute; top: calc(var(--space-3) + env(safe-area-inset-top, 0px)); inset-inline-end: var(--space-3); }
+.lightbox__close .btn-icon, .lightbox__close button { background: rgba(255, 255, 255, 0.92); color: #111; }
+
+/* ---------- business QR page + poster ---------- */
+.qr-page { display: grid; grid-template-columns: minmax(0, 320px) minmax(0, 1fr); gap: var(--space-5); align-items: start; }
+@media (max-width: 720px) { .qr-page { grid-template-columns: 1fr; } }
+.qr-page__code { background: #fff; padding: var(--space-3); }
+.qr-page__code img { display: block; width: 100%; height: auto; }
+.qr-page__url { display: block; padding: var(--space-2) var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface); font-size: 0.9rem; word-break: break-all; text-align: left; }
+.qr-print { display: none; }
+@media print {
+  .qr-print { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; text-align: center; gap: 8mm; padding: 15mm; font-family: var(--font-sans); color: #000; }
+  .qr-print h1 { font-size: 30pt; margin: 0; }
+  .qr-print__branch { font-size: 18pt; margin: 0; }
+  .qr-print__scan { font-size: 22pt; font-weight: 600; margin: 0; }
+  .qr-print img { width: 120mm; height: 120mm; }
+  .qr-print__url { font-size: 11pt; word-break: break-all; margin: 0; }
+  .qr-print__brand { font-size: 12pt; color: #333; margin: 0; }
+}
+.option-group { border: 1px solid var(--color-border); border-radius: var(--radius-card); background: var(--color-surface); padding: var(--space-4); margin: 0; min-inline-size: 0; }
+.option-group > legend.field__label { float: inline-start; width: 100%; font-size: var(--text-body); margin-bottom: var(--space-3); }
+.option-group > .radio-list { clear: both; }
+.option-group .choice { background: var(--color-bg); }
+.option-group .choice.is-selected { background: var(--color-soft); }
+.option-group[aria-invalid="true"] { border-color: var(--color-danger); }
+
+/* Localized (he/ar/en) input group: one compact row per language with the language name as a
+ * fixed-width side label, instead of three stacked full fields. The legend is the only heading. */
+.localized { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.localized > legend.field__label { margin-bottom: var(--space-2); }
+.localized__rows { display: flex; flex-direction: column; gap: var(--space-2); }
+.localized__row { display: grid; grid-template-columns: 3.75rem minmax(0, 1fr); align-items: center; column-gap: var(--space-2); }
+.localized__lang { font-size: var(--text-secondary); color: var(--color-text-muted); font-weight: 500; line-height: 1.2; }
+.localized__row:has(.textarea) .localized__lang { align-self: start; padding-block-start: var(--space-3); }
+.localized__control.textarea { min-height: 64px; }

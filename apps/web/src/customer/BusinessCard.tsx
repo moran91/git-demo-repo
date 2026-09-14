@@ -19,12 +19,12 @@ export function BusinessCard({ branch, mode, cityId }: { branch: PublicBranch; m
   const branchName = L(branch.name, branch.businessDefaultLocale);
   const isFav = ids.has(branch.businessId);
   const closed = !open.open || branch.ordersPaused;
-  const closesAt = open.open && open.closesInMin !== undefined ? minutesToHHMM(new Date().getHours() * 60 + new Date().getMinutes() + open.closesInMin) : undefined;
+  const closesAt = open.open && open.closesInMin !== undefined ? minutesToHHMM(new Date().getHours() * 60 + new Date().getMinutes() + open.closesInMin).replace(/^0/, "") : undefined;
   return (
     <article className={`biz-card card--interactive ${closed ? 'biz-card--closed' : ''}`}>
       <div className="biz-card__media">
         <Link to={`/b/${branch.businessId}/${branch.id}`} aria-label={name} tabIndex={-1}>
-          <StorageImage path={branch.coverPath} size="display" alt="" wide fallbackLabel={t('discovery.imageFallback')} />
+          <StorageImage path={branch.coverPath} size="thumb" alt="" wide fallbackLabel={t('discovery.imageFallback')} />
         </Link>
         <div className="biz-card__fav">
           <IconButton

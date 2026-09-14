@@ -23,6 +23,7 @@ e2e                 Playwright browser tests + design screenshots
 | Firebase access | `apps/web/src/lib/{firebase,api,queries}.ts`, `functions/src/lib/firebase.ts` | Web reads Firestore directly under rules; all mutations go through callables |
 | Localization | `packages/shared/src/i18n`, `apps/web/src/lib/i18n.tsx` | Typed dictionaries (missing keys fail typecheck); `resolveLocalized` for business content |
 | UI components | `apps/web/src/design` | Tokens in CSS custom properties, one icon family, native `<dialog>` |
+| Business QR / deep links | `packages/shared/src/links.ts`, `apps/web/src/customer/QrLanding.tsx`, `apps/web/src/business/QrPage.tsx` | `/q/<businessId>[/<branchId>]` contract shared with the native apps; see `docs/QR_LINKS.md` |
 
 ## Authority and trust
 

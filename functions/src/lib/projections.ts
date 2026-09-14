@@ -1,4 +1,4 @@
-import type { Branch, Business, Category, Product } from '@qareeb/shared';
+import type { Branch, Business, Category, Product, Promotion } from '@qareeb/shared';
 import { col, db, nowIso, type Tx } from './firebase.js';
 
 /**
@@ -21,6 +21,8 @@ export interface PublicBusinessDoc {
   loyaltyRedeemValueAgorot: number;
   loyaltyEarnPerAgorot: number;
   loyaltyPointsPerStep: number;
+  /** Active promotions only; the client hides those past `endsAt`. */
+  promotions: Promotion[];
   updatedAt: string;
 }
 
@@ -74,11 +76,19 @@ export function toPublicBusiness(b: Business): PublicBusinessDoc {
     loyaltyRedeemValueAgorot: b.loyalty.redeemValueAgorot,
     loyaltyEarnPerAgorot: b.loyalty.earnPerAgorot,
     loyaltyPointsPerStep: b.loyalty.pointsPerStep,
+    promotions: (b.promotions ?? []).filter((p) => p.active).sort((x, y) => x.sortOrder - y.sortOrder),
     updatedAt: nowIso(),
   };
 }
 
+/** Legacy branches saved delivery enabled with no delivery areas; treat that as "own city, free" so
+ *  the branch is discoverable and orderable in delivery mode instead of silently vanishing. */
+export function effectiveDeliveryCities(br: Pick<Branch, 'cityId' | 'deliveryEnabled' | 'deliveryCities'>): Branch['deliveryCities'] {
+  return br.deliveryEnabled && br.deliveryCities.length === 0 ? [{ cityId: br.cityId, feeAgorot: 0, minSubtotalAgorot: 0 }] : br.deliveryCities;
+}
+
 export function toPublicBranch(b: Business, br: Branch): PublicBranchDoc {
+  const deliveryCities = effectiveDeliveryCities(br);
   return {
     id: br.id,
     businessId: b.id,
@@ -97,8 +107,8 @@ export function toPublicBranch(b: Business, br: Branch): PublicBranchDoc {
     hoursOverrides: br.hoursOverrides,
     pickupEnabled: br.pickupEnabled,
     deliveryEnabled: br.deliveryEnabled,
-    deliveryCities: br.deliveryCities,
-    deliveryCityIds: br.deliveryEnabled ? br.deliveryCities.map((c) => c.cityId) : [],
+    deliveryCities,
+    deliveryCityIds: br.deliveryEnabled ? deliveryCities.map((c) => c.cityId) : [],
     ordersPaused: br.ordersPaused,
     visible: isPubliclyVisible(b, br),
     updatedAt: nowIso(),
@@ -109,15 +119,16 @@ export function toPublicProduct(p: Product): PublicProductDoc {
   const { stockQty, sku, barcode, ...rest } = p;
   void sku;
   void barcode;
-  const variants = p.variants.map(({ stockQty: vs, sku: vsku, ...v }) => ({ ...v, available: v.available && (!p.trackInventory || vs === undefined || vs > 0), ...(p.trackInventory && vs !== undefined ? { stockLeft: Math.min(vs, 10) } : {}) }));
-  void variants;
   const inStock = !p.trackInventory || (stockQty ?? 0) > 0 || (p.variants.length > 0 && p.variants.some((v) => (v.stockQty ?? 0) > 0));
+  // Products with variants keep their stock on the variants; the product-level counter stays 0 there,
+  // so the "only N left" indicator has to come from the variants or it would always read zero.
+  const remaining = p.variants.length > 0 ? p.variants.reduce((sum, v) => sum + (v.stockQty ?? 0), 0) : stockQty;
   return {
     ...rest,
     variants: p.variants.map(({ stockQty: vs, sku: _s, ...v }) => ({ ...v, stockQty: undefined, available: v.available && (!p.trackInventory || vs === undefined || vs > 0) })),
     inStock,
     available: p.available && inStock,
-    stockLeft: p.trackInventory && stockQty !== undefined ? Math.min(stockQty, 10) : undefined,
+    stockLeft: p.trackInventory && remaining !== undefined ? Math.min(remaining, 10) : undefined,
   };
 }
 

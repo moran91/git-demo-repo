@@ -18,7 +18,7 @@ import {
   type PrintStation,
   type PrinterConfig,
 } from '@qareeb/shared';
-import { REGION, col, db, nowIso } from '../lib/firebase.js';
+import { FieldValue, REGION, col, db, nowIso } from '../lib/firebase.js';
 import { handled, fail } from '../lib/errors.js';
 import { parse } from '../lib/validate.js';
 import { requireCaller, requireMembership } from '../lib/auth.js';
@@ -82,8 +82,9 @@ export const deactivatePrinter = onCall(opts, handled(async (req: CallableReques
     if (!snap.exists) fail('not_found');
     const p = snap.data() as PrinterConfig;
     await requireMembership(c, p.businessId, ['owner', 'manager'], p.branchId, tx);
-    tx.update(snap.ref, { active: false, autoPrint: 'off', updatedAt: nowIso() });
+    // All reads must precede writes in a Firestore transaction.
     const stations = await tx.get(col.printStations().where('printerId', '==', printerId).where('revoked', '==', false));
+    tx.update(snap.ref, { active: false, autoPrint: 'off', updatedAt: nowIso() });
     for (const s of stations.docs) tx.update(s.ref, { revoked: true, online: false });
     writeAudit(tx, { actorUid: c.uid, action: 'printer.deactivate', targetType: 'printer', targetId: printerId });
   });
@@ -244,15 +245,14 @@ export const claimPrintJob = onCall(opts, handled(async (req: CallableRequest<un
       if (j.state !== 'queued') fail('invalid_argument', { issues: [{ path: 'jobId', message: 'not_queued', state: j.state }] });
       candidate = j;
     } else {
-      const q = await tx.get(col.printJobs().where('printerId', '==', printer.id).where('state', '==', 'queued').orderBy('requestedAt').limit(10));
-      const now = Date.now();
-      for (const d of q.docs) {
-        const j = d.data() as PrintJob;
-        if (input.includeStale || now - Date.parse(j.requestedAt) <= STALE_MS) {
-          candidate = j;
-          break;
-        }
-      }
+      // The staleness cut has to be in the query, not applied to the page afterwards. Filtering the
+      // 10 oldest queued jobs in memory meant that once a branch accumulated 10 stale ones (printer
+      // offline for a while), every page was entirely stale and automatic printing stopped picking
+      // up new jobs — permanently, until staff resolved the backlog by hand.
+      let q = col.printJobs().where('printerId', '==', printer.id).where('state', '==', 'queued');
+      if (!input.includeStale) q = q.where('requestedAt', '>=', new Date(Date.now() - STALE_MS).toISOString());
+      const snap = await tx.get(q.orderBy('requestedAt').limit(10));
+      candidate = snap.docs[0]?.data() as PrintJob | undefined;
     }
     tx.update(sSnap.ref, { lastHeartbeatAt: nowIso(), online: true });
     if (!candidate) return { job: null };
@@ -299,9 +299,10 @@ export const reportPrintAttempt = onCall(opts, handled(async (req: CallableReque
         state = job.attempts >= MAX_AUTO_ATTEMPTS ? 'needs_review' : 'queued';
     }
     const patch: Partial<PrintJob> = { state, updatedAt: now, lastError: input.error, progress: input.stripsTotal !== undefined ? { stripsTotal: input.stripsTotal, stripsSent: input.stripsSent ?? 0 } : job.progress };
-    patch.leaseStationId = undefined;
-    patch.leaseExpiresAt = undefined;
-    tx.set(jRef, patch, { merge: true });
+    // The client is configured with ignoreUndefinedProperties, so assigning `undefined` here left the
+    // lease in place instead of clearing it: a superseded station whose fence still matched could
+    // then report on a job staff had already resolved and push it back into the queue for reprint.
+    tx.set(jRef, { ...patch, leaseStationId: FieldValue.delete(), leaseExpiresAt: FieldValue.delete() }, { merge: true });
     const attemptRef = input.attemptId ? col.printAttempts(job.id).doc(input.attemptId) : col.printAttempts(job.id).doc();
     tx.set(attemptRef, { id: attemptRef.id, jobId: job.id, stationId: station.id, fence: input.fence, startedAt: now, finishedAt: now, outcome: input.outcome, error: input.error, stripsSent: input.stripsSent, stripsTotal: input.stripsTotal, pending: false } satisfies PrintAttempt & { pending: boolean }, { merge: true });
     if (state === 'needs_review') {
@@ -323,7 +324,8 @@ export const resolvePrintJob = onCall(opts, handled(async (req: CallableRequest<
     if (job.state === 'sending' && input.resolution === 'requeue') fail('invalid_argument', { issues: [{ path: 'resolution', message: 'job_is_sending' }] });
     const now = nowIso();
     const state: PrintJob['state'] = input.resolution === 'requeue' ? 'queued' : input.resolution;
-    tx.set(ref, { state, updatedAt: now, leaseStationId: undefined, leaseExpiresAt: undefined, lastError: input.note ?? job.lastError }, { merge: true });
+    // FieldValue.delete(), not undefined — see reportPrintAttempt.
+    tx.set(ref, { state, updatedAt: now, leaseStationId: FieldValue.delete(), leaseExpiresAt: FieldValue.delete(), lastError: input.note ?? job.lastError }, { merge: true });
     const aRef = col.printAttempts(job.id).doc();
     tx.set(aRef, { id: aRef.id, jobId: job.id, stationId: 'staff', fence: job.leaseFence, startedAt: now, finishedAt: now, outcome: input.resolution === 'confirmed' ? 'confirmed_by_staff' : 'failed_before_send', error: input.note ?? `staff:${input.resolution}`, pending: false });
   });

@@ -1,6 +1,6 @@
 import { onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { z } from 'zod';
-import { AggregateField } from 'firebase-admin/firestore';
+import { AggregateField, FieldPath } from 'firebase-admin/firestore';
 import {
   DEFAULT_LOYALTY_RULES,
   approvalDecisionSchema,
@@ -38,6 +38,8 @@ export const decideApproval = onCall(opts, handled(async (req: CallableRequest<u
     const ref = input.targetType === 'business' ? col.business(input.businessId) : col.branch(input.businessId, input.branchId ?? '_');
     const snap = await tx.get(ref);
     if (!snap.exists) fail('not_found');
+    // All reads must precede writes in a transaction.
+    const pendingBranches = input.targetType === 'business' && input.state === 'approved' ? await tx.get(col.branches(input.businessId).where('approval', '==', 'pending')) : { docs: [] as FirebaseFirestore.QueryDocumentSnapshot[] };
     const before = (snap.data() as Business | Branch).approval;
     const now = nowIso();
     tx.update(ref, { approval: input.state, approvalReason: input.reason, updatedAt: now });
@@ -45,6 +47,17 @@ export const decideApproval = onCall(opts, handled(async (req: CallableRequest<u
     writeAudit(tx, { actorUid: c.uid, action: `approval.${input.targetType}.${input.state}`, targetType: input.targetType, targetId: input.branchId ?? input.businessId, reason: input.reason, before: { approval: before }, after: { approval: input.state } });
     const ownerUid = (input.targetType === 'business' ? (snap.data() as Business).ownerUid : undefined);
     enqueueEvent(tx, { kind: 'business_approval', ...(ownerUid ? { recipients: [ownerUid] } : { audience: { businessId: input.businessId, branchId: input.branchId ?? '' } }), params: {}, link: `/business/${input.businessId}`, businessId: input.businessId, key: `approval:${input.targetType}:${input.branchId ?? input.businessId}:${now}` });
+    // Approving a business also approves its branches that are still pending, so one admin decision
+    // makes the business discoverable. Branches created later still get their own approval.
+    if (input.targetType === 'business' && input.state === 'approved') {
+      for (const d of pendingBranches.docs) {
+        const br = d.data() as Branch;
+        if (br.approval !== 'pending') continue;
+        tx.update(d.ref, { approval: 'approved', approvalReason: input.reason, updatedAt: now });
+        tx.set(col.approvalHistory(input.businessId).doc(), { targetType: 'branch', branchId: br.id, state: 'approved', reason: input.reason, actorUid: c.uid, at: now });
+        writeAudit(tx, { actorUid: c.uid, action: 'approval.branch.approved', targetType: 'branch', targetId: br.id, reason: input.reason, before: { approval: 'pending' }, after: { approval: 'approved' } });
+      }
+    }
   });
   await reprojectBusiness(input.businessId);
   return { ok: true };
@@ -182,11 +195,12 @@ export const getAdminMetrics = onCall(opts, handled(async (req: CallableRequest<
   requireAdmin(c);
   const since = new Date(Date.now() - 30 * 86400000).toISOString();
   const agingSince = new Date(Date.now() - 30 * 60000).toISOString();
-  const [placed, accepted, cash, pendingBiz, aging, daily, users, businesses] = await Promise.all([
+  const [placed, accepted, cash, pendingBiz, pendingBranches, aging, daily, users, businesses] = await Promise.all([
     col.orders().where('placedAt', '>=', since).aggregate({ count: AggregateField.count(), value: AggregateField.sum('totals.cashDueAgorot') }).get(),
     col.orders().where('placedAt', '>=', since).where('status', '==', 'accepted').aggregate({ count: AggregateField.count(), value: AggregateField.sum('totals.cashDueAgorot') }).get(),
     col.cashRecords().where('recordedAt', '>=', since).where('reversed', '==', false).aggregate({ count: AggregateField.count(), value: AggregateField.sum('amountAgorot') }).get(),
     col.businesses().where('approval', '==', 'pending').count().get(),
+    db.collectionGroup('branches').where('approval', '==', 'pending').count().get(),
     col.orders().where('status', '==', 'placed').where('placedAt', '<', agingSince).count().get(),
     db.collection('metricsDaily').orderBy('date', 'desc').limit(30).get(),
     col.users().count().get(),
@@ -202,6 +216,7 @@ export const getAdminMetrics = onCall(opts, handled(async (req: CallableRequest<
       cashRecordedAgorot: cash.data().value ?? 0,
     },
     pendingBusinessApprovals: pendingBiz.data().count,
+    pendingBranchApprovals: pendingBranches.data().count,
     agingPlacedOrders: aging.data().count,
     totalUsers: users.data().count,
     approvedBusinesses: businesses.data().count,
@@ -218,8 +233,14 @@ export const adminListUsers = onCall(opts, handled(async (req: CallableRequest<u
   if (input.email) q = q.where('email', '==', input.email.toLowerCase());
   else if (input.phone) q = q.where('phone', '==', input.phone);
   else {
-    q = q.orderBy('createdAt', 'desc');
-    if (input.cursor) q = q.startAfter(input.cursor);
+    // Tiebreak on the document id: users created in the same instant share a `createdAt`, and a
+    // cursor on that field alone skips every one of them. Matching directions keep this served by
+    // the automatic single-field index.
+    q = q.orderBy('createdAt', 'desc').orderBy(FieldPath.documentId(), 'desc');
+    if (input.cursor) {
+      const sep = input.cursor.lastIndexOf('|');
+      if (sep > 0) q = q.startAfter(input.cursor.slice(0, sep), input.cursor.slice(sep + 1));
+    }
   }
   const snap = await q.limit(input.limit).get();
   const users = await Promise.all(
@@ -230,5 +251,5 @@ export const adminListUsers = onCall(opts, handled(async (req: CallableRequest<u
     }),
   );
   const last = snap.docs[snap.docs.length - 1];
-  return { users, nextCursor: last && !input.email && !input.phone ? (last.data() as UserProfile).createdAt : undefined };
+  return { users, nextCursor: last && !input.email && !input.phone ? `${(last.data() as UserProfile).createdAt}|${last.id}` : undefined };
 }));

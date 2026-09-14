@@ -1,25 +1,54 @@
 import { useMemo, useState } from 'react';
-import { formatGrams, makeId, priceLine, weightLineTotal, type CartModifierSelection, type Product } from '@qareeb/shared';
+import { formatGrams, makeId, placementSuffix, priceLine, weightLineTotal, type CartLine, type CartModifierSelection, type Product, type ToppingPlacement } from '@qareeb/shared';
+import { PlacementPicker } from './PizzaPlacement';
 import { useI18n, useT } from '@/lib/i18n';
 import { Button, Checkbox, ConfirmDialog, Dialog, Stepper, TextArea, toast } from '@/design/components';
-import { addLine, cartBelongsTo, cartStore } from '@/lib/cart';
+import { addLine, cartBelongsTo, cartStore, replaceLine } from '@/lib/cart';
 import { money } from '@/lib/format';
 import type { PublicBranch, PublicBusiness } from './hooks';
 import { StorageImage } from './StorageImage';
+import { PhotoLightbox } from './PhotoLightbox';
 
-export function ProductSheet({ product, business, branch, mode, cityId, onClose }: { product: Product; business: PublicBusiness; branch: PublicBranch; mode: 'pickup' | 'delivery'; cityId: string; onClose: () => void }) {
+/** When `editLine` is given the sheet opens prefilled and "Save" replaces that cart line in place. */
+export function ProductSheet({ product, business, branch, mode, cityId, onClose, editLine }: { product: Product; business: PublicBusiness; branch: PublicBranch; mode: 'pickup' | 'delivery'; cityId: string; onClose: () => void; editLine?: CartLine }) {
   const t = useT();
   const { L, locale } = useI18n();
   const cart = cartStore.use();
-  const [variantId, setVariantId] = useState<string | undefined>(product.variants.find((v) => v.available)?.id);
-  const [selections, setSelections] = useState<Record<string, string[]>>({});
-  const [qty, setQty] = useState(product.minQuantity || 1);
-  const [grams, setGrams] = useState(product.minWeightGrams ?? product.weightStepGrams ?? 100);
-  const [note, setNote] = useState('');
+  // Prefill from the edited line, but only with options that still exist and are still selectable:
+  // an option removed from the menu since the line was added must not survive as a phantom pick.
+  const initial = useMemo(() => {
+    if (!editLine) return null;
+    const sel: Record<string, string[]> = {};
+    const pl: Record<string, Record<string, ToppingPlacement>> = {};
+    for (const m of editLine.modifiers) {
+      const g = product.modifierGroups.find((x) => x.id === m.groupId);
+      if (!g) continue;
+      const ids = m.optionIds.filter((id) => g.options.some((o) => o.id === id && o.available));
+      if (ids.length === 0) continue;
+      sel[g.id] = g.maxSelect === 1 ? ids.slice(0, 1) : g.maxSelect > 0 ? ids.slice(0, g.maxSelect) : ids;
+      if (g.placement) pl[g.id] = Object.fromEntries(sel[g.id]!.map((id) => [id, m.placements?.[id] ?? 'whole']));
+    }
+    const variant = product.variants.find((v) => v.id === editLine.variantId && v.available)?.id;
+    return { sel, pl, variant };
+  }, [editLine, product]);
+  const [variantId, setVariantId] = useState<string | undefined>(initial?.variant ?? product.variants.find((v) => v.available)?.id);
+  const [selections, setSelections] = useState<Record<string, string[]>>(initial?.sel ?? {});
+  const [placements, setPlacements] = useState<Record<string, Record<string, ToppingPlacement>>>(initial?.pl ?? {});
+  const [qty, setQty] = useState(Math.max(editLine?.quantity ?? 0, product.minQuantity || 1));
+  const [grams, setGrams] = useState(editLine?.requestedGrams ?? product.minWeightGrams ?? product.weightStepGrams ?? 100);
+  const [note, setNote] = useState(editLine?.note ?? '');
   const [showReplace, setShowReplace] = useState(false);
   const [touched, setTouched] = useState(false);
+  const [showPhoto, setShowPhoto] = useState(false);
 
-  const modifiers: CartModifierSelection[] = useMemo(() => Object.entries(selections).map(([groupId, optionIds]) => ({ groupId, optionIds })), [selections]);
+  const modifiers: CartModifierSelection[] = useMemo(
+    () => Object.entries(selections).map(([groupId, optionIds]) => {
+      const group = product.modifierGroups.find((g) => g.id === groupId);
+      const chosen = Object.fromEntries(optionIds.map((id) => [id, placements[groupId]?.[id] ?? 'whole'] as const));
+      return group?.placement ? { groupId, optionIds, placements: chosen } : { groupId, optionIds };
+    }),
+    [selections, placements, product.modifierGroups],
+  );
   const preview = useMemo(() => {
     const variant = product.variants.find((v) => v.id === variantId);
     const base = variant ? variant.priceAgorot : product.priceAgorot;
@@ -40,29 +69,31 @@ export function ProductSheet({ product, business, branch, mode, cityId, onClose 
 
   const commit = () => {
     const meta = { businessName: business.name, branchName: branch.name, businessDefaultLocale: business.defaultLocale };
-    const modifierNames = product.modifierGroups.flatMap((g) => (selections[g.id] ?? []).map((id) => g.options.find((o) => o.id === id)?.name ?? {}));
-    addLine({
-      businessId: business.id,
-      branchId: branch.id,
-      mode,
-      cityId,
-      meta,
-      line: { ...preview.cartLine, lineId: makeId(12), note: note.trim() || undefined },
-      lineMeta: { name: product.name, variantName: product.variants.find((v) => v.id === variantId)?.name, modifierNames, unitLabel: product.unitLabel, pricingMode: product.pricingMode, imagePath: product.imagePath },
-    });
+    const modifierNames = product.modifierGroups.flatMap((g) => (selections[g.id] ?? []).map((id) => {
+      const nm = g.options.find((o) => o.id === id)?.name ?? {};
+      const suffix = g.placement ? placementSuffix(placements[g.id]?.[id], t) : '';
+      return suffix ? Object.fromEntries(Object.entries(nm).map(([k, v]) => [k, `${v}${suffix}`])) : nm;
+    }));
+    const lineMeta = { name: product.name, variantName: product.variants.find((v) => v.id === variantId)?.name, modifierNames, unitLabel: product.unitLabel, pricingMode: product.pricingMode, imagePath: product.imagePath, weightStepGrams: product.weightStepGrams, minWeightGrams: product.minWeightGrams, quantityStep: product.quantityStep, minQuantity: product.minQuantity };
+    const { lineId: _preview, ...body } = preview.cartLine;
+    if (editLine) {
+      replaceLine(editLine.lineId, { ...body, note: note.trim() || undefined }, lineMeta);
+    } else {
+      addLine({ businessId: business.id, branchId: branch.id, mode, cityId, meta, line: { ...body, lineId: makeId(12), note: note.trim() || undefined }, lineMeta });
+    }
     try {
       sessionStorage.removeItem('qareeb.cart.quotedTotal');
       window.dispatchEvent(new Event('qareeb:cart-quote'));
     } catch {
       /* ignore */
     }
-    toast(`${t('product.addToCart')} ✓`);
+    toast(`${editLine ? t('product.saveChanges') : t('product.addToCart')} ✓`);
     onClose();
   };
   const submit = () => {
     setTouched(true);
     if (invalid) return;
-    if (cart.cart && !cartBelongsTo(cart, business.id, branch.id)) {
+    if (!editLine && cart.cart && !cartBelongsTo(cart, business.id, branch.id)) {
       setShowReplace(true);
       return;
     }
@@ -77,13 +108,13 @@ export function ProductSheet({ product, business, branch, mode, cityId, onClose 
         title={L(product.name, business.defaultLocale)}
         footer={
           <Button block onClick={submit} disabled={touched && invalid}>
-            {t('product.addToCart')} · <bdi className="price">{money(preview.total, locale)}</bdi>
+            {editLine ? t('product.saveChanges') : t('product.addToCart')} · <bdi className="price">{money(preview.total, locale)}</bdi>
           </Button>
         }
       >
         <div className="stack">
           <div className="row row--nowrap" style={{ alignItems: 'flex-start' }}>
-            <StorageImage path={product.imagePath} alt="" square className="product__img" fallbackLabel={t('discovery.imageFallback')} />
+            <StorageImage path={product.imagePath} alt={t('product.photoAlt', { name: L(product.name, business.defaultLocale) })} square className="product__img" fallbackLabel={t('discovery.imageFallback')} onClick={() => setShowPhoto(true)} />
             <div className="stack--sm stack" style={{ minWidth: 0 }}>
               {L(product.description, business.defaultLocale) ? <p className="wrap-anywhere">{L(product.description, business.defaultLocale)}</p> : null}
               {L(product.dietaryText, business.defaultLocale) ? <p className="muted wrap-anywhere"><strong>{t('business.dietary')}:</strong> {L(product.dietaryText, business.defaultLocale)}</p> : null}
@@ -92,7 +123,7 @@ export function ProductSheet({ product, business, branch, mode, cityId, onClose 
           </div>
 
           {product.variants.length > 0 ? (
-            <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
+            <fieldset className="field option-group">
               <legend className="field__label">{t('product.size')} <span className="badge badge--accent">{t('product.required')}</span></legend>
               <div className="radio-list">
                 {product.variants.map((v) => (
@@ -112,7 +143,7 @@ export function ProductSheet({ product, business, branch, mode, cityId, onClose 
             const err = touched && groupError(g);
             const rule = g.required && g.maxSelect === 1 ? t('product.chooseExactly', { count: 1 }) : g.maxSelect > 0 ? t('product.chooseUpTo', { max: g.maxSelect }) : g.minSelect > 0 ? t('product.chooseAtLeast', { min: g.minSelect }) : '';
             return (
-              <fieldset key={g.id} className="field" style={{ border: 0, padding: 0, margin: 0 }} aria-invalid={err || undefined}>
+              <fieldset key={g.id} className="field option-group" aria-invalid={err || undefined}>
                 <legend className="field__label">
                   {L(g.name, business.defaultLocale)} {g.required ? <span className="badge badge--accent">{t('product.required')}</span> : <span className="field__optional">({t('common.optional')})</span>}
                   {rule ? <span className="field__optional">· {rule}</span> : null}
@@ -121,7 +152,8 @@ export function ProductSheet({ product, business, branch, mode, cityId, onClose 
                   {g.options.map((o) => {
                     const checked = chosen.includes(o.id);
                     return (
-                      <label key={o.id} className={`choice ${checked ? 'is-selected' : ''}`}>
+                      <div key={o.id} className={`choice-block ${g.placement && checked ? 'has-extra' : ''}`}>
+                      <label className={`choice ${checked ? 'is-selected' : ''}`}>
                         <input
                           type={single ? 'radio' : 'checkbox'}
                           name={`g-${g.id}`}
@@ -132,6 +164,8 @@ export function ProductSheet({ product, business, branch, mode, cityId, onClose 
                         <span className="choice__label">{L(o.name, business.defaultLocale)}{!o.available ? ` · ${t('common.unavailable')}` : ''}</span>
                         {o.priceDeltaAgorot ? <span className="choice__price"><bdi>{o.priceDeltaAgorot > 0 ? '+' : ''}{money(o.priceDeltaAgorot, locale)}</bdi></span> : null}
                       </label>
+                      {g.placement && checked ? <PlacementPicker value={placements[g.id]?.[o.id]} onChange={(pl) => setPlacements((s) => ({ ...s, [g.id]: { ...(s[g.id] ?? {}), [o.id]: pl } }))} /> : null}
+                      </div>
                     );
                   })}
                 </div>
@@ -147,16 +181,18 @@ export function ProductSheet({ product, business, branch, mode, cityId, onClose 
               <div className="field__hint">{t('product.weightExplainer')} · {t('product.estimatedPrice')}: <bdi className="price">{money(preview.total, locale)}</bdi></div>
             </div>
           ) : (
-            <div className="field">
+            <div className="field field--inline">
               <span className="field__label">{t('common.quantity')}</span>
               <Stepper value={qty} min={product.minQuantity || 1} max={99} step={product.quantityStep || 1} onChange={setQty} decLabel={t('product.decrease')} incLabel={t('product.increase')} />
             </div>
           )}
 
           <TextArea label={t('product.itemNote')} optional placeholder={t('product.itemNotePlaceholder')} value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} style={{ minHeight: 72 }} />
-          {business.type === 'supermarket' ? <Checkbox label={t('cart.estimatedNote')} disabled checked={product.pricingMode === 'weight'} style={{ display: product.pricingMode === 'weight' ? undefined : 'none' }} /> : null}
+          {/* Only weight-priced items are estimated; `style` on Checkbox lands on the input, not the label. */}
+          {business.type === 'supermarket' && product.pricingMode === 'weight' ? <Checkbox label={t('cart.estimatedNote')} disabled checked /> : null}
         </div>
       </Dialog>
+      {showPhoto && product.imagePath ? <PhotoLightbox path={product.imagePath} alt={t('product.photoAlt', { name: L(product.name, business.defaultLocale) })} onClose={() => setShowPhoto(false)} /> : null}
       <ConfirmDialog open={showReplace} onClose={() => setShowReplace(false)} onConfirm={() => { setShowReplace(false); commit(); }} title={t('product.replaceCartTitle')} body={t('product.replaceCartBody', { business: L(cart.meta?.businessName ?? {}, cart.meta?.businessDefaultLocale) })} confirmLabel={t('product.replaceCartConfirm')} danger />
     </>
   );

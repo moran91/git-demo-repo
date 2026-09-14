@@ -8,7 +8,7 @@ import { useCities } from './hooks';
 export function CitySelector({ open, onClose, value, onSelect }: { open: boolean; onClose: () => void; value: string; onSelect: (c: City) => void }) {
   const t = useT();
   const { L } = useI18n();
-  const { cities, loading } = useCities();
+  const { cities, loading, error } = useCities();
   const [q, setQ] = useState('');
   const filtered = useMemo(() => {
     const needle = normalizeDigits(q.trim().toLowerCase());
@@ -20,6 +20,7 @@ export function CitySelector({ open, onClose, value, onSelect }: { open: boolean
       <div className="stack">
         <TextInput label={t('discovery.citySearch')} value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
         {loading ? <div className="skeleton" style={{ height: 48 }} /> : null}
+        {error ? <p className="muted" role="alert">{t('common.errorGeneric')}</p> : null}
         <ul className="radio-list" role="listbox" aria-label={t('discovery.citySelectorTitle')}>
           {filtered.map((c) => (
             <li key={c.id}>
@@ -28,7 +29,7 @@ export function CitySelector({ open, onClose, value, onSelect }: { open: boolean
               </button>
             </li>
           ))}
-          {!loading && filtered.length === 0 ? <li className="muted">{t('discovery.noCity')}</li> : null}
+          {!loading && !error && filtered.length === 0 ? <li className="muted">{t('discovery.noCity')}</li> : null}
         </ul>
       </div>
     </Dialog>

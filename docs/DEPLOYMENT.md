@@ -39,6 +39,42 @@ Console → Build → Authentication → Get started.
 - Deploy rules and indexes: `npm run deploy:rules`. Index builds take minutes; discovery queries fail
   until they finish.
 
+### Storage rules read Firestore — grant the service agent once
+
+`storage.rules` calls `firestore.get()` / `firestore.exists()` (membership and suspension checks). Those
+calls only work when the project's Cloud Storage service agent holds the Firestore rules role; without
+it every evaluation errors and **every upload is denied with `storage/unauthorized`**, even for an
+owner with a correct membership. An interactive `firebase deploy --only storage` offers to grant it;
+`--non-interactive` deploys do not, so grant it explicitly (project number from the Firebase console):
+
+```bash
+gcloud projects add-iam-policy-binding <project-id> \
+  --member="serviceAccount:service-<project-number>@gcp-sa-firebasestorage.iam.gserviceaccount.com" \
+  --role="roles/firebaserules.firestoreServiceAgent"
+```
+
+This is not hypothetical: photo upload was dead on `qareeb-dev` from the day the bucket was created
+(2026-09-07) until the binding was granted on 2026-09-09, and the bucket held zero objects for the
+whole window. Nothing in the repo could catch it — the Storage emulator does not resolve
+cross-service lookups at all, so `tests/rules/storage.test.ts` can only assert the *negative* paths,
+and the client surfaces the failure as an ordinary `storage/unauthorized`, identical to a genuine
+permission denial. **Verify it after every deploy that touches storage rules:**
+
+```bash
+npm run check:storage-upload
+```
+
+That checks the binding and then replays a real owner upload — logo and product photo, plus the
+guest/content-type/size/path denials — against the *deployed* ruleset via the Rules test API.
+
+#### Two documents is a hard ceiling
+
+Cross-service Rules allow at most **two unique Firestore documents per evaluation**; repeated calls
+against the same path are cached and free. `storage.rules` is already at the ceiling — it reads
+`users/{uid}` and `memberships/{uid}_{businessId}`. A third lookup makes the rules service deny
+**every** upload with a bare 403, and the Rules simulator will not catch it because it only ever
+evaluates mocks. `npm run test:rules` fails the build if a third document path appears in the file.
+
 ## 4. Cloud Functions
 - Runtime **Node 22**, region `me-west1` (`firebase.json`, `functions/package.json`).
 - Secrets (only if enabling WhatsApp OTP):
@@ -81,6 +117,12 @@ npm run deploy:hosting
 Custom domain: Hosting → Add custom domain → DNS verification; add it to Auth authorized domains and
 `APP_ORIGIN`.
 
+### Third-party notice: HEIC decoding
+
+Photo uploads decode HEIC/HEIF on the client with `libheif-js` (LGPL-3.0). It is built as its own
+chunk (`assets/libheif-*.js`), fetched only when a HEIC file is picked and never precached, so it stays
+a separately replaceable component of the app rather than part of the main bundle.
+
 ## 8. First admin (bootstrap)
 1. Register through the app (`/business/register`) with the admin's email and verify the email.
 2. With Application Default Credentials for the project:
@@ -105,7 +147,9 @@ invite owners from `/admin/invite`.
 ## 11. Optional WhatsApp OTP (Twilio Verify)
 1. Create a Twilio Verify Service and enable the **WhatsApp** channel (requires an approved WhatsApp
    sender). Docs: https://www.twilio.com/docs/verify/whatsapp
-2. Set the three secrets (section 4), redeploy functions. The web app shows the WhatsApp button only when
+2. Set the three secrets (section 4), then set `WHATSAPP_OTP=1` in `functions/.env` and redeploy
+   functions. The secrets are only bound to the callables when that flag is on; without it, deploy
+   succeeds on projects that have no Twilio secrets. The web app shows the WhatsApp button only when
    configured (`authOptions`). SMS keeps working independently; Firebase's SMS API never sends WhatsApp.
 
 ## Official references (re-check at deploy time)

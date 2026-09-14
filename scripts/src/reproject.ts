@@ -39,7 +39,9 @@ export async function reprojectBusinessSeed(db: Firestore, businessId: string): 
       if (prod.archived) continue;
       const { stockQty, sku: _s, barcode: _b, ...rest } = prod;
       const inStock = !prod.trackInventory || (stockQty ?? 0) > 0 || prod.variants.some((v) => (v.stockQty ?? 0) > 0);
-      batch.set(ref.collection('products').doc(prod.id), { ...rest, variants: prod.variants.map(({ stockQty: vs, sku: _vs, ...v }) => ({ ...v, available: v.available && (!prod.trackInventory || vs === undefined || vs > 0) })), inStock, available: prod.available && inStock, stockLeft: prod.trackInventory && stockQty !== undefined ? Math.min(stockQty, 10) : undefined });
+      // Variant products keep their stock on the variants (see functions/src/lib/projections.ts).
+      const remaining = prod.variants.length > 0 ? prod.variants.reduce((sum, v) => sum + (v.stockQty ?? 0), 0) : stockQty;
+      batch.set(ref.collection('products').doc(prod.id), { ...rest, variants: prod.variants.map(({ stockQty: vs, sku: _vs, ...v }) => ({ ...v, available: v.available && (!prod.trackInventory || vs === undefined || vs > 0) })), inStock, available: prod.available && inStock, stockLeft: prod.trackInventory && remaining !== undefined ? Math.min(remaining, 10) : undefined });
     }
   }
   await batch.commit();

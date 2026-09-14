@@ -36,6 +36,7 @@ function AdminShell() {
     { to: '/admin/audit', icon: 'list', label: t('admin.audit') },
     { to: '/admin/config', icon: 'settings', label: t('admin.config') },
   ];
+  const { dir } = useI18n();
   const sidebar = (
     <>
       <Link to="/" className="brand"><BrandMark size={28} label={t('brand.logoLabel')} /><span className="brand__word">{BRAND.wordmark}</span></Link>
@@ -47,7 +48,7 @@ function AdminShell() {
   return (
     <div className="dash">
       <aside className="dash__sidebar">{sidebar}</aside>
-      {drawer ? <><button type="button" className="drawer-backdrop" aria-label={t('common.close')} onClick={() => setDrawer(false)} /><aside className="dash__sidebar dash__sidebar--drawer" role="dialog" aria-modal="true">{sidebar}</aside></> : null}
+      {drawer ? <><button type="button" className="drawer-backdrop" aria-label={t('common.close')} onClick={() => setDrawer(false)} /><aside className="dash__sidebar dash__sidebar--drawer" style={dir === 'rtl' ? { right: 0, left: 'auto' } : { left: 0, right: 'auto' }} role="dialog" aria-modal="true">{sidebar}</aside></> : null}
       <header className="dash__header"><IconButton icon="menu" label={t('common.menu')} className="dash__menu-btn" onClick={() => setDrawer(true)} /><strong>{t('admin.title')}</strong></header>
       <main className="dash__main" id="main"><OfflineBanner /><Outlet /></main>
       <style>{`@media (min-width: 900px) { .dash__menu-btn { display: none; } }`}</style>
@@ -58,7 +59,7 @@ function AdminShell() {
 function Overview() {
   const t = useT();
   const { locale } = useI18n();
-  const [m, setM] = useState<{ last30Days: { placedCount: number; placedValueAgorot: number; acceptedCount: number; acceptedValueAgorot: number; cashRecordsCount: number; cashRecordedAgorot: number }; pendingBusinessApprovals: number; agingPlacedOrders: number; totalUsers: number; approvedBusinesses: number; daily: Array<{ date: string; placedCount?: number; placedValueAgorot?: number; acceptedValueAgorot?: number; cashRecordedAgorot?: number }> } | null>(null);
+  const [m, setM] = useState<{ last30Days: { placedCount: number; placedValueAgorot: number; acceptedCount: number; acceptedValueAgorot: number; cashRecordsCount: number; cashRecordedAgorot: number }; pendingBusinessApprovals: number; pendingBranchApprovals?: number; agingPlacedOrders: number; totalUsers: number; approvedBusinesses: number; daily: Array<{ date: string; placedCount?: number; placedValueAgorot?: number; acceptedValueAgorot?: number; cashRecordedAgorot?: number }> } | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => { call<typeof m>('getAdminMetrics', {}).then(setM).catch((e) => setError(t(errorKey(e)))); }, [t]);
   if (error) return <Alert tone="danger">{error}</Alert>;
@@ -73,7 +74,7 @@ function Overview() {
         <div className="metric"><span className="metric__value"><bdi>{money(m.last30Days.placedValueAgorot, locale)}</bdi></span><span className="metric__label">{t('admin.metrics.placedValue')}</span></div>
         <div className="metric"><span className="metric__value"><bdi>{money(m.last30Days.acceptedValueAgorot, locale)}</bdi></span><span className="metric__label">{t('admin.metrics.acceptedValue')}</span></div>
         <div className="metric"><span className="metric__value"><bdi>{money(m.last30Days.cashRecordedAgorot, locale)}</bdi></span><span className="metric__label">{t('admin.metrics.cashRecorded')}</span></div>
-        <Link to="/admin/approvals" className="metric" style={{ textDecoration: 'none', color: 'inherit', borderColor: m.pendingBusinessApprovals ? 'var(--color-accent-text)' : undefined }}><span className="metric__value num">{m.pendingBusinessApprovals}</span><span className="metric__label">{t('admin.metrics.pendingApprovals')}</span></Link>
+        <Link to="/admin/approvals" className="metric" style={{ textDecoration: 'none', color: 'inherit', borderColor: m.pendingBusinessApprovals + (m.pendingBranchApprovals ?? 0) ? 'var(--color-accent-text)' : undefined }}><span className="metric__value num">{m.pendingBusinessApprovals + (m.pendingBranchApprovals ?? 0)}</span><span className="metric__label">{t('admin.metrics.pendingApprovals')}</span></Link>
         <Link to="/admin/orders" className="metric" style={{ textDecoration: 'none', color: 'inherit', borderColor: m.agingPlacedOrders ? 'var(--color-danger)' : undefined }}><span className="metric__value num">{m.agingPlacedOrders}</span><span className="metric__label">{t('admin.metrics.agingOrders')}</span></Link>
         <div className="metric"><span className="metric__value num">{m.totalUsers}</span><span className="metric__label">{t('admin.users')}</span></div>
         <div className="metric"><span className="metric__value num">{m.approvedBusinesses}</span><span className="metric__label">{t('admin.businesses')}</span></div>
@@ -99,16 +100,26 @@ function Approvals() {
   const t = useT();
   const { L } = useI18n();
   const pendingBiz = useCollection<Business>('businesses', [where('approval', '==', 'pending'), orderBy('createdAt', 'desc'), limit(50)]);
-  const pendingBranches = useCollection<Branch>(null, []);
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [branchError, setBranchError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Parameters<typeof ApprovalDialog>[0]['target'] | null>(null);
   useEffect(() => {
-    import('firebase/firestore').then(({ getDocs, collectionGroup, query, where, orderBy, limit }) => getDocs(query(collectionGroup(db, 'branches'), where('approval', '==', 'pending'), orderBy('createdAt', 'desc'), limit(50)))).then((s) => setBranches(s.docs.map((d) => d.data() as Branch))).catch(() => setBranches([]));
-  }, [pendingBiz.data.length, dialog]);
-  void pendingBranches;
+    let unsub: (() => void) | undefined;
+    let cancelled = false;
+    import('firebase/firestore').then(({ onSnapshot, collectionGroup, query, where, orderBy, limit }) => {
+      if (cancelled) return;
+      unsub = onSnapshot(
+        query(collectionGroup(db, 'branches'), where('approval', '==', 'pending'), orderBy('createdAt', 'desc'), limit(50)),
+        (s) => { setBranches(s.docs.map((d) => d.data() as Branch)); setBranchError(null); },
+        (err) => { setBranches([]); setBranchError(t(errorKey(err))); },
+      );
+    });
+    return () => { cancelled = true; unsub?.(); };
+  }, [t]);
   return (
     <div className="stack">
       <h1>{t('admin.approvals')}</h1>
+      {branchError ? <Alert tone="danger">{branchError}</Alert> : null}
       {pendingBiz.data.length === 0 && branches.length === 0 && !pendingBiz.loading ? <EmptyState icon="check" title={t('admin.noPending')} /> : null}
       {pendingBiz.data.length > 0 ? <section className="stack--sm stack"><h2>{t('admin.businesses')}</h2><div className="table-wrap"><table className="table"><thead><tr><th>{t('common.name')}</th><th>{t('bizProfile.type')}</th><th>{t('admin.owner')}</th><th>{t('common.date')}</th><th>{t('common.actions')}</th></tr></thead><tbody>{pendingBiz.data.map((b) => <tr key={b.id}><td><Link to={`/admin/businesses/${b.id}`}>{L(b.name, b.defaultLocale)}</Link></td><td>{b.type}</td><td dir="ltr">{b.ownerUid.slice(0, 8)}</td><td><bdi>{formatLocalDateTime(b.createdAt, 'en')}</bdi></td><td className="row"><Button size="sm" onClick={() => setDialog({ type: 'business', businessId: b.id, name: L(b.name, b.defaultLocale), state: 'approved', current: b.approval })}>{t('admin.approve')}</Button><Button size="sm" variant="danger" onClick={() => setDialog({ type: 'business', businessId: b.id, name: L(b.name, b.defaultLocale), state: 'rejected', current: b.approval })}>{t('admin.rejectApproval')}</Button></td></tr>)}</tbody></table></div></section> : null}
       {branches.length > 0 ? <section className="stack--sm stack"><h2>{t('admin.branches')}</h2><div className="table-wrap"><table className="table"><thead><tr><th>{t('common.name')}</th><th>{t('admin.businesses')}</th><th>{t('common.city')}</th><th>{t('common.actions')}</th></tr></thead><tbody>{branches.map((b) => <tr key={b.id}><td>{L(b.name)}</td><td><Link to={`/admin/businesses/${b.businessId}`} dir="ltr">{b.businessId}</Link></td><td>{b.cityId}</td><td className="row"><Button size="sm" onClick={() => setDialog({ type: 'branch', businessId: b.businessId, branchId: b.id, name: L(b.name), state: 'approved', current: b.approval })}>{t('admin.approve')}</Button><Button size="sm" variant="danger" onClick={() => setDialog({ type: 'branch', businessId: b.businessId, branchId: b.id, name: L(b.name), state: 'rejected', current: b.approval })}>{t('admin.rejectApproval')}</Button></td></tr>)}</tbody></table></div></section> : null}
@@ -123,7 +134,7 @@ function Businesses() {
   const paged = usePaged<Business>(() => query(collection(db, 'businesses'), fbOrderBy('createdAt', 'desc')), 25, []);
   return (
     <div className="stack">
-      <div className="row row--between"><h1>{t('admin.businesses')}</h1><Link className="btn btn--secondary" to="/admin/invite">{t('admin.inviteOwner')}</Link></div>
+      <div className="dash__title"><h1>{t('admin.businesses')}</h1><div className="actions"><Link className="btn btn--secondary" to="/admin/invite">{t('admin.inviteOwner')}</Link></div></div>
       <div className="table-wrap"><table className="table"><thead><tr><th>{t('common.name')}</th><th>{t('bizProfile.type')}</th><th>{t('common.status')}</th><th>{t('common.date')}</th></tr></thead><tbody>{paged.items.map((b) => <tr key={b.id}><td><Link to={`/admin/businesses/${b.id}`}>{L(b.name, b.defaultLocale)}</Link></td><td>{b.type}</td><td><Badge tone={b.approval === 'approved' ? 'success' : b.approval === 'pending' ? 'accent' : 'danger'}>{t(`admin.state.${b.approval}`)}</Badge></td><td><bdi>{formatLocalDateTime(b.createdAt, 'en')}</bdi></td></tr>)}</tbody></table></div>
       {!paged.done ? <div className="pagination"><Button variant="secondary" loading={paged.loading} onClick={paged.loadMore}>{t('dash.loadMore')}</Button></div> : null}
     </div>
@@ -144,7 +155,7 @@ function BusinessDetail() {
   const b = biz.data;
   const name = L(b.name, b.defaultLocale);
   const actions = (type: 'business' | 'branch', current: string, branch?: Branch) => (
-    <div className="row" style={{ gap: 4 }}>
+    <div className="actions">
       {current !== 'approved' ? <Button size="sm" onClick={() => setDialog({ type, businessId: b.id, branchId: branch?.id, name: branch ? L(branch.name) : name, state: 'approved', current })}>{t('admin.approve')}</Button> : null}
       {current === 'pending' ? <Button size="sm" variant="danger" onClick={() => setDialog({ type, businessId: b.id, branchId: branch?.id, name: branch ? L(branch.name) : name, state: 'rejected', current })}>{t('admin.rejectApproval')}</Button> : null}
       {current === 'approved' ? <Button size="sm" variant="danger" onClick={() => setDialog({ type, businessId: b.id, branchId: branch?.id, name: branch ? L(branch.name) : name, state: 'suspended', current })}>{t('admin.suspend')}</Button> : null}
@@ -153,7 +164,7 @@ function BusinessDetail() {
   );
   return (
     <div className="stack">
-      <div className="row row--between"><h1>{name}</h1><Badge tone={b.approval === 'approved' ? 'success' : b.approval === 'pending' ? 'accent' : 'danger'}>{t(`admin.state.${b.approval}`)}</Badge></div>
+      <div className="dash__title"><h1>{name}</h1><Badge tone={b.approval === 'approved' ? 'success' : b.approval === 'pending' ? 'accent' : 'danger'}>{t(`admin.state.${b.approval}`)}</Badge></div>
       <div className="muted">{b.type} · {t('admin.owner')}: <span dir="ltr">{b.ownerUid}</span> · {b.publicPhone ? <bdi className="num">{b.publicPhone}</bdi> : null}</div>
       <section className="card stack"><h2>{t('admin.approvals')}</h2>{actions('business', b.approval)}{b.approvalReason ? <p className="muted">{b.approvalReason}</p> : null}</section>
       <section className="card stack"><h2>{t('admin.branches')}</h2><ul className="list">{branches.data.map((br) => <li key={br.id} className="list__item"><div className="list__grow"><strong>{L(br.name, b.defaultLocale)}</strong> <span className="muted">· {br.cityId} · <bdi className="num">{br.phone}</bdi></span></div><Badge tone={br.approval === 'approved' ? 'success' : br.approval === 'pending' ? 'accent' : 'danger'}>{t(`admin.state.${br.approval}`)}</Badge>{actions('branch', br.approval, br)}</li>)}</ul></section>
@@ -178,7 +189,7 @@ function Users() {
   return (
     <div className="stack">
       <h1>{t('admin.users')}</h1>
-      <form className="row" onSubmit={(e) => { e.preventDefault(); void load(); }}><div style={{ flex: 1 }}><TextInput label={t('common.search')} ltr placeholder="email@ / +972…" value={q} onChange={(e) => setQ(e.target.value)} /></div><Button type="submit" variant="secondary" style={{ alignSelf: 'flex-end' }}>{t('common.search')}</Button></form>
+      <form className="row row--end" onSubmit={(e) => { e.preventDefault(); void load(); }}><div style={{ flex: 1, minWidth: 200 }}><TextInput label={t('common.search')} ltr placeholder="email@ / +972…" value={q} onChange={(e) => setQ(e.target.value)} /></div><Button type="submit" variant="secondary">{t('common.search')}</Button></form>
       <div className="table-wrap"><table className="table"><thead><tr><th>{t('common.name')}</th><th>{t('common.email')} / {t('common.phone')}</th><th>{t('admin.memberships')}</th><th>{t('common.status')}</th><th>{t('common.actions')}</th></tr></thead><tbody>
         {data?.users.map((u) => <tr key={u.uid}><td>{u.displayName || '—'}<div className="muted" dir="ltr">{u.uid}</div></td><td dir="ltr">{u.email ?? ''} {u.phone ?? ''}</td><td>{u.memberships.map((m) => `${m.role}@${m.businessId}`).join(', ')}</td><td>{u.isAdmin ? <Badge tone="primary">{t('staff.role.admin')}</Badge> : u.suspended ? <Badge tone="danger">{t('admin.userSuspended')}</Badge> : <Badge tone="success">{t('admin.active')}</Badge>}</td><td className="row" style={{ gap: 4 }}>{!u.isAdmin ? <Button size="sm" variant={u.suspended ? 'secondary' : 'danger'} onClick={() => { setReason(''); setSusp({ uid: u.uid, suspended: !u.suspended }); }}>{u.suspended ? t('admin.reinstateUser') : t('admin.suspendUser')}</Button> : null}<Button size="sm" variant="ghost" onClick={() => { setLoyForm({ businessId: u.memberships[0]?.businessId ?? '', points: 0, reason: '' }); setLoy({ uid: u.uid }); }}>{t('admin.loyaltyAdjust')}</Button></td></tr>)}
       </tbody></table></div>
@@ -227,7 +238,7 @@ function Cities() {
   const [busy, setBusy] = useState(false);
   return (
     <div className="stack">
-      <div className="row row--between"><h1>{t('admin.cities')}</h1><Button icon="plus" onClick={() => setEdit({ name: {}, aliases: '', active: true, sortOrder: cities.data.length })}>{t('admin.newCity')}</Button></div>
+      <div className="dash__title"><h1>{t('admin.cities')}</h1><div className="actions"><Button icon="plus" onClick={() => setEdit({ name: {}, aliases: '', active: true, sortOrder: cities.data.length })}>{t('admin.newCity')}</Button></div></div>
       <div className="table-wrap"><table className="table"><thead><tr><th>{t('common.name')}</th><th>ID</th><th>{t('admin.aliases')}</th><th>{t('admin.active')}</th><th></th></tr></thead><tbody>{cities.data.map((c) => <tr key={c.id}><td>{LOCALES.map((l) => c.name[l]).filter(Boolean).join(' · ')}</td><td dir="ltr">{c.id}</td><td>{c.aliases.join(', ')}</td><td>{c.active ? t('common.yes') : t('common.no')}</td><td><IconButton icon="edit" label={t('common.edit')} onClick={() => setEdit({ id: c.id, name: c.name, aliases: c.aliases.join(', '), active: c.active, sortOrder: c.sortOrder, lat: c.lat, lng: c.lng })} /></td></tr>)}</tbody></table></div>
       <Dialog open={!!edit} onClose={() => setEdit(null)} title={edit?.id ? `${t('common.edit')}: ${L(edit.name)}` : t('admin.newCity')} sheet={false} footer={<><Button variant="secondary" onClick={() => setEdit(null)}>{t('common.cancel')}</Button><Button loading={busy} onClick={async () => { if (!edit) return; setBusy(true); try { await call('saveCity', { id: edit.id, name: edit.name, aliases: edit.aliases.split(',').map((s) => s.trim()).filter(Boolean), active: edit.active, sortOrder: edit.sortOrder, lat: edit.lat, lng: edit.lng }); toast(t('common.saved')); setEdit(null); } catch (e) { toast(t(errorKey(e)), 'danger'); } finally { setBusy(false); } }}>{t('common.save')}</Button></>}>
         {edit ? <div className="stack"><LocalizedInput label={t('common.name')} required value={edit.name} onChange={(name) => setEdit({ ...edit, name })} /><TextInput label={t('admin.aliases')} value={edit.aliases} onChange={(e) => setEdit({ ...edit, aliases: e.target.value })} /><div className="row"><TextInput label="Sort" type="number" ltr value={edit.sortOrder} onChange={(e) => setEdit({ ...edit, sortOrder: Number(e.target.value) })} /><Checkbox label={t('admin.active')} checked={edit.active} onChange={(e) => setEdit({ ...edit, active: e.target.checked })} /></div></div> : null}

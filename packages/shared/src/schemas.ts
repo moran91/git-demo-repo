@@ -11,6 +11,7 @@ export const requiredLocalizedSchema = localizedSchema.refine((v) => [v.he, v.ar
 });
 
 export const idSchema = z.string().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/);
+export const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 export const agorotSchema = z.number().int().min(0).max(100_000_000);
 export const gramsSchema = z.number().int().min(0).max(1_000_000);
 export const e164Schema = z.string().regex(/^\+[1-9]\d{6,14}$/);
@@ -40,7 +41,8 @@ export const addressInputSchema = z
 export type AddressInput = z.infer<typeof addressInputSchema>;
 
 /** ---------- Cart / checkout ---------- */
-export const cartModifierSchema = z.object({ groupId: idSchema, optionIds: z.array(idSchema).max(30) }).strict();
+export const toppingPlacementSchema = z.string().regex(/^(whole|left|right|top|bottom|(tl|tr|bl|br)(\+(tl|tr|bl|br)){0,3})$/);
+export const cartModifierSchema = z.object({ groupId: idSchema, optionIds: z.array(idSchema).max(30), placements: z.record(idSchema, toppingPlacementSchema).optional() }).strict();
 export const cartLineSchema = z
   .object({
     lineId: idSchema,
@@ -153,7 +155,8 @@ export const businessInputSchema = z
     description: localizedSchema,
     defaultLocale: localeSchema,
     publicPhone: shortText(30).optional(),
-    publicEmail: z.string().email().max(120).optional(),
+    /** The empty string is how the owner clears the address; updateBusiness turns it into a delete. */
+    publicEmail: z.union([z.literal(''), z.string().email().max(120)]).optional(),
   })
   .strict();
 
@@ -205,9 +208,24 @@ export const modifierGroupInputSchema = z
     maxSelect: z.number().int().min(0).max(30),
     options: z.array(modifierOptionInputSchema).min(1).max(30),
     sortOrder: z.number().int().min(0).max(1000),
+    placement: z.boolean().optional(),
+    sharedGroupId: idSchema.optional(),
   })
   .strict()
   .refine((g) => g.maxSelect === 0 || g.maxSelect >= g.minSelect, { message: 'max_below_min' });
+export const sharedModifierGroupInputSchema = z
+  .object({
+    name: requiredLocalizedSchema,
+    required: z.boolean(),
+    minSelect: z.number().int().min(0).max(30),
+    maxSelect: z.number().int().min(0).max(30),
+    options: z.array(modifierOptionInputSchema).min(1).max(30),
+    sortOrder: z.number().int().min(0).max(1000).optional(),
+    placement: z.boolean().optional(),
+  })
+  .strict()
+  .refine((g) => g.maxSelect === 0 || g.maxSelect >= g.minSelect, { message: 'max_below_min' });
+export type SharedModifierGroupInput = z.infer<typeof sharedModifierGroupInputSchema>;
 export const variantInputSchema = z
   .object({ id: idSchema.optional(), name: requiredLocalizedSchema, priceAgorot: agorotSchema, available: z.boolean(), sortOrder: z.number().int().min(0).max(1000), stockQty: z.number().int().min(0).max(1_000_000).optional(), sku: shortText(60).optional() })
   .strict();
@@ -313,3 +331,14 @@ export const whatsappStartSchema = z.object({ phone: z.string().trim().min(6).ma
 export const whatsappCheckSchema = z.object({ challengeId: idSchema, code: z.string().regex(/^\d{4,8}$/) }).strict();
 
 export const paginationSchema = z.object({ limit: z.number().int().min(1).max(50).default(20), cursor: z.string().max(200).optional() });
+
+/** ---------- Promotions ---------- */
+export const promotionInputSchema = z
+  .object({
+    title: requiredLocalizedSchema,
+    body: localizedSchema,
+    endsAt: isoDateSchema.optional(),
+    active: z.boolean(),
+  })
+  .strict();
+export type PromotionInput = z.infer<typeof promotionInputSchema>;

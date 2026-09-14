@@ -1,12 +1,12 @@
-@font-face { font-family: 'Noto Sans'; src: url('/fonts/NotoSans-Regular.ttf') format('truetype'); font-weight: 400; font-display: swap; }
-@font-face { font-family: 'Noto Sans'; src: url('/fonts/NotoSans-Medium.ttf') format('truetype'); font-weight: 500; font-display: swap; }
-@font-face { font-family: 'Noto Sans'; src: url('/fonts/NotoSans-SemiBold.ttf') format('truetype'); font-weight: 600; font-display: swap; }
-@font-face { font-family: 'Noto Sans Hebrew'; src: url('/fonts/NotoSansHebrew-Regular.ttf') format('truetype'); font-weight: 400; font-display: swap; unicode-range: U+0590-05FF, U+FB1D-FB4F; }
-@font-face { font-family: 'Noto Sans Hebrew'; src: url('/fonts/NotoSansHebrew-Medium.ttf') format('truetype'); font-weight: 500; font-display: swap; unicode-range: U+0590-05FF, U+FB1D-FB4F; }
-@font-face { font-family: 'Noto Sans Hebrew'; src: url('/fonts/NotoSansHebrew-SemiBold.ttf') format('truetype'); font-weight: 600; font-display: swap; unicode-range: U+0590-05FF, U+FB1D-FB4F; }
-@font-face { font-family: 'Noto Sans Arabic'; src: url('/fonts/NotoSansArabic-Regular.ttf') format('truetype'); font-weight: 400; font-display: swap; unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF; }
-@font-face { font-family: 'Noto Sans Arabic'; src: url('/fonts/NotoSansArabic-Medium.ttf') format('truetype'); font-weight: 500; font-display: swap; unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF; }
-@font-face { font-family: 'Noto Sans Arabic'; src: url('/fonts/NotoSansArabic-SemiBold.ttf') format('truetype'); font-weight: 600; font-display: swap; unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF; }
+@font-face { font-family: 'Noto Sans'; src: url('/fonts/NotoSans-Regular.woff2') format('woff2'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Noto Sans'; src: url('/fonts/NotoSans-Medium.woff2') format('woff2'); font-weight: 500; font-display: swap; }
+@font-face { font-family: 'Noto Sans'; src: url('/fonts/NotoSans-SemiBold.woff2') format('woff2'); font-weight: 600; font-display: swap; }
+@font-face { font-family: 'Noto Sans Hebrew'; src: url('/fonts/NotoSansHebrew-Regular.woff2') format('woff2'); font-weight: 400; font-display: swap; unicode-range: U+0590-05FF, U+FB1D-FB4F; }
+@font-face { font-family: 'Noto Sans Hebrew'; src: url('/fonts/NotoSansHebrew-Medium.woff2') format('woff2'); font-weight: 500; font-display: swap; unicode-range: U+0590-05FF, U+FB1D-FB4F; }
+@font-face { font-family: 'Noto Sans Hebrew'; src: url('/fonts/NotoSansHebrew-SemiBold.woff2') format('woff2'); font-weight: 600; font-display: swap; unicode-range: U+0590-05FF, U+FB1D-FB4F; }
+@font-face { font-family: 'Noto Sans Arabic'; src: url('/fonts/NotoSansArabic-Regular.woff2') format('woff2'); font-weight: 400; font-display: swap; unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF; }
+@font-face { font-family: 'Noto Sans Arabic'; src: url('/fonts/NotoSansArabic-Medium.woff2') format('woff2'); font-weight: 500; font-display: swap; unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF; }
+@font-face { font-family: 'Noto Sans Arabic'; src: url('/fonts/NotoSansArabic-SemiBold.woff2') format('woff2'); font-weight: 600; font-display: swap; unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF; }
 
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
@@ -41,7 +41,10 @@ bdi { unicode-bidi: isolate; }
 
 /* ---------- layout ---------- */
 .page { padding-inline: var(--gutter); padding-block: var(--space-4) var(--space-8); max-width: var(--max-content); margin-inline: auto; width: 100%; }
-.page--customer { padding-bottom: calc(var(--bottom-nav-height) + var(--safe-bottom) + var(--space-8)); }
+/* --cart-bar-space is set on :root by CustomerLayout while the floating cart bar is on screen: it is the
+ * bar's measured height plus its offset from the bottom nav. Everything anchored to the bottom edge adds
+ * it, so the bar can never sit on top of the last row of content (or of a toast). It is 0 when no bar. */
+.page--customer { padding-bottom: calc(var(--bottom-nav-height) + var(--safe-bottom) + var(--cart-bar-space, 0px) + var(--space-8)); }
 @media (min-width: 900px) { .page--customer { padding-bottom: var(--space-8); } }
 .stack { display: flex; flex-direction: column; gap: var(--space-4); }
 .stack--sm { gap: var(--space-2); }
@@ -49,6 +52,10 @@ bdi { unicode-bidi: isolate; }
 .row { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
 .row--between { justify-content: space-between; }
 .row--nowrap { flex-wrap: nowrap; }
+/* A field sitting next to a button: the button lines up with the input, not with the label above it. */
+.row--end { align-items: flex-end; }
+/* Wrapped onto its own line, a submit button fills it rather than leaving a short stub. */
+@media (max-width: 480px) { .row--end > .btn { width: 100%; } }
 .grid-cards { display: grid; gap: var(--space-4); grid-template-columns: 1fr; }
 @media (min-width: 640px) { .grid-cards { grid-template-columns: repeat(2, 1fr); } }
 @media (min-width: 1100px) { .grid-cards { grid-template-columns: repeat(3, 1fr); } }
@@ -56,6 +63,7 @@ bdi { unicode-bidi: isolate; }
 
 /* ---------- surfaces ---------- */
 .card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-card); padding: var(--space-4); }
+@media (max-width: 380px) { .card, .soft-block { padding: var(--space-3); } }
 .card--flat { box-shadow: none; }
 .card--interactive { transition: border-color var(--duration) var(--ease), box-shadow var(--duration) var(--ease); }
 .card--interactive:hover { border-color: var(--color-border-strong); box-shadow: var(--shadow-card); }
@@ -75,16 +83,18 @@ bdi { unicode-bidi: isolate; }
 .btn--danger-solid { background: var(--color-danger); color: #fff; }
 .btn--block { width: 100%; }
 .btn--sm { min-height: 40px; padding: 0 var(--space-4); font-size: var(--text-secondary); }
-.btn:disabled, .btn[aria-disabled='true'] { opacity: 0.55; cursor: not-allowed; }
+.btn:disabled, .btn[aria-disabled='true'], .btn.is-busy { opacity: 0.55; cursor: not-allowed; }
 .btn--icon { width: var(--touch-min); min-width: var(--touch-min); height: var(--touch-min); min-height: var(--touch-min); padding: 0; border-radius: 50%; background: transparent; color: var(--color-text); border: 0; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .btn--icon:hover { background: var(--color-soft); }
 .btn--icon.is-active { color: var(--color-primary); }
 .btn--icon[aria-pressed='true'] { color: var(--color-danger); }
 
 /* ---------- inputs ---------- */
-.field { display: flex; flex-direction: column; gap: var(--space-1); }
+.field { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
 .field__label { font-weight: 500; font-size: var(--text-secondary); color: var(--color-text); display: flex; gap: var(--space-2); align-items: baseline; }
 .field__optional { color: var(--color-text-muted); font-weight: 400; }
+/* A rendered <legend> sits outside the fieldset's flex flow, so the .field gap never reaches it; space it explicitly. */
+legend.field__label { padding: 0; margin: 0 0 var(--space-2); flex-wrap: wrap; row-gap: var(--space-1); }
 .field__hint { color: var(--color-text-muted); font-size: var(--text-secondary); }
 .field__error { color: var(--color-danger-text); font-size: var(--text-secondary); display: flex; gap: var(--space-1); align-items: center; }
 .input, .select, .textarea { width: 100%; min-height: var(--control-height); padding: var(--space-3) var(--space-4); border-radius: var(--radius-control); border: 1px solid var(--color-border-strong); background: var(--color-surface); color: var(--color-text); line-height: var(--leading); }
@@ -93,10 +103,18 @@ bdi { unicode-bidi: isolate; }
 .input[aria-invalid='true'], .textarea[aria-invalid='true'], .select[aria-invalid='true'] { border-color: var(--color-danger); }
 .textarea { min-height: 110px; resize: vertical; }
 .input--ltr { direction: ltr; text-align: start; unicode-bidi: plaintext; }
+/* A date/time control lays its own segments out in the writing direction, so under RTL Chrome put
+ * the AM/PM segment first and a fixed pixel width then clipped it. These are always LTR values. */
+.input[type='time'], .input[type='date'], .input[type='datetime-local'] { direction: ltr; unicode-bidi: isolate; text-align: center; padding-inline: var(--space-2); }
 .select { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--color-text-muted) 50%), linear-gradient(135deg, var(--color-text-muted) 50%, transparent 50%); background-position: calc(100% - 20px) 50%, calc(100% - 14px) 50%; background-size: 6px 6px; background-repeat: no-repeat; padding-inline-end: 40px; }
 [dir='rtl'] .select { background-position: 20px 50%, 14px 50%; padding-inline-end: 40px; padding-inline-start: var(--space-4); }
-.checkbox { display: flex; align-items: flex-start; gap: var(--space-3); min-height: var(--touch-min); cursor: pointer; }
-.checkbox input { width: 22px; height: 22px; margin: 2px 0 0; accent-color: var(--color-primary); flex: none; }
+/* The box lines up with the FIRST line of the label, whatever the label's height: `min-height` plus
+ * top alignment used to leave a single-line checkbox sitting against the top of a 44px box with 20px
+ * of dead space under it, which read as uneven spacing in a stack. Symmetric padding gives the same
+ * 44px touch target with the content centred in it, and the margin centres the 22px box on the first
+ * 24px line, so a wrapping label or a hint below never drags the box down with it. */
+.checkbox { display: flex; align-items: flex-start; gap: var(--space-3); padding-block: calc((var(--touch-min) - 1.5em) / 2); cursor: pointer; }
+.checkbox input { width: 22px; height: 22px; margin: calc((1.5em - 22px) / 2) 0 0; accent-color: var(--color-primary); flex: none; }
 .radio-list { display: flex; flex-direction: column; gap: var(--space-2); }
 .choice { display: flex; align-items: center; gap: var(--space-3); min-height: var(--control-height); padding: var(--space-2) var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface); cursor: pointer; }
 .choice input { width: 22px; height: 22px; accent-color: var(--color-primary); margin: 0; flex: none; }
@@ -137,15 +155,20 @@ bdi { unicode-bidi: isolate; }
 /* ---------- dialog / sheet ---------- */
 .dialog { border: 0; padding: 0; background: var(--color-surface); color: var(--color-text); border-radius: var(--radius-sheet); width: min(560px, calc(100vw - 2 * var(--gutter))); max-height: min(90dvh, 900px); box-shadow: var(--shadow-float); overflow: hidden; display: flex; flex-direction: column; }
 .dialog::backdrop { background: var(--color-overlay); }
-.dialog--sheet { width: 100vw; max-width: 100vw; margin: 0; margin-top: auto; border-radius: var(--radius-sheet) var(--radius-sheet) 0 0; max-height: 92dvh; }
+.dialog--sheet { width: 100vw; max-width: 100vw; margin: 0; margin-top: auto; border-radius: var(--radius-sheet) var(--radius-sheet) 0 0; max-height: 92dvh; will-change: transform; }
+.dialog--sheet.is-settling { transition: transform 200ms var(--ease); }
+.dialog__grabber { display: none; }
+@media (max-width: 639px) { .dialog--sheet .dialog__grabber { display: block; width: 40px; height: 4px; border-radius: 2px; background: var(--color-border-strong, var(--color-border)); margin: var(--space-2) auto calc(-1 * var(--space-2)); } .dialog--sheet .dialog__header { touch-action: none; } }
 @media (min-width: 640px) { .dialog--sheet { width: min(560px, calc(100vw - 2 * var(--gutter))); margin: auto; border-radius: var(--radius-sheet); } }
 .dialog__header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--color-border); }
-.dialog__body { padding: var(--space-4) var(--space-5); overflow-y: auto; flex: 1; }
+.dialog__body { padding: var(--space-4) var(--space-5); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; flex: 1; }
+/* No scroll chaining to the page while a modal sheet is open. */
+body:has(dialog[open]) { overflow: hidden; }
 .dialog__footer { padding: var(--space-3) var(--space-5) calc(var(--space-4) + var(--safe-bottom)); border-top: 1px solid var(--color-border); display: flex; gap: var(--space-3); background: var(--color-surface); }
 .dialog__footer .btn { flex: 1; }
 
 /* ---------- toast ---------- */
-.toast-region { position: fixed; inset-inline: var(--gutter); bottom: calc(var(--bottom-nav-height) + var(--safe-bottom) + var(--space-3)); z-index: 60; display: flex; flex-direction: column; gap: var(--space-2); pointer-events: none; }
+.toast-region { position: fixed; inset-inline: var(--gutter); bottom: calc(var(--bottom-nav-height) + var(--safe-bottom) + var(--cart-bar-space, 0px) + var(--space-3)); z-index: 60; display: flex; flex-direction: column; gap: var(--space-2); pointer-events: none; }
 @media (min-width: 900px) { .toast-region { bottom: var(--space-6); inset-inline: auto var(--gutter); max-width: 420px; } }
 .toast { pointer-events: auto; background: var(--color-text); color: var(--color-bg); padding: var(--space-3) var(--space-4); border-radius: var(--radius-control); box-shadow: var(--shadow-float); font-size: var(--text-secondary); display: flex; gap: var(--space-3); align-items: center; }
 .toast--danger { background: var(--color-danger); color: #fff; }
@@ -160,10 +183,16 @@ bdi { unicode-bidi: isolate; }
 /* ---------- misc ---------- */
 .price { font-weight: 600; font-variant-numeric: tabular-nums; }
 .price--lg { font-size: var(--text-heading); }
-.stepper { display: inline-flex; align-items: center; border: 1px solid var(--color-border-strong); border-radius: var(--radius-control); background: var(--color-surface); overflow: hidden; }
-.stepper button { width: var(--touch-min); height: var(--touch-min); border: 0; background: transparent; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; color: var(--color-primary); }
-.stepper button:disabled { color: var(--color-text-muted); cursor: not-allowed; }
-.stepper output { min-width: 40px; text-align: center; font-weight: 600; }
+.stepper { --stepper-size: 44px; display: inline-flex; flex: none; align-self: center; align-items: center; height: var(--stepper-size); border-radius: var(--radius-control); background: var(--color-soft); direction: ltr; }
+.stepper--sm { --stepper-size: 40px; }
+.stepper button { flex: none; width: var(--stepper-size); height: var(--stepper-size); border: 0; border-radius: var(--radius-control); background: transparent; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; color: var(--color-primary); transition: background-color var(--duration) var(--ease); }
+.stepper button:hover { background: rgba(32, 88, 59, 0.08); }
+.stepper button:active { background: rgba(32, 88, 59, 0.14); }
+.stepper button:disabled { color: var(--color-text-muted); cursor: not-allowed; background: transparent; }
+.stepper button.stepper__remove { color: var(--color-danger); }
+.stepper button.stepper__remove:hover { background: var(--color-danger-bg); }
+.stepper output { flex: none; min-width: 28px; padding-inline: 2px; text-align: center; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stepper svg { display: block; }
 .img-frame { background: var(--color-soft); border-radius: var(--radius-control); overflow: hidden; position: relative; display: flex; align-items: center; justify-content: center; color: var(--color-primary); }
 .img-frame img { width: 100%; height: 100%; object-fit: cover; object-position: center; }
 .img-frame--square { aspect-ratio: 1; }

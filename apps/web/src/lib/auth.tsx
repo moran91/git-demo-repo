@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { onIdTokenChanged, signOut as fbSignOut, type User } from 'firebase/auth';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import type { Membership, UserProfile } from '@qareeb/shared';
@@ -6,6 +6,7 @@ import { auth, db } from './firebase';
 import { call } from './api';
 import { useI18n } from './i18n';
 import { clearCart } from './cart';
+import { disablePush } from './push';
 
 interface AuthCtx {
   user: User | null;
@@ -25,6 +26,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [memberships, setMemberships] = useState<Membership[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
+  /**
+   * The token listener below is registered once, so a captured `locale` would be frozen at mount.
+   * Firebase refreshes the ID token about hourly, and each refresh re-sends it to ensureProfile —
+   * with a stale value that silently overwrote the language the user had chosen since, which is what
+   * notifications are translated into. Read the current locale through a ref instead.
+   */
+  const localeRef = useRef(locale);
+  useEffect(() => {
+    localeRef.current = locale;
+  }, [locale]);
 
   const refreshProfile = useCallback(async () => {
     if (!auth.currentUser) return;
@@ -49,7 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const token = await u.getIdTokenResult();
       setIsAdmin(token.claims.admin === true);
       try {
-        const res = await call<{ profile: UserProfile }>('ensureProfile', { locale });
+        const res = await call<{ profile: UserProfile }>('ensureProfile', { locale: localeRef.current });
         setProfile(res.profile);
       } catch {
         setProfile(null);
@@ -68,11 +79,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     // Clear account-specific state on sign-out (cart, prefs stay device-local but are cleared for privacy).
     clearCart();
-    try {
-      localStorage.removeItem('qareeb.push.token');
-    } catch {
-      /* ignore */
-    }
+    // Forgetting the token locally is not enough: it stays registered under the signed-out user, so
+    // the server keeps pushing their notifications to this device. Unregister before losing auth.
+    const uid = auth.currentUser?.uid;
+    if (uid) await disablePush(uid).catch(() => undefined);
     await fbSignOut(auth);
   }, []);
 

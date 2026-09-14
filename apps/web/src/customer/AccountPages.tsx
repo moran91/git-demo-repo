@@ -5,7 +5,7 @@ import { formatPhoneDisplay, type AppNotification, type Favorite, type LoyaltyAc
 import { useI18n, useT } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
 import { db } from '@/lib/firebase';
-import { useCollection, orderBy, where, limit } from '@/lib/queries';
+import { useCollection, useDoc, orderBy, where, limit } from '@/lib/queries';
 import { Button, EmptyState, Skeleton, Alert, Dialog, ConfirmDialog, TextInput, toast, Badge } from '@/design/components';
 import { Icon } from '@/design/Icon';
 import { LanguageSelect } from '@/app/Shell';
@@ -57,9 +57,9 @@ export function AccountPage() {
         <>
           <section className="card stack">
             <h2>{t('account.profile')}</h2>
-            <form className="row" onSubmit={async (e) => { e.preventDefault(); setSavingName(true); try { await call('updateProfile', { displayName: name.trim() }); await refreshProfile(); toast(t('common.saved')); } catch (err) { toast(t(errorKey(err)), 'danger'); } finally { setSavingName(false); } }}>
+            <form className="row row--end" onSubmit={async (e) => { e.preventDefault(); setSavingName(true); try { await call('updateProfile', { displayName: name.trim() }); await refreshProfile(); toast(t('common.saved')); } catch (err) { toast(t(errorKey(err)), 'danger'); } finally { setSavingName(false); } }}>
               <div style={{ flex: 1, minWidth: 200 }}><TextInput label={t('account.displayName')} value={name} onChange={(e) => setName(e.target.value)} maxLength={80} /></div>
-              <Button type="submit" variant="secondary" loading={savingName} style={{ alignSelf: 'flex-end' }}>{t('common.save')}</Button>
+              <Button type="submit" variant="secondary" loading={savingName}>{t('common.save')}</Button>
             </form>
             {profile?.phone ? <div className="muted">{t('common.phone')}: <bdi className="num">{formatPhoneDisplay(profile.phone)}</bdi></div> : null}
             {profile?.email ? <div className="muted">{t('common.email')}: <bdi>{profile.email}</bdi></div> : null}
@@ -132,13 +132,36 @@ export function AddressesPage() {
   );
 }
 
+/** One favourited product. The name lives on the public product doc, not on the favourite itself. */
+function FavoriteProductRow({ fav, onRemove }: { fav: Favorite; onRemove: () => void }) {
+  const t = useT();
+  const { L } = useI18n();
+  const product = useDoc<{ id: string; name: Record<string, string>; imagePath?: string }>(fav.branchId && fav.productId ? `publicBranches/${fav.branchId}/products/${fav.productId}` : null);
+  return (
+    <li className="list__item">
+      <StorageImage path={product.data?.imagePath} alt="" square className="product__img" fallbackLabel={t('discovery.imageFallback')} />
+      <div className="list__grow">
+        {product.data ? (
+          <Link to={`/b/${fav.businessId}/${fav.branchId}`} style={{ fontWeight: 600 }}>{L(product.data.name)}</Link>
+        ) : product.loading ? (
+          <Skeleton height={18} width="60%" />
+        ) : (
+          <span className="muted">{t('business.outOfStock')}</span>
+        )}
+      </div>
+      <Button size="sm" variant="ghost" onClick={onRemove}>{t('common.remove')}</Button>
+    </li>
+  );
+}
+
 export function FavoritesPage() {
   const t = useT();
   const { L } = useI18n();
   const { user, loading } = useAuth();
   const { favorites, toggle } = useFavorites();
-  const bizIds = favorites.filter((f) => f.kind === 'business').map((f) => f.businessId);
-  const businesses = useCollection<PublicBusiness>(bizIds.length ? 'publicBusinesses' : null, [where('__name__', 'in', bizIds.slice(0, 10)), limit(10)], [bizIds.join(',')]);
+  // Only the ids we actually query may be rendered, or the extras would all read "not approved".
+  const bizIds = favorites.filter((f) => f.kind === 'business').map((f) => f.businessId).slice(0, 30);
+  const businesses = useCollection<PublicBusiness>(bizIds.length ? 'publicBusinesses' : null, [where('__name__', 'in', bizIds), limit(30)], [bizIds.join(',')]);
   if (loading) return <Skeleton height={200} radius={16} />;
   if (!user) return <GuestGate />;
   const products = favorites.filter((f) => f.kind === 'product');
@@ -156,7 +179,7 @@ export function FavoritesPage() {
                 <li key={id} className="list__item">
                   <StorageImage path={b?.logoPath} alt="" square className="product__img" fallbackLabel={t('discovery.imageFallback')} />
                   <div className="list__grow">
-                    {b ? <Link to={`/b/${id}`} style={{ fontWeight: 600 }}>{L(b.name, b.defaultLocale)}</Link> : <span className="muted">{t('checkout.notApproved')}</span>}
+                    {b ? <Link to={`/b/${id}`} style={{ fontWeight: 600 }}>{L(b.name, b.defaultLocale)}</Link> : businesses.loading ? <Skeleton height={18} width="60%" /> : <span className="muted">{t('checkout.notApproved')}</span>}
                     {b ? <div className="muted">{b.type === 'restaurant' ? t('common.restaurant') : t('common.supermarket')}</div> : null}
                   </div>
                   <Button size="sm" variant="ghost" icon="heart" onClick={() => toggle({ id, kind: 'business', businessId: id } as Favorite)}>{t('common.remove')}</Button>
@@ -170,9 +193,7 @@ export function FavoritesPage() {
         <section className="stack--sm stack">
           <h2>{t('account.favoriteProducts')}</h2>
           <ul className="list card">
-            {products.map((f) => (
-              <li key={f.id} className="list__item"><Link className="list__grow" to={`/b/${f.businessId}/${f.branchId}`}>{f.productId}</Link><Button size="sm" variant="ghost" onClick={() => toggle(f)}>{t('common.remove')}</Button></li>
-            ))}
+            {products.map((f) => <FavoriteProductRow key={f.id} fav={f} onRemove={() => toggle(f)} />)}
           </ul>
         </section>
       ) : null}
@@ -218,11 +239,12 @@ export function LoyaltyPage() {
   const { user, loading } = useAuth();
   const accounts = useCollection<LoyaltyAccount>(user ? 'loyaltyAccounts' : null, [where('uid', '==', user?.uid ?? '_'), limit(50)], [user?.uid]);
   const ledger = useCollection<LoyaltyLedgerEntry>(user ? 'loyaltyLedger' : null, [where('uid', '==', user?.uid ?? '_'), orderBy('at', 'desc'), limit(100)], [user?.uid]);
-  const bizIds = accounts.data.map((a) => a.businessId);
-  const businesses = useCollection<PublicBusiness>(bizIds.length ? 'publicBusinesses' : null, [where('__name__', 'in', bizIds.slice(0, 10)), limit(10)], [bizIds.join(',')]);
+  const bizIds = accounts.data.map((a) => a.businessId).slice(0, 30);
+  const businesses = useCollection<PublicBusiness>(bizIds.length ? 'publicBusinesses' : null, [where('__name__', 'in', bizIds), limit(30)], [bizIds.join(',')]);
   if (loading) return <Skeleton height={200} radius={16} />;
   if (!user) return <GuestGate />;
-  const bizName = (id: string) => { const b = businesses.data.find((x) => x.id === id); return b ? L(b.name, b.defaultLocale) : id; };
+  // Never flash the raw document id while the names are still loading.
+  const bizName = (id: string) => { const b = businesses.data.find((x) => x.id === id); return b ? L(b.name, b.defaultLocale) : businesses.loading ? '…' : id; };
   return (
     <div className="stack">
       <h1>{t('account.loyalty')}</h1>
@@ -240,7 +262,7 @@ export function LoyaltyPage() {
         <section className="stack--sm stack">
           <h2>{t('account.loyaltyHistory')}</h2>
           <div className="table-wrap"><table className="table"><thead><tr><th>{t('common.date')}</th><th>{t('common.name')}</th><th>{t('admin.points')}</th><th>{t('common.reason')}</th></tr></thead><tbody>
-            {ledger.data.map((e) => <tr key={e.id}><td><bdi>{formatLocalDateTime(e.at, locale)}</bdi></td><td>{bizName(e.businessId)}</td><td className="num">{e.points !== 0 ? (e.points > 0 ? `+${e.points}` : e.points) : e.reservedDelta > 0 ? `(${e.reservedDelta})` : `(${e.reservedDelta})`}</td><td>{e.type}{e.reason ? ` · ${e.reason}` : ''}</td></tr>)}
+            {ledger.data.map((e) => <tr key={e.id}><td><bdi>{formatLocalDateTime(e.at, locale)}</bdi></td><td>{bizName(e.businessId)}</td><td className="num">{e.points !== 0 ? (e.points > 0 ? `+${e.points}` : e.points) : e.reservedDelta > 0 ? `(${e.reservedDelta})` : `(${e.reservedDelta})`}</td><td>{t(`loyalty.entry.${e.type}` as never)}{e.reason ? ` · ${e.reason}` : ''}</td></tr>)}
           </tbody></table></div>
         </section>
       ) : null}

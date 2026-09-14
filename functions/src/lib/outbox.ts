@@ -91,11 +91,14 @@ async function sendPush(uid: string, n: AppNotification): Promise<void> {
   const tokens = await col.deviceTokens(uid).where('invalid', '==', false).limit(20).get();
   if (tokens.empty) return;
   const list = tokens.docs.map((d) => d.id);
+  // Data-only on purpose. With a `notification` block the Firebase SW displays the message itself
+  // AND still calls onBackgroundMessage, which displays it a second time with a different tag — so
+  // every background push arrived twice. Sending data only leaves our own service worker as the
+  // single owner of display and click handling.
   const res = await messaging.sendEachForMulticast({
     tokens: list,
-    notification: { title: n.title, body: n.body },
-    data: { link: n.link, kind: n.kind, notificationId: n.id },
-    webpush: { fcmOptions: { link: n.link }, notification: { icon: '/icons/icon-192.png', badge: '/icons/badge-72.png' } },
+    data: { title: n.title, body: n.body, link: n.link, kind: n.kind, notificationId: n.id },
+    webpush: { fcmOptions: { link: n.link } },
   });
   await Promise.all(
     res.responses.map(async (r, i) => {

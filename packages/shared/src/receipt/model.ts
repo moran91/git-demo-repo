@@ -1,8 +1,9 @@
 import { formatILSPlain, formatGrams } from '../money.js';
 import { formatLocalDateTime } from '../hours.js';
 import { resolveLocalized, dirOf } from '../localize.js';
-import { makeTranslator } from '../i18n/index.js';
+import { makeTranslator, type Translator } from '../i18n/index.js';
 import { formatPhoneDisplay } from '../phone.js';
+import { placementSuffix } from '../placement.js';
 import type { Locale, Order, PaperWidth, ReceiptTemplate } from '../types.js';
 
 /**
@@ -50,6 +51,25 @@ export interface BuildReceiptOptions {
 }
 
 const MAX_BLOCKS = 400;
+
+/**
+ * Enforces the block budget without ever dropping the tail of the receipt. Truncating the array from
+ * the end would remove the totals, the "cash on delivery" instruction and the footer — the ticket
+ * would print items with no amount to collect. Only the item rows are shrunk, and the receipt says
+ * how many were left out so nobody mistakes a short list for the whole order.
+ */
+function capBlocks(blocks: ReceiptBlock[], itemsStart: number, itemsEnd: number, t: Translator): ReceiptBlock[] {
+  if (blocks.length <= MAX_BLOCKS) return blocks;
+  const head = blocks.slice(0, itemsStart);
+  const items = blocks.slice(itemsStart, itemsEnd);
+  const tail = blocks.slice(itemsEnd);
+  // One block is reserved for the "N more items" marker.
+  const budget = Math.max(0, MAX_BLOCKS - head.length - tail.length - 1);
+  const kept = items.slice(0, budget);
+  const omitted = items.length - kept.length;
+  const marker: ReceiptBlock = { kind: 'text', text: t('receipt.moreItems', { count: omitted }), size: 'md', bold: true };
+  return [...head, ...kept, marker, ...tail];
+}
 
 function lineNames(order: Order, locale: Locale) {
   return (l: Order['lines'][number]) => resolveLocalized(l.name, locale, order.customerLocale);
@@ -105,6 +125,9 @@ export function buildOrderReceipt(order: Order, opts: BuildReceiptOptions): Rece
 
   // Items
   blocks.push({ kind: 'text', text: t('receipt.items'), size: 'md', bold: true });
+  // Item rows are the only unbounded section; remember where they start so the block budget can be
+  // taken out of them rather than off the end of the receipt (which is where the totals live).
+  const itemsStart = blocks.length;
   for (const line of order.lines) {
     const label = line.removed ? `[${t('receipt.removed')}] ` : line.substitutedFromLineId ? `[${t('receipt.replacement')}] ` : '';
     let qtyText: string;
@@ -117,13 +140,14 @@ export function buildOrderReceipt(order: Order, opts: BuildReceiptOptions): Rece
     const variant = line.variantName ? ` (${resolveLocalized(line.variantName, L)})` : '';
     blocks.push({ kind: 'row', start: `${label}${qtyText} ${name(line)}${variant}`, end: line.removed ? '' : formatILSPlain(line.lineTotalAgorot), size: 'md', bold: !line.removed, endDir: 'ltr' });
     for (const m of line.modifiers) {
-      blocks.push({ kind: 'row', start: `  + ${resolveLocalized(m.optionName, L)}`, end: m.priceDeltaAgorot ? formatILSPlain(m.priceDeltaAgorot) : '', size: 'sm', endDir: 'ltr' });
+      blocks.push({ kind: 'row', start: `  + ${resolveLocalized(m.optionName, L)}${placementSuffix(m.placement, t)}`, end: m.priceDeltaAgorot ? formatILSPlain(m.priceDeltaAgorot) : '', size: 'sm', endDir: 'ltr' });
     }
     if (line.pricingMode === 'weight' && line.actualGrams !== undefined && line.requestedGrams !== undefined) {
       blocks.push({ kind: 'text', text: `  ${t('receipt.requestedWeight')}: ${formatGrams(line.requestedGrams, L)}`, size: 'sm' });
     }
     if (line.note) blocks.push({ kind: 'text', text: `  ${t('receipt.note')}: ${line.note}`, size: 'sm', bold: true });
   }
+  const itemsEnd = blocks.length;
   if (order.customerNote) {
     blocks.push({ kind: 'spacer', px: 4 });
     blocks.push({ kind: 'box', title: t('receipt.note'), lines: [order.customerNote], size: 'md' });
@@ -161,7 +185,7 @@ export function buildOrderReceipt(order: Order, opts: BuildReceiptOptions): Rece
     labels: { copy: !!opts.isCopy, revised: !!opts.isRevised || order.revision > 0, simulation: !!opts.simulation },
     orderId: order.id,
     orderRevision: order.revision,
-    blocks: blocks.slice(0, MAX_BLOCKS),
+    blocks: capBlocks(blocks, itemsStart, itemsEnd, t),
     generatedAt: (opts.now ?? new Date()).toISOString(),
   };
 }

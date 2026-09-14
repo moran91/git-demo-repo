@@ -109,7 +109,7 @@ export function PrintersPage() {
           const isMine = station.printerId === p.id && station.stationId;
           return (
             <section key={p.id} className="card stack" aria-labelledby={`pr-${p.id}`}>
-              <div className="row row--between"><h2 id={`pr-${p.id}`}>{p.name}</h2>{p.setupVerified ? <Badge tone="success" icon="check">{t('printers.verified')}</Badge> : <Badge tone="accent">{t('printers.notVerified')}</Badge>}</div>
+              <div className="section-head"><h2 id={`pr-${p.id}`}>{p.name}</h2>{p.setupVerified ? <Badge tone="success" icon="check">{t('printers.verified')}</Badge> : <Badge tone="accent">{t('printers.notVerified')}</Badge>}</div>
               <div className="muted">{t(`printers.transport.${p.transport}`)} · {p.paperWidthMm}mm · {p.printableDots} dots · {p.receiptLocale} · {t('printers.role')}: {p.role} · {t('printers.autoPrint')}: {t(`printers.auto.${p.autoPrint}`)}</div>
               <div className="muted">{profile?.label} {profile && !profile.verified ? <Badge tone="muted">{t('printers.profileCandidate')}</Badge> : null}</div>
               <div className="station-indicator" role="status">
@@ -118,7 +118,7 @@ export function PrintersPage() {
                 {isMine && station.status === 'printing' && station.progress ? <span>· {t('printers.printing')} {station.progress.sent}/{station.progress.total}</span> : null}
               </div>
               {isMine && station.lastError ? <Alert tone="danger">{errText(station.lastError)}</Alert> : null}
-              <div className="row">
+              <div className="actions">
                 {p.transport === 'web_bluetooth_ble' ? (isMine && station.connection ? <Button size="sm" variant="secondary" icon="bluetooth" onClick={() => stopStation()}>{t('printers.disconnect')}</Button> : <Button size="sm" icon="bluetooth" disabled={support !== 'ok'} onClick={() => connect(p)}>{t('printers.connect')}</Button>) : null}
                 {p.transport !== 'os_print_dialog' ? <Button size="sm" variant="secondary" icon="printer" onClick={() => testPrint(p)}>{t('printers.testPrint')}</Button> : null}
                 <Button size="sm" variant="secondary" icon="eye" onClick={() => setPreview(testModel(p))}>{t('printers.preview')}</Button>
@@ -156,7 +156,7 @@ export function PrintersPage() {
               <div><strong>{j.template === 'test' ? t('receipt.testReceipt') : j.template === 'order_ticket' ? t('receipt.orderTicket') : t('receipt.customerCopy')}</strong>{j.orderId ? <span className="muted" dir="ltr"> · {j.orderId.slice(0, 8)}</span> : null}{j.isReprint ? <Badge tone="accent">{t('printers.copyLabel')}</Badge> : null}{isReceiptModel(j.receipt) && j.receipt.labels.revised ? <Badge tone="accent">{t('printers.revisedLabel')}</Badge> : null}</div>
               <div className="muted"><bdi>{formatLocalDateTime(j.requestedAt, locale)}</bdi> · {j.trigger} · {j.printerRole}{j.lastError ? ` · ${errText(j.lastError) || j.lastError}` : ''}{j.progress ? ` · ${j.progress.stripsSent}/${j.progress.stripsTotal}` : ''}</div>
             </div>
-            <div className="row" style={{ gap: 4 }}>
+            <div className="actions">
               {isReceiptModel(j.receipt) ? <IconButton icon="eye" label={t('printers.preview')} onClick={() => setPreview(j.receipt as ReceiptModel)} /> : null}
               {j.state === 'sent_unconfirmed' || j.state === 'needs_review' ? <><Button size="sm" variant="secondary" onClick={() => call('resolvePrintJob', { jobId: j.id, resolution: 'confirmed' }).catch((e) => toast(t(errorKey(e)), 'danger'))}>{t('printers.confirmPrinted')}</Button><Button size="sm" variant="danger" onClick={() => call('resolvePrintJob', { jobId: j.id, resolution: 'cancelled', note: 'staff: did not print' }).catch((e) => toast(t(errorKey(e)), 'danger'))}>{t('printers.markFailed')}</Button></> : null}
               {j.state === 'needs_review' || j.state === 'failed_before_send' ? <Button size="sm" variant="secondary" icon="refresh" onClick={() => call('resolvePrintJob', { jobId: j.id, resolution: 'requeue' }).catch((e) => toast(t(errorKey(e)), 'danger'))}>{t('printers.retry')}</Button> : null}
@@ -177,7 +177,7 @@ export function PrintersPage() {
               {PRINTER_PROFILES.filter((p) => p.transports.includes(edit.d.transport)).map((p) => <option key={p.id} value={p.id}>{p.label}{!p.verified ? ` (${t('printers.profileCandidate')})` : ''}</option>)}
             </Select>
             <p className="muted">{getProfile(edit.d.profileId)?.notes}</p>
-            <div className="row">
+            <div className="form-row form-cols--tight">
               <Select label={t('printers.paper')} value={String(edit.d.paperWidthMm)} onChange={(e) => { const w = Number(e.target.value) as 58 | 80; setEdit({ ...edit, d: { ...edit.d, paperWidthMm: w, printableDots: getProfile(edit.d.profileId)?.defaultDots[w] ?? (w === 58 ? 384 : 576) } }); }}><option value="58">58mm</option><option value="80">80mm</option></Select>
               <TextInput label={t('printers.dots')} type="number" ltr min={200} max={832} value={edit.d.printableDots} onChange={(e) => setEdit({ ...edit, d: { ...edit.d, printableDots: Number(e.target.value) } })} />
               <Select label={t('printers.language')} value={edit.d.receiptLocale} onChange={(e) => setEdit({ ...edit, d: { ...edit.d, receiptLocale: e.target.value as 'he' } })}><option value="he">עברית</option><option value="ar">العربية</option><option value="en">English</option></Select>
@@ -185,7 +185,7 @@ export function PrintersPage() {
             </div>
             <TextInput label={t('printers.role')} required hint={t('printers.roleHint')} ltr value={edit.d.role} onChange={(e) => setEdit({ ...edit, d: { ...edit.d, role: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '') } })} />
             <Select label={t('printers.autoPrint')} hint={t('printers.autoHint')} value={edit.d.autoPrint} onChange={(e) => setEdit({ ...edit, d: { ...edit.d, autoPrint: e.target.value as Draft['autoPrint'] } })}><option value="off">{t('printers.auto.off')}</option><option value="when_placed">{t('printers.auto.when_placed')}</option><option value="when_accepted">{t('printers.auto.when_accepted')}</option></Select>
-            <div className="row"><Checkbox label={t('printers.cut')} checked={edit.d.cutSupported} disabled={!getProfile(edit.d.profileId)?.cutSupported} onChange={(e) => setEdit({ ...edit, d: { ...edit.d, cutSupported: e.target.checked } })} /><TextInput label={t('printers.feed')} type="number" ltr min={0} max={10} value={edit.d.feedLinesAfter} onChange={(e) => setEdit({ ...edit, d: { ...edit.d, feedLinesAfter: Number(e.target.value) } })} /></div>
+            <div className="form-row form-cols--tight"><Checkbox label={t('printers.cut')} checked={edit.d.cutSupported} disabled={!getProfile(edit.d.profileId)?.cutSupported} onChange={(e) => setEdit({ ...edit, d: { ...edit.d, cutSupported: e.target.checked } })} /><TextInput label={t('printers.feed')} type="number" ltr min={0} max={10} value={edit.d.feedLinesAfter} onChange={(e) => setEdit({ ...edit, d: { ...edit.d, feedLinesAfter: Number(e.target.value) } })} /></div>
             <TextInput label={t('printers.deviceHint')} optional ltr value={edit.d.deviceHint ?? ''} onChange={(e) => setEdit({ ...edit, d: { ...edit.d, deviceHint: e.target.value } })} />
           </div>
         ) : null}
