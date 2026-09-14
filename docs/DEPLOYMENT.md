@@ -5,6 +5,26 @@
 > (`firebase@12`, `firebase-admin@14`, `firebase-functions@7`, `firebase-tools@15`) and the emulator
 > suite. Re-check console menu labels against the official docs listed at the end before going live.
 
+## Deploy from GitHub Actions (no logged-in machine needed)
+
+`.github/workflows/deploy-firebase.yml` deploys rules, indexes, Storage rules, Cloud Functions and
+Hosting to `qareeb-dev`. It runs on every push to `main` and on manual dispatch
+(Actions → "Deploy to Firebase" → Run workflow, with an `everything` / `rules-only` / `hosting-only` choice).
+
+One-time setup:
+
+1. Firebase console → Project settings → **Service accounts** → *Generate new private key*.
+2. GitHub → repo **Settings → Secrets and variables → Actions**:
+   - Secret `FIREBASE_SERVICE_ACCOUNT_QAREEB_DEV` = the whole JSON key file.
+   - Variables `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`,
+     `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID`
+     from Project settings → General → Your apps → *SDK setup and configuration* (public web config).
+   - Optional variables `VITE_FCM_VAPID_KEY`, `VITE_APPCHECK_SITE_KEY`.
+3. Push, or run the workflow manually. The first Functions deploy can take several minutes.
+
+The service account needs the roles *Firebase Admin*, *Cloud Functions Admin* and *Service Account User*
+(the console-generated key from the default `firebase-adminsdk` account has them).
+
 ## Quick path (after the one-time console setup in sections 1–6)
 
 ```

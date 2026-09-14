@@ -26,7 +26,7 @@ const REQUIRED = [
   'VITE_FIREBASE_APP_ID',
 ];
 // Values shipped in .env.example; deploying them produces a non-functional site.
-const PLACEHOLDERS = [/^demo-/i, /^0{6,}$/, /^1:0{6,}:web:0+$/, /qareeb-dev/];
+const PLACEHOLDERS = [/^demo-/i, /^0{6,}$/, /^1:0{6,}:web:0+$/];
 
 const problems = [];
 if (env.VITE_USE_EMULATORS === '1' && !allowEmulator) {

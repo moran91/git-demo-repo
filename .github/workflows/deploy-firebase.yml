@@ -1,0 +1,89 @@
+# Deploys Qareeb to Firebase from GitHub, so no logged-in machine is needed.
+#
+# One-time setup:
+#   1. Firebase console → Project settings → Service accounts → "Generate new private key".
+#   2. GitHub repo → Settings → Secrets and variables → Actions:
+#        Secret    FIREBASE_SERVICE_ACCOUNT_QAREEB_DEV   the whole JSON key file
+#        Variables VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN, VITE_FIREBASE_PROJECT_ID,
+#                  VITE_FIREBASE_STORAGE_BUCKET, VITE_FIREBASE_MESSAGING_SENDER_ID, VITE_FIREBASE_APP_ID
+#                  (Project settings → General → Your apps → SDK setup and configuration; public web config)
+#        Optional  VITE_FCM_VAPID_KEY, VITE_APPCHECK_SITE_KEY
+#
+# Runs on manual dispatch (Actions → "Deploy to Firebase" → Run workflow) and on pushes to the
+# branches listed below.
+name: Deploy to Firebase
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: What to deploy
+        type: choice
+        default: everything
+        options: [everything, rules-only, hosting-only]
+  push:
+    branches: [main, claude/build-prompt-design-2efitl]
+
+concurrency:
+  group: deploy-qareeb-dev
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      PROJECT_ID: qareeb-dev
+      VITE_USE_EMULATORS: '0'
+      VITE_FUNCTIONS_REGION: me-west1
+      VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+      VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+      VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+      VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
+      VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+      VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+      VITE_FCM_VAPID_KEY: ${{ vars.VITE_FCM_VAPID_KEY }}
+      VITE_APPCHECK_SITE_KEY: ${{ vars.VITE_APPCHECK_SITE_KEY }}
+      SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_QAREEB_DEV }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Write service-account credentials
+        run: |
+          if [ -z "$SA_JSON" ]; then
+            echo "::error::Secret FIREBASE_SERVICE_ACCOUNT_QAREEB_DEV is not set. See the header of this workflow."
+            exit 1
+          fi
+          printf '%s' "$SA_JSON" > "$RUNNER_TEMP/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
+
+      - name: Typecheck and unit tests
+        run: |
+          npm run typecheck
+          npm test -w packages/shared
+
+      - name: Rules, indexes, Storage rules
+        run: npx --yes firebase-tools@15 deploy --only firestore:rules,firestore:indexes,storage --project "$PROJECT_ID" --non-interactive
+
+      - name: Cloud Functions
+        if: ${{ github.event_name == 'push' || inputs.target == 'everything' }}
+        run: npx --yes firebase-tools@15 deploy --only functions --project "$PROJECT_ID" --non-interactive --force
+
+      - name: Build web app (production preflight)
+        if: ${{ github.event_name == 'push' || inputs.target != 'rules-only' }}
+        run: npm run build -w apps/web
+
+      - name: Hosting
+        if: ${{ github.event_name == 'push' || inputs.target != 'rules-only' }}
+        run: npx --yes firebase-tools@15 deploy --only hosting --project "$PROJECT_ID" --non-interactive
+
+      - name: Remove credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/sa.json"
