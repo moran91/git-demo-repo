@@ -25,6 +25,7 @@
     "emulators:ci": "firebase emulators:start --only auth,firestore,functions,storage",
     "seed": "npm run seed -w scripts",
     "dev": "npm run dev -w apps/web",
+    "deploy:all": "bash scripts/deploy-all.sh",
     "deploy": "firebase deploy",
     "deploy:hosting": "firebase deploy --only hosting",
     "deploy:functions": "firebase deploy --only functions",

@@ -5,6 +5,21 @@
 > (`firebase@12`, `firebase-admin@14`, `firebase-functions@7`, `firebase-tools@15`) and the emulator
 > suite. Re-check console menu labels against the official docs listed at the end before going live.
 
+## One command, nothing to copy (recommended)
+
+```
+./scripts/deploy-all.sh            # or: npm run deploy:all
+```
+
+It installs dependencies if needed, logs you in to Firebase (one browser tab, once per machine),
+registers a Web app on `qareeb-dev` if none exists, pulls the SDK config from Firebase into
+`apps/web/.env.production`, moves an emulator `.env.local` aside for the build and restores it after,
+deploys rules, indexes, Storage rules, Cloud Functions and Hosting, then fetches the live site and
+checks that the served code contains the Deals & combos and Most ordered features. Re-running is safe.
+
+Prerequisites: Node.js 22+, the project on the Blaze plan (Cloud Functions need it). Pass another project
+id as the first argument to target it.
+
 ## Deploy from GitHub Actions (no logged-in machine needed)
 
 `.github/workflows/deploy-firebase.yml` deploys rules, indexes, Storage rules, Cloud Functions and

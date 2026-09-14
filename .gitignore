@@ -24,3 +24,4 @@ android/print-station/.gradle/
 android/print-station/app/google-services.json
 .DS_Store
 .emulator-logs/
+apps/web/.env.local.deploy-bak
