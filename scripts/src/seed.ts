@@ -10,7 +10,7 @@
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import type { Branch, Business, Category, City, Membership, PlatformConfig, Product, SavedAddress, UserProfile, WeeklyHours } from '@qareeb/shared';
+import type { Branch, Business, Category, City, Combo, Membership, PlatformConfig, Product, SavedAddress, UserProfile, WeeklyHours } from '@qareeb/shared';
 
 if (!process.env.FIREBASE_AUTH_EMULATOR_HOST || !process.env.FIRESTORE_EMULATOR_HOST) {
   console.error('Refusing to seed: FIREBASE_AUTH_EMULATOR_HOST and FIRESTORE_EMULATOR_HOST must point at the emulators.');
@@ -128,7 +128,7 @@ async function main() {
       id: 'p-shawarma', branchId, businessId: restaurant.id, categoryId: 'c-mains',
       name: { he: 'שווארמה', ar: 'شاورما', en: 'Shawarma' }, description: { he: 'שווארמת הודו עם סלטים וטחינה', ar: 'شاورما حبش مع سلطات وطحينة', en: 'Turkey shawarma with salads and tahini' }, dietaryText: { ar: 'يحتوي على سمسم وغلوتين', en: 'Contains sesame and gluten' },
       pricingMode: 'unit', priceAgorot: 3500, unitLabel: {}, quantityStep: 1, minQuantity: 1,
-      variants: [], available: true, trackInventory: false, archived: false, sortOrder: 0, createdAt: now, updatedAt: now,
+      variants: [], available: true, trackInventory: false, mostOrdered: true, archived: false, sortOrder: 0, createdAt: now, updatedAt: now,
       modifierGroups: [
         { id: 'g-bread', name: { he: 'לחם', ar: 'الخبز', en: 'Bread' }, required: true, minSelect: 1, maxSelect: 1, sortOrder: 0, options: [
           { id: 'o-pita', name: { he: 'פיתה', ar: 'خبز', en: 'Pita' }, priceDeltaAgorot: 0, available: true, sortOrder: 0 },
@@ -176,6 +176,13 @@ async function main() {
     for (const c of rCats(branchId)) await db.collection('businesses').doc(restaurant.id).collection('branches').doc(branchId).collection('categories').doc(c.id).set(c);
     for (const p of rProducts(branchId)) await db.collection('businesses').doc(restaurant.id).collection('branches').doc(branchId).collection('products').doc(p.id).set(p);
   }
+  const combo: Combo = {
+    id: 'combo-family', businessId: restaurant.id, branchId: branchA.id,
+    name: { he: 'ארוחה משפחתית', ar: 'وجبة عائلية', en: 'Family meal' }, description: { he: 'שני פלאפל, צ׳יפס ושתי פחיות', ar: 'صحنا فلافل وبطاطا وعلبتا كولا', en: 'Two falafel plates, fries and two cans' },
+    items: [{ productId: 'p-falafel', variantId: 'v-reg', quantity: 2 }, { productId: 'p-fries', quantity: 1 }, { productId: 'p-cola', quantity: 2 }],
+    discountPercent: 15, promoted: true, active: true, archived: false, sortOrder: 0, createdAt: now, updatedAt: now,
+  };
+  await db.collection('businesses').doc(restaurant.id).collection('branches').doc(branchA.id).collection('combos').doc(combo.id).set(combo);
 
   // ---------- Supermarket: Beit Jann Market (tracked stock, weight produce) ----------
   const market: Business = {

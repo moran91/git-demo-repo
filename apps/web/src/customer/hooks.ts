@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { doc, deleteDoc, setDoc } from 'firebase/firestore';
-import { evaluateOpen, type City, type Favorite, type HoursOverride, type Promotion, type WeeklyHours } from '@qareeb/shared';
+import { evaluateOpen, type City, type Combo, type Favorite, type HoursOverride, type Promotion, type WeeklyHours } from '@qareeb/shared';
 import { db } from '@/lib/firebase';
 import { useCollection, useDoc, orderBy, where, limit } from '@/lib/queries';
 import { useAuth } from '@/lib/auth';
@@ -88,4 +88,8 @@ export function useFavorites() {
     return true;
   };
   return { favorites: data, ids, toggle, signedIn: !!user };
+}
+
+export function useCombos(branchId: string | null) {
+  return useCollection<Combo>(branchId ? `publicBranches/${branchId}/combos` : null, [orderBy('sortOrder'), limit(50)], [branchId]);
 }

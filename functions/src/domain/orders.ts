@@ -10,6 +10,7 @@ import {
   normalizeIsraeliPhone,
   placeOrderSchema,
   pointsEarned,
+  priceComboLine,
   priceLine,
   quoteRequestSchema,
   recordCashSchema,
@@ -24,6 +25,7 @@ import {
   type Business,
   type CashRecord,
   type City,
+  type Combo,
   type LoyaltyAccount,
   type LoyaltyLedgerEntry,
   type Order,
@@ -82,19 +84,34 @@ interface PricedCart {
 }
 
 async function priceCart(tx: Tx | null, businessId: string, branchId: string, cartLines: z.infer<typeof quoteRequestSchema>['lines']): Promise<PricedCart> {
-  const ids = Array.from(new Set(cartLines.map((l) => l.productId)));
+  // Combos are resolved first so their member products are loaded alongside plain lines.
+  const comboIds = Array.from(new Set(cartLines.filter((l) => l.comboId).map((l) => l.comboId!)));
+  const comboSnaps = await Promise.all(comboIds.map((id) => { const r = col.combos(businessId, branchId).doc(id); return tx ? tx.get(r) : r.get(); }));
+  const combos = new Map<string, Combo>();
+  comboSnaps.forEach((s, i) => { if (s.exists) combos.set(comboIds[i]!, s.data() as Combo); });
+  const memberIds = Array.from(combos.values()).flatMap((c) => c.items.map((i) => i.productId));
+  const ids = Array.from(new Set([...cartLines.filter((l) => !l.comboId).map((l) => l.productId), ...memberIds]));
   const refs = ids.map((id) => col.products(businessId, branchId).doc(id));
   const snaps = await Promise.all(refs.map((r) => (tx ? tx.get(r) : r.get())));
   const products = new Map<string, { ref: FirebaseFirestore.DocumentReference; product: Product }>();
   snaps.forEach((s, i) => {
     if (s.exists) products.set(ids[i]!, { ref: refs[i]!, product: s.data() as Product });
   });
+  const plain = new Map(Array.from(products.entries()).map(([id, e]) => [id, e.product]));
   const lines: OrderLine[] = [];
   const problems: Array<{ lineId: string; code: string; expected?: number; actual?: number; reason?: string }> = [];
   const seen = new Set<string>();
   for (const cl of cartLines) {
     if (seen.has(cl.lineId)) fail('invalid_argument', { issues: [{ path: 'lines', message: 'duplicate_line_id' }] });
     seen.add(cl.lineId);
+    if (cl.comboId) {
+      const combo = combos.get(cl.comboId);
+      if (!combo || combo.branchId !== branchId) { problems.push({ lineId: cl.lineId, code: 'item_unavailable' }); continue; }
+      const r = priceComboLine(combo, plain, cl);
+      if (r.problem) problems.push(r.problem as (typeof problems)[number]);
+      else if (r.line) lines.push(r.line);
+      continue;
+    }
     const entry = products.get(cl.productId);
     if (!entry || entry.product.branchId !== branchId) {
       problems.push({ lineId: cl.lineId, code: 'item_unavailable' });
@@ -163,6 +180,13 @@ function writeStockDeltas(tx: Tx, business: Business, branch: Branch, plan: Stoc
 
 function lineStockUnits(line: OrderLine): number {
   return line.pricingMode === 'weight' ? line.actualGrams ?? line.requestedGrams ?? 0 : line.quantity;
+}
+
+/** Stock units a line consumes, expanding combo members (units = member qty × combo qty). */
+function stockUnitsOf(line: OrderLine): Array<{ productId: string; variantId?: string; units: number }> {
+  if (line.comboItems) return line.comboItems.filter((i) => i.trackInventory).map((i) => ({ productId: i.productId, variantId: i.variantId, units: i.quantity * line.quantity }));
+  if (!line.trackInventory) return [];
+  return [{ productId: line.productId, variantId: line.variantId, units: lineStockUnits(line) }];
 }
 
 /** ---------- Quote (read-only; guests allowed, loyalty only when signed in) ---------- */
@@ -275,13 +299,16 @@ export const placeOrder = onCall(opts, handled(async (req: CallableRequest<unkno
     // Inventory check (atomic: reads happen in this transaction, writes below).
     const stockNeeded = new Map<string, number>();
     for (const l of lines) {
-      const entry = products.get(l.productId)!;
-      const avail = stockAvailable(entry.product, l.variantId);
-      if (avail === undefined) continue;
-      const key = `${l.productId}:${l.variantId ?? ''}`;
-      const need = (stockNeeded.get(key) ?? 0) + lineStockUnits(l);
-      if (need > avail) fail('out_of_stock', { lineId: l.lineId, available: avail });
-      stockNeeded.set(key, need);
+      for (const u of stockUnitsOf(l)) {
+        const entry = products.get(u.productId);
+        if (!entry) continue;
+        const avail = stockAvailable(entry.product, u.variantId);
+        if (avail === undefined) continue;
+        const key = `${u.productId}:${u.variantId ?? ''}`;
+        const need = (stockNeeded.get(key) ?? 0) + u.units;
+        if (need > avail) fail('out_of_stock', { lineId: l.lineId, available: avail });
+        stockNeeded.set(key, need);
+      }
     }
 
     // Loyalty reservation.
@@ -401,7 +428,7 @@ export const decideOrder = onCall(opts, handled(async (req: CallableRequest<unkn
     if (input.decision === 'rejected') {
       // Release inventory exactly once and release reserved points.
       const restore = new Map<string, number>();
-      for (const l of order.lines) if (l.trackInventory && !l.removed) restore.set(`${l.productId}:${l.variantId ?? ''}`, (restore.get(`${l.productId}:${l.variantId ?? ''}`) ?? 0) + lineStockUnits(l));
+      for (const l of order.lines) if (!l.removed) for (const u of stockUnitsOf(l)) restore.set(`${u.productId}:${u.variantId ?? ''}`, (restore.get(`${u.productId}:${u.variantId ?? ''}`) ?? 0) + u.units);
       const stockPlan = await readStockDeltas(tx, order.businessId, order.branchId, restore);
       const reservedPts = order.loyalty?.pointsReserved ?? 0;
       const accRefR = col.loyaltyAccount(order.businessId, order.customer.uid);
@@ -483,13 +510,14 @@ export const reviseOrder = onCall(opts, handled(async (req: CallableRequest<unkn
       switch (ch.action) {
         case 'remove': {
           requireAgreementFor(line, ch);
-          addDelta(line, lineStockUnits(line));
+          for (const u of stockUnitsOf(line)) addDelta({ productId: u.productId, variantId: u.variantId, trackInventory: true }, u.units);
           line.removed = true;
           line.revised = true;
           line.lineTotalAgorot = 0;
           break;
         }
         case 'set_quantity': {
+          if (line.comboId) fail('invalid_argument', { issues: [{ path: 'quantity', message: 'combo_lines_can_only_be_removed' }] });
           if (line.pricingMode !== 'unit' || ch.quantity === undefined) fail('invalid_argument', { issues: [{ path: 'quantity', message: 'quantity_required' }] });
           if (ch.quantity === 0) {
             requireAgreementFor(line, ch);
@@ -520,6 +548,7 @@ export const reviseOrder = onCall(opts, handled(async (req: CallableRequest<unkn
         }
         case 'substitute': {
           requireAgreementFor(line, ch);
+          if (line.comboId) fail('invalid_argument', { issues: [{ path: 'lineId', message: 'combo_lines_can_only_be_removed' }] });
           if (!ch.replacementProductId) fail('invalid_argument', { issues: [{ path: 'replacementProductId', message: 'required' }] });
           const { product } = await getProduct(ch.replacementProductId);
           if (product.archived || !product.available) fail('item_unavailable', { productId: product.id });
@@ -668,7 +697,7 @@ export async function reverseCashInternal(c: Caller, input: z.infer<typeof rever
     const now = nowIso();
     // Inventory: return tracked stock for supplied lines.
     const restore = new Map<string, number>();
-    for (const l of order.lines) if (l.trackInventory && !l.removed) restore.set(`${l.productId}:${l.variantId ?? ''}`, (restore.get(`${l.productId}:${l.variantId ?? ''}`) ?? 0) + lineStockUnits(l));
+    for (const l of order.lines) if (!l.removed) for (const u of stockUnitsOf(l)) restore.set(`${u.productId}:${u.variantId ?? ''}`, (restore.get(`${u.productId}:${u.variantId ?? ''}`) ?? 0) + u.units);
     const stockPlan = await readStockDeltas(tx, order.businessId, order.branchId, restore);
     // Loyalty: reverse earned points (may create debt) and return consumed points.
     let ledgerWrites: Array<Omit<LoyaltyLedgerEntry, 'id' | 'at'>> = [];

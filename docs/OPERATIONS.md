@@ -22,7 +22,8 @@
   page; the customer is notified and sees original vs revised totals.
 - **Cash**: after acceptance and once weights are final, use **Record cash received**. This is a manual
   confirmation; it locks the order and awards loyalty points. Owners can reverse it with an audited reason.
-- **Catalog**: categories, products, options, variants, stock, photos; copy to another branch.
+- **Catalog**: categories, products, options, variants, stock, photos; copy to another branch. Mark best sellers with **Most ordered** (star on the list or the checkbox in the editor).
+- **Deals & combos**: bundle items with quantities (for example two falafel plates + fries), set a percentage discount, and promote the combo to the Deals rail at the top of your page. Prices follow your catalog automatically. **Generate promo image** composes a picture on your device from the item photos with the discount badge; add item photos first for the best result.
 - **Branch settings**: hours (overnight allowed, date overrides), delivery cities/fees/minimums, pause.
 - **Printers**: see `docs/PRINTING.md`.
 - **Staff**: owners invite managers (catalog/settings/orders for assigned branches) and staff (orders and

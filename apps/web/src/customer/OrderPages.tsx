@@ -101,6 +101,7 @@ export function OrderPage() {
               <span className="wrap-anywhere">
                 {l.removed ? <span className="badge badge--danger">{t('orders.removed')}</span> : l.substitutedFromLineId ? <span className="badge badge--accent">{t('orders.substituted')}</span> : null}{' '}
                 {l.pricingMode === 'weight' ? (l.actualGrams !== undefined ? `${t('orders.actualWeight')} ${formatGrams(l.actualGrams, locale)}` : `${t('orders.requestedWeight')} ${formatGrams(l.requestedGrams ?? 0, locale)}`) : `${l.quantity} ×`} {L(l.name)}{l.variantName ? ` (${L(l.variantName)})` : ''}
+                {l.comboItems ? <span className="order-line__mods"> ({l.comboItems.map((ci) => `${ci.quantity} × ${L(ci.name)}`).join(' + ')}, -{l.comboDiscountPercent}%)</span> : null}
                 {l.modifiers.length ? <span className="order-line__mods"> {l.modifiers.map((m) => L(m.optionName) + placementSuffix(m.placement, t)).join(', ')}</span> : null}
                 {l.note ? <span className="muted"> “{l.note}”</span> : null}
               </span>

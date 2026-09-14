@@ -7,7 +7,7 @@ import { ExtrasLibraryPage } from './ExtrasLibraryPage';
 import { BranchSettingsPage, NewBranchPage, BusinessProfilePage, StaffPage, LoyaltySettingsPage, CashRecordsPage, NewBusinessPage } from './SettingsPages';
 import { PrintersPage } from './PrintersPage';
 import { QrPage } from './QrPage';
-import { PromotionsPage } from './PromotionsPage';
+import { DealsPage } from './DealsPage';
 import { EmailSignInPage, OwnerRegisterPage, ResetPasswordPage, VerifyEmailPage, InviteAcceptPage } from './AuthPages';
 import { NotFound } from '@/app/Shell';
 
@@ -30,11 +30,12 @@ export function BusinessRoutes() {
         <Route path="history" element={<OrderHistoryPage />} />
         <Route path="catalog" element={<CatalogPage />} />
         <Route path="catalog/extras" element={<ExtrasLibraryPage />} />
+        <Route path="deals" element={<DealsPage />} />
         <Route path="branch" element={<BranchSettingsPage />} />
         <Route path="printers" element={<PrintersPage />} />
         <Route path="cash" element={<CashRecordsPage />} />
         <Route path="loyalty" element={<LoyaltySettingsPage />} />
-        <Route path="promotions" element={<PromotionsPage />} />
+        <Route path="promotions" element={<Navigate to="../deals" replace />} />
         <Route path="staff" element={<StaffPage />} />
         <Route path="business" element={<BusinessProfilePage />} />
         <Route path="qr" element={<QrPage />} />

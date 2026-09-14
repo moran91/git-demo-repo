@@ -25,6 +25,8 @@ export interface CartState {
     minWeightGrams?: number;
     quantityStep?: number;
     minQuantity?: number;
+    isCombo?: boolean;
+    discountPercent?: number;
   }>;
 }
 
@@ -47,7 +49,7 @@ export function sameSelection(a: CartModifierSelection[], b: CartModifierSelecti
 export function addLine(params: { businessId: string; branchId: string; mode: FulfillmentMode; cityId: string; meta: CartMeta; line: CartLine; lineMeta: CartState['lineMeta'][string] }) {
   cartStore.set((s) => {
     const base: Cart = cartBelongsTo(s, params.businessId, params.branchId) && s.cart ? s.cart : { businessId: params.businessId, branchId: params.branchId, mode: params.mode, cityId: params.cityId, lines: [], updatedAt: new Date().toISOString() };
-    const existing = base.lines.find((l) => l.productId === params.line.productId && l.variantId === params.line.variantId && sameSelection(l.modifiers, params.line.modifiers) && (l.note ?? '') === (params.line.note ?? '') && !l.requestedGrams);
+    const existing = base.lines.find((l) => l.productId === params.line.productId && l.comboId === params.line.comboId && l.variantId === params.line.variantId && sameSelection(l.modifiers, params.line.modifiers) && (l.note ?? '') === (params.line.note ?? '') && !l.requestedGrams);
     let lines: CartLine[];
     if (existing) lines = base.lines.map((l) => (l.lineId === existing.lineId ? { ...l, quantity: l.quantity + params.line.quantity } : l));
     else lines = [...base.lines, params.line];

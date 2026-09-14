@@ -10,13 +10,15 @@ import { cartStore } from '@/lib/cart';
 import { money } from '@/lib/format';
 import { telHref } from '@/lib/format';
 import { ErrorView } from '@/app/Shell';
-import { useCity, useFavorites, useOpenState, type PublicBranch, type PublicBusiness } from './hooks';
+import { useCity, useCombos, useFavorites, useOpenState, type PublicBranch, type PublicBusiness } from './hooks';
 import { StorageImage } from './StorageImage';
 import { ProductSheet } from './ProductSheet';
 import { PhotoLightbox } from './PhotoLightbox';
 import { useHeightVar } from '@/lib/stickyVars';
 import { useScrollSpy } from '@/lib/scrollSpy';
 import { formatDay, promotionExpired } from '@/lib/promotions';
+import { ComboSheet, comboPricing } from './ComboSheet';
+import type { Combo } from '@qareeb/shared';
 
 export type PublicProduct = Product & { inStock: boolean; stockLeft?: number };
 
@@ -39,6 +41,8 @@ export function BusinessPage() {
   const { ids, toggle, signedIn } = useFavorites();
   const [active, setActive] = useState<PublicProduct | null>(null);
   const [photo, setPhoto] = useState<{ path: string; alt: string } | null>(null);
+  const [activeCombo, setActiveCombo] = useState<Combo | null>(null);
+  const combos = useCombos(branch?.id ?? null);
   const cart = cartStore.use();
   // The category nav is sticky under the topbar; publishing its height lets a #cat- anchor jump clear
   // both bars instead of parking the heading behind them.
@@ -134,6 +138,31 @@ export function BusinessPage() {
         </section>
       ) : null}
 
+      {combos.data.filter((c) => c.promoted).length > 0 ? (
+        <section aria-labelledby="deals-h" className="stack--sm stack">
+          <h2 id="deals-h">{t('deals.title')}</h2>
+          <div className="deals">
+            {combos.data.filter((c) => c.promoted).map((c) => {
+              const pricing = comboPricing(c, products.data);
+              const off = !orderable || modeMismatch || !pricing;
+              return (
+                <button key={c.id} type="button" className={`deal-card card--interactive ${off ? 'deal-card--off' : ''}`} onClick={() => setActiveCombo(c)} aria-label={`${t('deals.combo')}: ${L(c.name, biz.defaultLocale)}`}>
+                  <div className="deal-card__media">
+                    <StorageImage path={c.imagePath} size="display" alt="" wide fallbackLabel={t('discovery.imageFallback')} />
+                    <span className="deal-card__badge">-{c.discountPercent}%</span>
+                  </div>
+                  <div className="deal-card__body">
+                    <strong className="wrap-anywhere">{L(c.name, biz.defaultLocale)}</strong>
+                    <span className="muted wrap-anywhere">{c.items.map((it) => { const p = products.data.find((x) => x.id === it.productId); return p ? `${it.quantity} × ${L(p.name, biz.defaultLocale)}` : null; }).filter(Boolean).join(' + ')}</span>
+                    {pricing ? <span className="deal-card__prices"><bdi className="price price--lg">{money(pricing.price, locale)}</bdi><bdi className="deal-card__was">{money(pricing.sum, locale)}</bdi></span> : <span className="badge badge--muted">{t('deals.unavailable')}</span>}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
       {shownCategories.length > 0 ? (
         <nav className="cat-nav" ref={(el) => { navEl.current = el; catNavRef(el); }} aria-label={t('business.categories')}>
           {shownCategories.map((c) => (
@@ -167,6 +196,7 @@ export function BusinessPage() {
                 >
                   <StorageImage path={p.imagePath} alt={t('product.photoAlt', { name: L(p.name, biz.defaultLocale) })} square className="product__img" fallbackLabel={t('discovery.imageFallback')} onClick={() => { if (!(unavailable || !orderable || modeMismatch)) setActive(p); else if (p.imagePath) setPhoto({ path: p.imagePath, alt: t('product.photoAlt', { name: L(p.name, biz.defaultLocale) }) }); }} />
                   <div className="product__body">
+                    {p.mostOrdered ? <span className="most-ordered">{t('product.mostOrdered')}</span> : null}
                     <h3 className="wrap-anywhere">{L(p.name, biz.defaultLocale)}</h3>
                     {L(p.description, biz.defaultLocale) ? <p className="muted wrap-anywhere">{L(p.description, biz.defaultLocale)}</p> : null}
                     <div className="row" style={{ gap: 6 }}>
@@ -178,9 +208,10 @@ export function BusinessPage() {
                     </div>
                     <div className="product__footer">
                       <span className="price"><bdi>{priceLabel}</bdi>{p.pricingMode === 'weight' ? <span className="muted"> {t('common.perKg')}</span> : null}</span>
-                      <Button size="sm" variant={inCart > 0 ? 'secondary' : 'primary'} icon="plus" disabled={unavailable || !orderable || modeMismatch} onClick={() => setActive(p)} aria-label={`${t('product.addToCart')}: ${L(p.name, biz.defaultLocale)}`}>
-                        {inCart > 0 ? `${t('product.addToCart')} (${inCart})` : t('product.addToCart')}
-                      </Button>
+                      <button type="button" className="btn--add" disabled={unavailable || !orderable || modeMismatch} onClick={() => setActive(p)} aria-label={`${t('product.addToCart')}: ${L(p.name, biz.defaultLocale)}${inCart > 0 ? ` (${t('product.inCartCount', { count: inCart })})` : ''}`} title={t('product.addToCart')}>
+                        <Icon name="plus" size={22} />
+                        {inCart > 0 ? <span className="btn--add__count" aria-hidden="true">{inCart}</span> : null}
+                      </button>
                     </div>
                   </div>
                 </article>
@@ -191,6 +222,7 @@ export function BusinessPage() {
       ))}
       {active ? <ProductSheet product={active} business={biz} branch={branch} mode={prefs.mode} cityId={prefs.cityId} onClose={() => setActive(null)} /> : null}
       {photo ? <PhotoLightbox path={photo.path} alt={photo.alt} onClose={() => setPhoto(null)} /> : null}
+      {activeCombo ? <ComboSheet combo={activeCombo} products={products.data} business={biz} branch={branch} mode={prefs.mode} cityId={prefs.cityId} onClose={() => setActiveCombo(null)} /> : null}
     </div>
   );
 }

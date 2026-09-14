@@ -285,6 +285,41 @@ export interface Product {
   available: boolean;
   trackInventory: boolean;
   stockQty?: number;
+  /** Owner-controlled "Most ordered" highlight shown above the product name. */
+  mostOrdered?: boolean;
+  archived: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** ---------- Combo deals ---------- */
+
+export interface ComboItem {
+  productId: string;
+  variantId?: string;
+  quantity: number;
+}
+
+/**
+ * A combo is an owner-built bundle of catalog items with a percentage discount on the sum of the
+ * items' current prices. Prices are never stored on the combo; they are resolved at quote time so a
+ * catalog price change flows through and a stale client price triggers `price_changed`.
+ */
+export interface Combo {
+  id: string;
+  businessId: string;
+  branchId: string;
+  name: Localized;
+  description: Localized;
+  items: ComboItem[];
+  /** 1–90. Applied to the merchandise sum of the items. */
+  discountPercent: number;
+  /** Locally generated promo image (Storage path) or undefined for the branded fallback. */
+  imagePath?: string;
+  /** Promoted combos appear in the Deals section at the top of the storefront. */
+  promoted: boolean;
+  active: boolean;
   archived: boolean;
   sortOrder: number;
   createdAt: string;
@@ -301,6 +336,8 @@ export interface CartModifierSelection {
 export interface CartLine {
   /** Client-generated stable id used for idempotent line references. */
   lineId: string;
+  /** Set for combo lines; `productId` is then the combo id. */
+  comboId?: string;
   productId: string;
   variantId?: string;
   modifiers: CartModifierSelection[];
@@ -331,10 +368,24 @@ export interface OrderLineModifierSnapshot {
   placement?: ToppingPlacement;
 }
 
+export interface OrderLineComboItem {
+  productId: string;
+  name: Localized;
+  variantId?: string;
+  variantName?: Localized;
+  quantity: number;
+  unitPriceAgorot: Agorot;
+  trackInventory: boolean;
+}
+
 export interface OrderLine {
   lineId: string;
   productId: string;
   name: Localized;
+  /** Combo snapshot: bundled items and the discount that was applied. */
+  comboId?: string;
+  comboItems?: OrderLineComboItem[];
+  comboDiscountPercent?: number;
   variantId?: string;
   variantName?: Localized;
   pricingMode: PricingMode;

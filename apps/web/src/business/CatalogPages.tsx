@@ -76,7 +76,7 @@ export function CatalogPage() {
               <li key={p.id} className="list__item">
                 <StorageImage path={p.imagePath} alt="" square className="product__img" fallbackLabel={t('discovery.imageFallback')} />
                 <div className="list__grow">
-                  <div className="row" style={{ gap: 6 }}><strong>{L(p.name, business.defaultLocale)}</strong>{p.archived ? <Badge tone="muted">{t('catalog.archived')}</Badge> : null}{!p.available ? <Badge tone="danger">{t('common.unavailable')}</Badge> : null}{p.pricingMode === 'weight' ? <Badge tone="neutral">{t('common.perKg')}</Badge> : null}</div>
+                  <div className="row" style={{ gap: 6 }}><strong>{L(p.name, business.defaultLocale)}</strong>{p.mostOrdered ? <span className="most-ordered">{t('product.mostOrdered')}</span> : null}{p.archived ? <Badge tone="muted">{t('catalog.archived')}</Badge> : null}{!p.available ? <Badge tone="danger">{t('common.unavailable')}</Badge> : null}{p.pricingMode === 'weight' ? <Badge tone="neutral">{t('common.perKg')}</Badge> : null}</div>
                   <div className="muted">
                     <bdi>{money(p.priceAgorot, locale)}</bdi>
                     {p.trackInventory ? <> · {t('dash.stock')}: <bdi className="num">{p.variants.length ? p.variants.map((v) => `${L(v.name, business.defaultLocale)} ${v.stockQty ?? 0}`).join(', ') : p.stockQty ?? 0}</bdi></> : null}
@@ -85,6 +85,7 @@ export function CatalogPage() {
                 <div className="actions actions--icons">
                   <IconButton icon="arrow" label={t('catalog.moveUp')} disabled={i === 0} onClick={() => move(arr.map((x) => x.id), p.id, -1, 'reorderProducts')} style={{ transform: 'rotate(-90deg)' }} />
                   <IconButton icon="arrow" label={t('catalog.moveDown')} disabled={i === arr.length - 1} onClick={() => move(arr.map((x) => x.id), p.id, 1, 'reorderProducts')} style={{ transform: 'rotate(90deg)' }} />
+                  <IconButton icon="star" label={t('product.mostOrdered')} active={!!p.mostOrdered} aria-pressed={!!p.mostOrdered} onClick={() => call('setProductMostOrdered', { businessId: business.id, branchId: branch.id, productId: p.id, mostOrdered: !p.mostOrdered }).catch((e) => toast(t(errorKey(e)), 'danger'))} />
                   {p.trackInventory ? <IconButton icon="scale" label={t('catalog.stockAdjust')} onClick={() => setStockEdit({ product: p, variantId: p.variants[0]?.id })} /> : null}
                   {branches.length > 1 ? <IconButton icon="copy" label={t('catalog.copyTo')} onClick={() => setCopyTarget({ productId: p.id })} /> : null}
                   <IconButton icon="edit" label={t('catalog.editProduct')} onClick={() => setProdEdit({ product: p, categoryId: p.categoryId })} />
@@ -139,7 +140,7 @@ function CopyDialog({ productId, onClose }: { productId?: string; onClose: () =>
 
 type Draft = ProductInput & { imagePath?: string };
 function draftFrom(p: Product | undefined, categoryId: string): Draft {
-  if (!p) return { categoryId, name: {}, description: {}, dietaryText: {}, pricingMode: 'unit', priceAgorot: 0, unitLabel: {}, quantityStep: 1, minQuantity: 1, variants: [], modifierGroups: [], available: true, trackInventory: false, stockQty: 0, weightStepGrams: 100, minWeightGrams: 100 };
+  if (!p) return { categoryId, name: {}, description: {}, dietaryText: {}, pricingMode: 'unit', priceAgorot: 0, unitLabel: {}, quantityStep: 1, minQuantity: 1, variants: [], modifierGroups: [], available: true, trackInventory: false, stockQty: 0, weightStepGrams: 100, minWeightGrams: 100, mostOrdered: false };
   const { id: _i, branchId: _b, businessId: _bz, archived: _a, createdAt: _c, updatedAt: _u, imagePath, sortOrder, ...rest } = p;
   return { ...rest, imagePath, sortOrder };
 }
@@ -247,6 +248,7 @@ export function ProductEditor({ initial, categoryId, categories, onClose }: { in
         <section className="stack--sm stack">
           <h3>{t('catalog.availability')}</h3>
           <Checkbox label={t('catalog.available')} checked={d.available} onChange={(e) => set({ available: e.target.checked })} />
+          <Checkbox label={t('product.mostOrdered')} checked={!!d.mostOrdered} onChange={(e) => set({ mostOrdered: e.target.checked })} />
           <Checkbox label={t('catalog.trackInventory')} checked={d.trackInventory} onChange={(e) => set({ trackInventory: e.target.checked })} />
           {d.trackInventory && d.variants.length === 0 && !initial?.trackInventory ? <TextInput label={t('catalog.stockQty')} type="number" ltr min={0} value={d.stockQty ?? 0} onChange={(e) => set({ stockQty: Number(e.target.value) })} hint={d.pricingMode === 'weight' ? '(g)' : undefined} /> : null}
         </section>

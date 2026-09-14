@@ -11,6 +11,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "@qareeb/shared": "*",
     "firebase": "^12.18.0",
     "libheif-js": "^1.23.2",

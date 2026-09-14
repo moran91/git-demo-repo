@@ -1,4 +1,4 @@
-import type { Branch, Business, Category, Product, Promotion } from '@qareeb/shared';
+import type { Branch, Business, Category, Combo, Product, Promotion } from '@qareeb/shared';
 import { col, db, nowIso, type Tx } from './firebase.js';
 
 /**
@@ -156,16 +156,23 @@ export async function reprojectCatalog(businessId: string, branchId: string): Pr
   const [bSnap, brSnap] = await Promise.all([col.business(businessId).get(), col.branch(businessId, branchId).get()]);
   if (!bSnap.exists || !brSnap.exists) return;
   const visible = isPubliclyVisible(bSnap.data() as Business, brSnap.data() as Branch);
-  const [cats, prods, pubCats, pubProds] = await Promise.all([
+  const [cats, prods, combos, pubCats, pubProds, pubCombos] = await Promise.all([
     col.categories(businessId, branchId).get(),
     col.products(businessId, branchId).get(),
+    col.combos(businessId, branchId).get(),
     col.publicCategories(branchId).get(),
     col.publicProducts(branchId).get(),
+    col.publicCombos(branchId).get(),
   ]);
   const batch = db.batch();
   for (const d of pubCats.docs) batch.delete(d.ref);
   for (const d of pubProds.docs) batch.delete(d.ref);
+  for (const d of pubCombos.docs) batch.delete(d.ref);
   if (visible) {
+    for (const d of combos.docs) {
+      const c = d.data() as Combo;
+      if (!c.archived && c.active) batch.set(col.publicCombos(branchId).doc(c.id), c);
+    }
     for (const d of cats.docs) {
       const c = d.data() as Category;
       if (!c.archived) batch.set(col.publicCategories(branchId).doc(c.id), c);
@@ -182,6 +189,12 @@ export async function reprojectCatalog(businessId: string, branchId: string): Pr
 export function projectProductInTx(tx: Tx, business: Business, branch: Branch, product: Product): void {
   const ref = col.publicProducts(branch.id).doc(product.id);
   if (isPubliclyVisible(business, branch) && !product.archived) tx.set(ref, toPublicProduct(product));
+  else tx.delete(ref);
+}
+
+export function projectComboInTx(tx: Tx, business: Business, branch: Branch, combo: Combo): void {
+  const ref = col.publicCombos(branch.id).doc(combo.id);
+  if (isPubliclyVisible(business, branch) && !combo.archived && combo.active) tx.set(ref, combo);
   else tx.delete(ref);
 }
 

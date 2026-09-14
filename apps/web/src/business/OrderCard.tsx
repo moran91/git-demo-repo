@@ -29,6 +29,7 @@ export function OrderLines({ order, compact }: { order: Order; compact?: boolean
             {l.removed ? <span className="badge badge--danger">{t('orders.removed')}</span> : l.substitutedFromLineId ? <span className="badge badge--accent">{t('orders.substituted')}</span> : null}{' '}
             <strong>{l.pricingMode === 'weight' ? (l.actualGrams !== undefined ? formatGrams(l.actualGrams, locale) : formatGrams(l.requestedGrams ?? 0, locale)) : `${l.quantity} ×`}</strong> {L(l.name)}{l.variantName ? ` (${L(l.variantName)})` : ''}
             {l.pricingMode === 'weight' && l.actualGrams !== undefined ? <span className="muted"> · {t("orders.requestedWeight")} {formatGrams(l.requestedGrams ?? 0, locale)}</span> : null}
+            {l.comboItems ? <div className="order-line__combo">{t('deals.combo')} -{l.comboDiscountPercent}%: {l.comboItems.map((ci) => `${ci.quantity * l.quantity} × ${L(ci.name)}${ci.variantName ? ` (${L(ci.variantName)})` : ''}`).join(' + ')}</div> : null}
             {l.modifiers.length ? <div className="order-line__mods">+ {l.modifiers.map((m, i) => <span key={m.optionId + i}>{i ? ', ' : ''}{m.placement && m.placement !== 'whole' ? <PizzaIcon placement={m.placement} size={18} label={placementSuffix(m.placement, t)} /> : null} {L(m.optionName)}{placementSuffix(m.placement, t)}</span>)}</div> : null}
             {l.note ? <div className="order-line__mods">“{l.note}”</div> : null}
           </span>

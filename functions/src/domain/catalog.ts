@@ -1,11 +1,11 @@
 import { onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { z } from 'zod';
-import { categoryInputSchema, cleanLocalized, idSchema, productInputSchema, sharedModifierGroupInputSchema, makeId, type Branch, type Business, type Category, type ModifierGroup, type Product, type SharedModifierGroup } from '@qareeb/shared';
+import { categoryInputSchema, cleanLocalized, comboInputSchema, idSchema, productInputSchema, sharedModifierGroupInputSchema, makeId, type Branch, type Business, type Category, type Combo, type ModifierGroup, type Product, type SharedModifierGroup } from '@qareeb/shared';
 import { REGION, col, db, nowIso, storage } from '../lib/firebase.js';
 import { handled, fail } from '../lib/errors.js';
 import { parse } from '../lib/validate.js';
 import { requireCaller, requireMembership } from '../lib/auth.js';
-import { isPubliclyVisible, projectCategoryInTx, projectProductInTx, reprojectCatalog, toPublicProduct } from '../lib/projections.js';
+import { isPubliclyVisible, projectCategoryInTx, projectComboInTx, projectProductInTx, reprojectCatalog, toPublicProduct } from '../lib/projections.js';
 import { writeAudit } from '../lib/audit.js';
 import { deleteImageWithVariants } from '../lib/images.js';
 
@@ -135,6 +135,7 @@ function buildProduct(existing: Product | undefined, input: z.infer<typeof produ
     trackInventory: input.trackInventory,
     // Stock is only changed through adjustStock (audited) once tracking exists, except initial set.
     stockQty: input.trackInventory ? (existing?.trackInventory ? existing.stockQty ?? input.stockQty ?? 0 : input.stockQty ?? 0) : undefined,
+    mostOrdered: input.mostOrdered ?? false,
     archived: existing?.archived ?? false,
     sortOrder: input.sortOrder ?? existing?.sortOrder ?? 0,
     createdAt: existing?.createdAt ?? now,
@@ -395,5 +396,115 @@ export const setSharedModifierGroupArchived = onCall(opts, handled(async (req: C
     }
     tx.set(ref, { ...(snap.data() as SharedModifierGroup), archived: input.archived, updatedAt: nowIso() });
   });
+  return { ok: true };
+}));
+/** Owner-controlled "Most ordered" highlight (owners and managers of the branch). */
+export const setProductMostOrdered = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
+  const c = await requireCaller(req);
+  const input = parse(z.object({ businessId: idSchema, branchId: idSchema, productId: idSchema, mostOrdered: z.boolean() }).strict(), req.data);
+  await requireMembership(c, input.businessId, [...CATALOG_ROLES], input.branchId);
+  await db.runTransaction(async (tx) => {
+    const ctx = await loadContext(tx, input.businessId, input.branchId);
+    const ref = col.products(input.businessId, input.branchId).doc(input.productId);
+    const snap = await tx.get(ref);
+    if (!snap.exists) fail('not_found');
+    const p = { ...(snap.data() as Product), mostOrdered: input.mostOrdered, updatedAt: nowIso() };
+    tx.set(ref, p);
+    projectProductInTx(tx, ctx.business, ctx.branch, p);
+  });
+  return { ok: true };
+}));
+
+/** ---------- Combo deals ---------- */
+
+export const saveCombo = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
+  const c = await requireCaller(req);
+  const input = parse(z.object({ businessId: idSchema, branchId: idSchema, comboId: idSchema.optional(), combo: comboInputSchema }).strict(), req.data);
+  await requireMembership(c, input.businessId, [...CATALOG_ROLES], input.branchId);
+  const ref = input.comboId ? col.combos(input.businessId, input.branchId).doc(input.comboId) : col.combos(input.businessId, input.branchId).doc();
+  const combo = await db.runTransaction(async (tx) => {
+    const ctx = await loadContext(tx, input.businessId, input.branchId);
+    const existingSnap = await tx.get(ref);
+    if (input.comboId && !existingSnap.exists) fail('not_found');
+    // Every bundled item must be a live, unit-priced product of this branch (weight items cannot be bundled).
+    const seen = new Set<string>();
+    for (const it of input.combo.items) {
+      const key = `${it.productId}:${it.variantId ?? ''}`;
+      if (seen.has(key)) fail('invalid_argument', { issues: [{ path: 'items', message: 'duplicate_item' }] });
+      seen.add(key);
+      const ps = await tx.get(col.products(input.businessId, input.branchId).doc(it.productId));
+      const p = ps.data() as Product | undefined;
+      if (!p || p.archived) fail('invalid_argument', { issues: [{ path: 'items', message: 'unknown_product', productId: it.productId }] });
+      if (p.pricingMode !== 'unit') fail('invalid_argument', { issues: [{ path: 'items', message: 'weight_items_cannot_be_bundled', productId: it.productId }] });
+      if (p.variants.length > 0 && !p.variants.some((v) => v.id === it.variantId)) fail('invalid_argument', { issues: [{ path: 'items', message: 'variant_required', productId: it.productId }] });
+    }
+    const existing = existingSnap.data() as Combo | undefined;
+    const now = nowIso();
+    const doc: Combo = {
+      id: ref.id,
+      businessId: input.businessId,
+      branchId: input.branchId,
+      name: cleanLocalized(input.combo.name),
+      description: cleanLocalized(input.combo.description),
+      items: input.combo.items,
+      discountPercent: input.combo.discountPercent,
+      imagePath: existing?.imagePath,
+      promoted: input.combo.promoted,
+      active: input.combo.active,
+      archived: existing?.archived ?? false,
+      sortOrder: input.combo.sortOrder ?? existing?.sortOrder ?? 0,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    tx.set(ref, doc);
+    projectComboInTx(tx, ctx.business, ctx.branch, doc);
+    writeAudit(tx, { actorUid: c.uid, action: 'combo.save', targetType: 'combo', targetId: `${input.branchId}/${ref.id}`, before: existing, after: doc });
+    return doc;
+  });
+  return { combo };
+}));
+
+export const setComboArchived = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
+  const c = await requireCaller(req);
+  const input = parse(z.object({ businessId: idSchema, branchId: idSchema, comboId: idSchema, archived: z.boolean() }).strict(), req.data);
+  await requireMembership(c, input.businessId, [...CATALOG_ROLES], input.branchId);
+  await db.runTransaction(async (tx) => {
+    const ctx = await loadContext(tx, input.businessId, input.branchId);
+    const ref = col.combos(input.businessId, input.branchId).doc(input.comboId);
+    const snap = await tx.get(ref);
+    if (!snap.exists) fail('not_found');
+    const combo = { ...(snap.data() as Combo), archived: input.archived, updatedAt: nowIso() };
+    tx.set(ref, combo);
+    projectComboInTx(tx, ctx.business, ctx.branch, combo);
+  });
+  return { ok: true };
+}));
+
+/** Records the locally generated promo image uploaded to businesses/{b}/branches/{br}/combos/{id}/. */
+export const setComboImage = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
+  const c = await requireCaller(req);
+  const input = parse(z.object({ businessId: idSchema, branchId: idSchema, comboId: idSchema, path: z.string().max(400).nullable() }).strict(), req.data);
+  await requireMembership(c, input.businessId, [...CATALOG_ROLES], input.branchId);
+  const prefix = `businesses/${input.businessId}/branches/${input.branchId}/combos/${input.comboId}/`;
+  if (input.path && !input.path.startsWith(prefix)) fail('invalid_argument', { issues: [{ path: 'path', message: 'wrong_tenant_path' }] });
+  let removed: string | undefined;
+  await db.runTransaction(async (tx) => {
+    const ctx = await loadContext(tx, input.businessId, input.branchId);
+    const ref = col.combos(input.businessId, input.branchId).doc(input.comboId);
+    const snap = await tx.get(ref);
+    if (!snap.exists) fail('not_found');
+    const combo = snap.data() as Combo;
+    if (input.path) {
+      const [meta] = await storage.bucket().file(input.path).getMetadata().catch(() => [undefined]);
+      if (!meta) fail('invalid_argument', { issues: [{ path: 'path', message: 'missing_object' }] });
+      const ct = String(meta.contentType ?? '');
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(ct) || Number(meta.size ?? 0) > 5 * 1024 * 1024) fail('invalid_argument', { issues: [{ path: 'path', message: 'invalid_image' }] });
+    }
+    if (combo.imagePath && combo.imagePath !== input.path) removed = combo.imagePath;
+    const next = { ...combo, imagePath: input.path ?? undefined, updatedAt: nowIso() };
+    tx.set(ref, next);
+    projectComboInTx(tx, ctx.business, ctx.branch, next);
+  });
+  if (removed) await storage.bucket().file(removed).delete({ ignoreNotFound: true }).catch(() => undefined);
   return { ok: true };
 }));

@@ -46,6 +46,7 @@ export const cartModifierSchema = z.object({ groupId: idSchema, optionIds: z.arr
 export const cartLineSchema = z
   .object({
     lineId: idSchema,
+    comboId: idSchema.optional(),
     productId: idSchema,
     variantId: idSchema.optional(),
     modifiers: z.array(cartModifierSchema).max(20),
@@ -253,10 +254,25 @@ export const productInputSchema = z
     available: z.boolean(),
     trackInventory: z.boolean(),
     stockQty: z.number().int().min(0).max(1_000_000).optional(),
+    mostOrdered: z.boolean().optional(),
     sortOrder: z.number().int().min(0).max(10000).optional(),
   })
   .strict();
 export type ProductInput = z.infer<typeof productInputSchema>;
+
+export const comboItemSchema = z.object({ productId: idSchema, variantId: idSchema.optional(), quantity: z.number().int().min(1).max(20) }).strict();
+export const comboInputSchema = z
+  .object({
+    name: requiredLocalizedSchema,
+    description: localizedSchema,
+    items: z.array(comboItemSchema).min(2).max(10),
+    discountPercent: z.number().int().min(1).max(90),
+    promoted: z.boolean(),
+    active: z.boolean(),
+    sortOrder: z.number().int().min(0).max(10000).optional(),
+  })
+  .strict();
+export type ComboInput = z.infer<typeof comboInputSchema>;
 
 export const membershipInputSchema = z
   .object({

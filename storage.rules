@@ -72,6 +72,12 @@ service firebase.storage {
       allow write: if signedIn() && notSuspended() && isCatalogEditor(businessId, branchId) && validImage();
       allow delete: if signedIn() && notSuspended() && isCatalogEditor(businessId, branchId);
     }
+    // Combo promo images (generated locally in the owner's browser): businesses/{b}/branches/{br}/combos/{id}/{file}
+    match /businesses/{businessId}/branches/{branchId}/combos/{comboId}/{file} {
+      allow read: if true;
+      allow write: if signedIn() && notSuspended() && isCatalogEditor(businessId, branchId) && validImage();
+      allow delete: if signedIn() && notSuspended() && isCatalogEditor(businessId, branchId);
+    }
     // Everything else (including any private receipt data) is server-only.
     match /{allPaths=**} {
       allow read, write: if false;

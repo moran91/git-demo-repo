@@ -4,6 +4,8 @@ import type {
   Agorot,
   CartLine,
   CartModifierSelection,
+  Combo,
+  OrderLineComboItem,
   LoyaltyRules,
   Localized,
   OrderLine,
@@ -170,6 +172,58 @@ export function revisionAgreementReason(
     default:
       return null;
   }
+}
+
+/** Discounted total for a combo: floor(sum × (100 − discount) / 100), documented rounding. */
+export function comboTotal(itemsSumAgorot: Agorot, discountPercent: number, quantity: number): Agorot {
+  return Math.floor((itemsSumAgorot * (100 - discountPercent)) / 100) * quantity;
+}
+
+/**
+ * Prices a combo cart line against the current combo definition and current products. Unit-priced
+ * items only (weight items cannot be bundled). The client's expected price is the discounted unit
+ * price of one combo; a mismatch requires review, exactly like a plain product.
+ */
+export function priceComboLine(combo: Combo, products: Map<string, Product>, cart: CartLine): PricedLineResult {
+  if (combo.archived || !combo.active) return { problem: { code: 'item_unavailable', lineId: cart.lineId } };
+  const items: OrderLineComboItem[] = [];
+  let sum = 0;
+  for (const it of combo.items) {
+    const p = products.get(it.productId);
+    if (!p || p.archived || !p.available || p.pricingMode !== 'unit') return { problem: { code: 'item_unavailable', lineId: cart.lineId } };
+    let unit = p.priceAgorot;
+    let variantName: Localized | undefined;
+    if (p.variants.length > 0) {
+      const v = p.variants.find((x) => x.id === it.variantId);
+      if (!v || !v.available) return { problem: { code: 'item_unavailable', lineId: cart.lineId } };
+      unit = v.priceAgorot;
+      variantName = v.name;
+    }
+    sum += unit * it.quantity;
+    items.push({ productId: p.id, name: p.name, variantId: it.variantId, variantName, quantity: it.quantity, unitPriceAgorot: unit, trackInventory: p.trackInventory });
+  }
+  const qty = cart.quantity;
+  if (!Number.isInteger(qty) || qty < 1 || qty > 99) return { problem: { code: 'invalid_argument', lineId: cart.lineId, reason: 'quantity' } };
+  const unitPrice = comboTotal(sum, combo.discountPercent, 1);
+  if (cart.expectedUnitPriceAgorot !== unitPrice) return { problem: { code: 'price_changed', lineId: cart.lineId, expected: cart.expectedUnitPriceAgorot, actual: unitPrice } };
+  return {
+    line: {
+      lineId: cart.lineId,
+      productId: combo.id,
+      comboId: combo.id,
+      comboItems: items,
+      comboDiscountPercent: combo.discountPercent,
+      name: combo.name,
+      pricingMode: 'unit',
+      unitLabel: {},
+      unitPriceAgorot: unitPrice,
+      modifiers: [],
+      quantity: qty,
+      note: cart.note?.trim() || undefined,
+      lineTotalAgorot: unitPrice * qty,
+      trackInventory: items.some((i) => i.trackInventory),
+    },
+  };
 }
 
 export function lineIsEstimated(line: OrderLine): boolean {

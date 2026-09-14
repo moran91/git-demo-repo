@@ -22,6 +22,31 @@ what remains blocked on external access or hardware._
   finalize trigger with the same fidelity as production — verify after first deploy.
 - **App Check**: wired for reCAPTCHA v3 when a site key is set.
 
+## Added after review: compact add button, "Most ordered", combo deals
+
+- **Compact add control**: product cards use a 48 px round green "+" (accessible name "Add to cart: <item>",
+  in-cart count badge) instead of the labelled button.
+- **Most ordered**: owners/managers toggle it per product (editor checkbox or the star on the catalog list;
+  callable `setProductMostOrdered`); customers see the green label above the name.
+- **Combo deals**: owners bundle any unit-priced items of a branch with quantities and a 1–90 % discount
+  (`saveCombo`, `setComboArchived`, `setComboImage`). Prices are never stored on the combo: the server sums
+  the members' *current* prices at quote/placement, so catalog changes flow through and a stale client price
+  is refused with `price_changed`. Member stock is reserved/released per bundled unit. Combo lines snapshot
+  the members and discount on the order and print them on tickets. Revisions may remove a combo line but not
+  re-quantify it. Promoted combos appear in a Deals rail at the top of the storefront.
+- **Promo image**: composed entirely on the owner's device from the item photos with the discount badge
+  (`apps/web/src/deals/promoImage.ts`); only the final JPEG is uploaded. The optional "cut out backgrounds"
+  step runs an on-device segmentation model (`@huggingface/transformers`, `briaai/RMBG-1.4` quantized,
+  ~44 MB one-time download, WASM in the browser). RMBG-1.4 is not a pipeline-supported architecture, so it
+  is driven as a "custom" `AutoModel` + `AutoProcessor` exactly as the transformers.js docs describe.
+  **Verified 2026-09-14 in Chromium against the emulators**: ~12 s first load, ~20 s per 1200 px photo, clean
+  cutouts on plated food and a can; any failure falls back to the plain compositor with a visible notice.
+  The runtime chunk (~0.5 MB) is loaded on demand and excluded from the service-worker precache.
+- **Deals page**: one dashboard page (`deals`) holds combos and the text promotions; `promotions` redirects there.
+- Tests: shared combo pricing (2 new), functions `combos.test.ts` (3 new: most-ordered permissions, combo
+  validation/projection, combo order pricing + member stock + rejection release), browser check of the
+  deals rail, combo sheet, cart totals and the editor's generator.
+
 ## Blocked / not done here
 | Item | Why | What is needed |
 |---|---|---|

@@ -5,7 +5,7 @@ import { Alert, Badge, Button, Checkbox, ConfirmDialog, Dialog, EmptyState, Icon
 import { Icon } from '@/design/Icon';
 import { call } from '@/lib/api';
 import { errorKey } from '@/lib/errors';
-import { PageTitle, useDash } from './shell';
+import { useDash } from './shell';
 import { LocalizedInput } from './LocalizedInput';
 import { formatDay, promotionExpired } from '@/lib/promotions';
 
@@ -13,14 +13,14 @@ interface Draft { title: Localized; body: Localized; endsAt: string; active: boo
 const emptyDraft = (): Draft => ({ title: {}, body: {}, endsAt: '', active: true });
 const draftOf = (p: Promotion): Draft => ({ title: p.title, body: p.body, endsAt: p.endsAt ?? '', active: p.active });
 
-export function PromotionsPage() {
+export function PromotionsSection() {
   const t = useT();
   const { L } = useI18n();
   const { business, can } = useDash();
   const [edit, setEdit] = useState<{ id?: string; draft: Draft } | null>(null);
   const [remove, setRemove] = useState<Promotion | null>(null);
   const [busy, setBusy] = useState(false);
-  if (!can('settings')) return <EmptyState icon="shield" title={t('error.forbidden')} />;
+  if (!can('settings')) return null;
   const list = [...(business.promotions ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
   const full = list.length >= MAX_PROMOTIONS;
 
@@ -54,10 +54,11 @@ export function PromotionsPage() {
   };
 
   return (
-    <div className="stack">
-      <PageTitle title={t('promotions.title')}>
+    <section className="stack" aria-labelledby="promotions-h">
+      <div className="row row--between">
+        <h2 id="promotions-h">{t('promotions.title')}</h2>
         <Button size="sm" icon="plus" disabled={full} onClick={() => setEdit({ draft: emptyDraft() })}>{t('promotions.new')}</Button>
-      </PageTitle>
+      </div>
       <Alert tone="info">{t('promotions.help', { max: MAX_PROMOTIONS })}</Alert>
       {full ? <Alert tone="warn">{t('promotions.limit', { max: MAX_PROMOTIONS })}</Alert> : null}
       {list.length === 0 ? (
@@ -106,6 +107,6 @@ export function PromotionsPage() {
         ) : null}
       </Dialog>
       <ConfirmDialog open={!!remove} onClose={() => setRemove(null)} onConfirm={confirmRemove} title={t('promotions.removeConfirm')} body={remove ? L(remove.title, business.defaultLocale) : undefined} confirmLabel={t('common.remove')} danger loading={busy} />
-    </div>
+    </section>
   );
 }

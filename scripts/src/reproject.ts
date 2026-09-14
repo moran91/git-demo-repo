@@ -3,7 +3,7 @@
  * functions bundle so the seed does not need the functions runtime.
  */
 import type { Firestore } from 'firebase-admin/firestore';
-import type { Branch, Business, Category, Product } from '@qareeb/shared';
+import type { Branch, Business, Category, Combo, Product } from '@qareeb/shared';
 
 function visible(b: Business, br: Branch): boolean {
   return b.approval === 'approved' && br.approval === 'approved';
@@ -28,6 +28,8 @@ export async function reprojectBusinessSeed(db: Firestore, businessId: string): 
       continue;
     }
     batch.set(ref, { id: br.id, businessId: b.id, type: b.type, name: br.name, businessName: b.name, businessDefaultLocale: b.defaultLocale, logoPath: b.logoPath, coverPath: b.coverPath, cityId: br.cityId, locationDescription: br.locationDescription, lat: br.lat, lng: br.lng, phone: br.phone, hours: br.hours, hoursOverrides: br.hoursOverrides, pickupEnabled: br.pickupEnabled, deliveryEnabled: br.deliveryEnabled, deliveryCities: br.deliveryCities, deliveryCityIds: br.deliveryEnabled ? br.deliveryCities.map((c) => c.cityId) : [], ordersPaused: br.ordersPaused, visible: true, updatedAt: now });
+    const combos = await d.ref.collection('combos').get();
+    for (const c of combos.docs) { const combo = c.data() as Combo; if (!combo.archived && combo.active) batch.set(ref.collection('combos').doc(combo.id), combo); }
     const cats = await d.ref.collection('categories').get();
     const prods = await d.ref.collection('products').get();
     for (const c of cats.docs) {

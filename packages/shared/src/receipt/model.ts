@@ -139,6 +139,12 @@ export function buildOrderReceipt(order: Order, opts: BuildReceiptOptions): Rece
     }
     const variant = line.variantName ? ` (${resolveLocalized(line.variantName, L)})` : '';
     blocks.push({ kind: 'row', start: `${label}${qtyText} ${name(line)}${variant}`, end: line.removed ? '' : formatILSPlain(line.lineTotalAgorot), size: 'md', bold: !line.removed, endDir: 'ltr' });
+    if (line.comboItems) {
+      for (const ci of line.comboItems) {
+        blocks.push({ kind: 'row', start: `  ${ci.quantity * line.quantity} × ${resolveLocalized(ci.name, L)}${ci.variantName ? ` (${resolveLocalized(ci.variantName, L)})` : ''}`, end: '', size: 'sm' });
+      }
+      if (line.comboDiscountPercent) blocks.push({ kind: 'text', text: `  -${line.comboDiscountPercent}%`, size: 'sm' });
+    }
     for (const m of line.modifiers) {
       blocks.push({ kind: 'row', start: `  + ${resolveLocalized(m.optionName, L)}${placementSuffix(m.placement, t)}`, end: m.priceDeltaAgorot ? formatILSPlain(m.priceDeltaAgorot) : '', size: 'sm', endDir: 'ltr' });
     }

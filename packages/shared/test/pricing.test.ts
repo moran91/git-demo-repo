@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampRedemption, computeTotals, maxLoyaltyDiscount, pointsEarned, priceLine, resolveModifiers } from '../src/pricing.js';
+import { clampRedemption, comboTotal, computeTotals, maxLoyaltyDiscount, pointsEarned, priceComboLine, priceLine, resolveModifiers } from '../src/pricing.js';
 import { weightLineTotal, formatILSPlain } from '../src/money.js';
 import type { Product } from '../src/types.js';
 import { normalizePlacement } from '../src/placement.js';
@@ -114,5 +114,25 @@ describe('legacy placement values', () => {
     expect(normalizePlacement('right')).toBe('tr+br');
     expect(toppingPlacementSchema.safeParse('right').success).toBe(true);
     expect(toppingPlacementSchema.safeParse('middle').success).toBe(false);
+  });
+});
+
+describe('combo pricing', () => {
+  const shawarma: Product = { ...base, id: 'p-shawarma', priceAgorot: 3500 };
+  const fries: Product = { ...base, id: 'p-fries', priceAgorot: 1200, trackInventory: true, stockQty: 5 };
+  const products = new Map([[shawarma.id, shawarma], [fries.id, fries]]);
+  const combo = { id: 'combo1', businessId: 'biz', branchId: 'b1', name: { en: 'Two + fries' }, description: {}, items: [{ productId: 'p-shawarma', quantity: 2 }, { productId: 'p-fries', quantity: 1 }], discountPercent: 15, promoted: true, active: true, archived: false, sortOrder: 0, createdAt: '', updatedAt: '' };
+  it('applies the percentage to the current member prices with floor rounding', () => {
+    expect(comboTotal(8200, 15, 1)).toBe(6970);
+    const r = priceComboLine(combo, products, { lineId: 'c', productId: 'combo1', comboId: 'combo1', modifiers: [], quantity: 2, expectedUnitPriceAgorot: 6970 });
+    expect(r.line?.lineTotalAgorot).toBe(13940);
+    expect(r.line?.comboItems?.map((i) => [i.productId, i.quantity, i.trackInventory])).toEqual([['p-shawarma', 2, false], ['p-fries', 1, true]]);
+    expect(r.line?.comboDiscountPercent).toBe(15);
+  });
+  it('flags stale prices and unavailable members', () => {
+    expect(priceComboLine(combo, products, { lineId: 'c', productId: 'combo1', comboId: 'combo1', modifiers: [], quantity: 1, expectedUnitPriceAgorot: 8200 }).problem).toMatchObject({ code: 'price_changed', actual: 6970 });
+    const off = new Map(products); off.set('p-fries', { ...fries, available: false });
+    expect(priceComboLine(combo, off, { lineId: 'c', productId: 'combo1', comboId: 'combo1', modifiers: [], quantity: 1, expectedUnitPriceAgorot: 6970 }).problem?.code).toBe('item_unavailable');
+    expect(priceComboLine({ ...combo, active: false }, products, { lineId: 'c', productId: 'combo1', comboId: 'combo1', modifiers: [], quantity: 1, expectedUnitPriceAgorot: 6970 }).problem?.code).toBe('item_unavailable');
   });
 });

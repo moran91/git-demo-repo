@@ -60,8 +60,8 @@ export function CartPage() {
               <StorageImage path={meta?.imagePath} alt={t('product.photoAlt', { name: L(meta?.name ?? {}, dl) })} square className="cart-line__img" fallbackLabel={t('discovery.imageFallback')} onClick={() => meta?.imagePath && setPhoto({ path: meta.imagePath, alt: t('product.photoAlt', { name: L(meta.name, dl) }) })} />
               <div className="cart-line__body">
                 <div className="cart-line__head">
-                  <strong className="wrap-anywhere">{L(meta?.name ?? {}, dl)}{meta?.variantName ? ` · ${L(meta.variantName, dl)}` : ''}</strong>
-                  <IconButton icon="edit" size={18} label={`${t('common.edit')}: ${L(meta?.name ?? {}, dl)}`} onClick={() => setEditing(l)} />
+                  <strong className="wrap-anywhere">{meta?.isCombo ? <span className="badge badge--accent" style={{ marginInlineEnd: 6 }}>{t('deals.combo')} -{meta.discountPercent}%</span> : null}{L(meta?.name ?? {}, dl)}{meta?.variantName ? ` · ${L(meta.variantName, dl)}` : ''}</strong>
+                  {meta?.isCombo ? null : <IconButton icon="edit" size={18} label={`${t('common.edit')}: ${L(meta?.name ?? {}, dl)}`} onClick={() => setEditing(l)} />}
                   <IconButton icon="x" size={18} label={t('common.remove')} onClick={() => removeLine(l.lineId)} />
                 </div>
                 {meta?.modifierNames.length ? <div className="muted">{meta.modifierNames.map((m) => L(m, dl)).join(', ')}</div> : null}

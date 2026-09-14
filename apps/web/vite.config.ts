@@ -31,9 +31,10 @@ export default defineConfig({
       },
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,woff2,svg,png,webmanifest}'],
-        // The HEIC decoder is a ~2 MB chunk loaded only when a HEIC file is picked; precaching it
+        // The HEIC decoder is a ~2 MB chunk loaded only when a HEIC file is picked, and the on-device
+        // segmentation runtime (~0.5 MB) only when an owner generates a promo image; precaching either
         // would push it to every customer on install.
-        globIgnores: ['**/libheif-*.js'],
+        globIgnores: ['**/libheif-*.js', '**/transformers*.js', '**/ort*.js', '**/onnx*.js'],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
       },
       devOptions: { enabled: false },
