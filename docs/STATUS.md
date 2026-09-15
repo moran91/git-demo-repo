@@ -22,11 +22,11 @@ what remains blocked on external access or hardware._
   finalize trigger with the same fidelity as production — verify after first deploy.
 - **App Check**: wired for reCAPTCHA v3 when a site key is set.
 
-## Added after review: compact add button, "Most ordered", combo deals
+## Added after review: compact add button, "Best seller", combo deals
 
 - **Compact add control**: product cards use a 48 px round green "+" (accessible name "Add to cart: <item>",
   in-cart count badge) instead of the labelled button.
-- **Most ordered**: owners/managers toggle it per product (editor checkbox or the star on the catalog list;
+- **Best seller**: owners/managers toggle it per product (editor checkbox or the star on the catalog list;
   callable `setProductMostOrdered`); customers see the green label above the name.
 - **Combo deals**: owners bundle any unit-priced items of a branch with quantities and a 1–90 % discount
   (`saveCombo`, `setComboArchived`, `setComboImage`). Prices are never stored on the combo: the server sums
