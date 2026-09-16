@@ -1,16 +1,9 @@
 /**
- * Local promo-image generator for combo deals.
+ * Local promo-image generator for combos.
  *
- * Everything runs in the owner's browser: the item photos are fetched, optionally cut out with an
- * on-device segmentation model, composed on a canvas with the brand palette and the discount badge,
- * and only the final image is uploaded when the owner saves. No server-side image service exists.
- *
- * Two stages:
- *  1. `composePromo` — deterministic canvas compositor. Always available.
- *  2. `cutoutWithLocalModel` — optional background removal with `@huggingface/transformers`
- *     (`briaai/RMBG-1.4`, quantized ONNX, runs via WASM in the browser, weights cached by the browser
- *     after a one-time ~44 MB download). It is loaded lazily and any failure falls back to stage 1.
- *     Verified 2026-09-14 in Chromium: ~12 s first load, ~20 s per 1200 px photo.
+ * Everything runs in the owner's browser: the item photos are fetched and composed on a canvas with
+ * the brand palette, the combo price sticker and the title; only the final image is uploaded when
+ * the owner saves. No server-side image service exists and no model is downloaded.
  */
 export interface PromoSource {
   /** Object URL / https URL of the item photo, or undefined when the item has no photo. */
@@ -24,28 +17,28 @@ export interface PromoSource {
 export interface PromoOptions {
   width?: number;
   height?: number;
-  discountPercent: number;
   title: string;
+  /** Text of the round sticker at the start corner (the combo price). */
+  stickerText: string;
+  /** Text of the pill above the title (the "Combo" label). */
   badgeText: string;
-  /** Try the on-device background-removal model. */
-  cutout?: boolean;
-  onProgress?: (stage: 'loading' | 'cutout' | 'compose', detail?: string) => void;
+  onProgress?: (stage: 'compose') => void;
   dir?: 'rtl' | 'ltr';
 }
 
 export interface PromoResult {
   blob: Blob;
   dataUrl: string;
-  cutoutUsed: boolean;
-  cutoutError?: string;
 }
 
-const BG = '#FAF7F0';
 const SURFACE = '#FFFEFA';
 const GREEN = '#20583B';
-const TEXT = '#193E2D';
-const ACCENT = '#924220';
+const DEEP = '#143324';
+const ACCENT = '#B5522A';
 const SOFT = '#EDF2E4';
+const FONT = '"Noto Sans Hebrew", "Noto Sans Arabic", "Noto Sans", sans-serif';
+/** Most photos that fit on a 16:9 card and still read at thumbnail size. */
+const MAX_TILES = 8;
 
 async function loadImage(url: string): Promise<HTMLImageElement> {
   const img = new Image();
@@ -57,63 +50,6 @@ async function loadImage(url: string): Promise<HTMLImageElement> {
     img.src = url;
   });
   return img;
-}
-
-/**
- * The model is loaded once per page and reused: the ~44 MB quantized weights come from the Hugging
- * Face CDN on first use and are then held in the browser's cache storage by transformers.js.
- */
-let modelPromise: Promise<{ model: (input: { input: unknown }) => Promise<{ output: { mul: (n: number) => { to: (t: string) => unknown } }[] }>; processor: (img: unknown) => Promise<{ pixel_values: unknown }>; RawImage: typeof import('@huggingface/transformers').RawImage }> | null = null;
-
-async function loadLocalModel(onProgress?: PromoOptions['onProgress']) {
-  if (!modelPromise) {
-    modelPromise = (async () => {
-      const { AutoModel, AutoProcessor, RawImage } = await import('@huggingface/transformers');
-      // RMBG-1.4 is not a pipeline-supported architecture; it is driven as a "custom" model exactly as
-      // documented by transformers.js. The processor config mirrors the model card (1024², mean 0.5).
-      const model = await AutoModel.from_pretrained('briaai/RMBG-1.4', {
-        config: { model_type: 'custom' },
-        dtype: 'q8',
-        progress_callback: (p: { status: string; file?: string; progress?: number }) => {
-          if (p.status === 'progress' && p.file?.endsWith('.onnx')) onProgress?.('loading', `${Math.round(p.progress ?? 0)}%`);
-        },
-      } as never);
-      const processor = await AutoProcessor.from_pretrained('briaai/RMBG-1.4', {
-        config: { do_normalize: true, do_pad: false, do_rescale: true, do_resize: true, image_mean: [0.5, 0.5, 0.5], feature_extractor_type: 'ImageFeatureExtractor', image_std: [1, 1, 1], resample: 2, rescale_factor: 1 / 255, size: { width: 1024, height: 1024 } },
-      } as never);
-      return { model: model as never, processor: processor as never, RawImage };
-    })();
-    modelPromise.catch(() => { modelPromise = null; });
-  }
-  return modelPromise;
-}
-
-/**
- * Optional on-device cutout. Returns a canvas with transparent background, or null when the model
- * cannot be loaded/run (offline, unsupported browser, model host unreachable).
- */
-export async function cutoutWithLocalModel(img: HTMLImageElement, onProgress?: PromoOptions['onProgress']): Promise<HTMLCanvasElement | null> {
-  try {
-    onProgress?.('loading', 'model');
-    const { model, processor, RawImage } = await loadLocalModel(onProgress);
-    onProgress?.('cutout');
-    const raw = await RawImage.fromURL(img.src);
-    const { pixel_values } = await processor(raw);
-    const { output } = await model({ input: pixel_values });
-    const mask = await RawImage.fromTensor(output[0]!.mul(255).to('uint8') as never).resize(raw.width, raw.height);
-    const c = document.createElement('canvas');
-    c.width = raw.width;
-    c.height = raw.height;
-    const ctx = c.getContext('2d')!;
-    ctx.drawImage(img, 0, 0, raw.width, raw.height);
-    const id = ctx.getImageData(0, 0, c.width, c.height);
-    const m = mask.data;
-    for (let i = 0, n = c.width * c.height; i < n; i++) id.data[i * 4 + 3] = m[i] ?? 255;
-    ctx.putImageData(id, 0, 0);
-    return c;
-  } catch {
-    return null;
-  }
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, radius: number) {
@@ -128,18 +64,128 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath();
 }
 
-function drawCover(ctx: CanvasRenderingContext2D, src: CanvasImageSource, sw: number, sh: number, x: number, y: number, w: number, h: number, radius: number, contain: boolean) {
+type Rect = { x: number; y: number; w: number; h: number };
+type Tile = { src: CanvasImageSource | null; sw: number; sh: number; label: string; quantity: number };
+
+/**
+ * Full-bleed mosaic: 1 photo fills the frame, 2 split it, 3 is one tall photo beside two stacked,
+ * 4+ is two rows with the extra tile on top. Photos are cropped to the cells, never letter-boxed.
+ */
+function mosaic(n: number, W: number, H: number, gap: number): Rect[] {
+  if (n <= 1) return [{ x: 0, y: 0, w: W, h: H }];
+  if (n === 2) { const w = (W - gap) / 2; return [{ x: 0, y: 0, w, h: H }, { x: w + gap, y: 0, w, h: H }]; }
+  if (n === 3) {
+    const w0 = Math.round(W * 0.58);
+    const w1 = W - w0 - gap;
+    const h = (H - gap) / 2;
+    return [{ x: 0, y: 0, w: w0, h: H }, { x: w0 + gap, y: 0, w: w1, h }, { x: w0 + gap, y: h + gap, w: w1, h }];
+  }
+  const top = Math.ceil(n / 2);
+  const bottom = n - top;
+  const h = (H - gap) / 2;
+  const row = (count: number, y: number) => { const w = (W - gap * (count - 1)) / count; return Array.from({ length: count }, (_, i) => ({ x: i * (w + gap), y, w, h })); };
+  return [...row(top, 0), ...row(bottom, h + gap)];
+}
+
+function drawCover(ctx: CanvasRenderingContext2D, src: CanvasImageSource, sw: number, sh: number, r: Rect) {
   ctx.save();
-  roundRect(ctx, x, y, w, h, radius);
+  ctx.beginPath();
+  ctx.rect(r.x, r.y, r.w, r.h);
   ctx.clip();
-  const scale = contain ? Math.min(w / sw, h / sh) * 0.92 : Math.max(w / sw, h / sh);
+  const scale = Math.max(r.w / sw, r.h / sh);
   const dw = sw * scale;
   const dh = sh * scale;
-  ctx.drawImage(src, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+  ctx.drawImage(src, r.x + (r.w - dw) / 2, r.y + (r.h - dh) / 2, dw, dh);
   ctx.restore();
 }
 
-/** Composes the promo image. Layout adapts to 1–4+ photos; items without photos get a labelled tile. */
+/** Ellipsis-truncates `text` to `maxW` in the current font. */
+function fit(ctx: CanvasRenderingContext2D, text: string, maxW: number): string {
+  if (ctx.measureText(text).width <= maxW) return text;
+  let s = text;
+  while (s.length > 1 && ctx.measureText(`${s}…`).width > maxW) s = s.slice(0, -1);
+  return `${s.trimEnd()}…`;
+}
+
+/** Greedy word wrap to at most `maxLines` lines; the last line is ellipsised when text remains. */
+function wrap(ctx: CanvasRenderingContext2D, text: string, maxW: number, maxLines: number): string[] {
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let cur = '';
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i]!;
+    const cand = cur ? `${cur} ${w}` : w;
+    if (ctx.measureText(cand).width <= maxW || !cur) { cur = cand; continue; }
+    lines.push(cur);
+    cur = w;
+    if (lines.length === maxLines - 1) { lines.push(fit(ctx, [cur, ...words.slice(i + 1)].join(' '), maxW)); return lines; }
+  }
+  if (cur) lines.push(fit(ctx, cur, maxW));
+  return lines;
+}
+
+/** Rounded sticker with the combo price, tilted like a price tag, with a soft shadow and an inner ring. */
+function drawSticker(ctx: CanvasRenderingContext2D, cx: number, cy: number, d: number, text: string, rtl: boolean) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(((rtl ? 8 : -8) * Math.PI) / 180);
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+  ctx.shadowBlur = d * 0.18;
+  ctx.shadowOffsetY = d * 0.06;
+  ctx.fillStyle = ACCENT;
+  ctx.beginPath();
+  ctx.arc(0, 0, d / 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+  ctx.lineWidth = Math.max(2, d * 0.018);
+  ctx.setLineDash([d * 0.05, d * 0.035]);
+  ctx.beginPath();
+  ctx.arc(0, 0, d / 2 - d * 0.075, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.direction = 'ltr';
+  let size = Math.round(d * 0.36);
+  ctx.font = `600 ${size}px "Noto Sans", sans-serif`;
+  while (ctx.measureText(text).width > d * 0.78 && size > 12) { size -= 2; ctx.font = `600 ${size}px "Noto Sans", sans-serif`; }
+  ctx.fillText(text, 0, d * 0.02);
+  ctx.restore();
+}
+
+function drawPill(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, size: number, fill: string, color: string, rtl: boolean): number {
+  ctx.font = `600 ${size}px ${FONT}`;
+  const padX = size * 0.7;
+  const w = ctx.measureText(text).width + padX * 2;
+  const h = size * 1.7;
+  const px = rtl ? x - w : x;
+  ctx.fillStyle = fill;
+  roundRect(ctx, px, y, w, h, 999);
+  ctx.fill();
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, px + w / 2, y + h / 2);
+  return w;
+}
+
+/**
+ * Makes sure the brand web fonts are usable on the canvas before any text is measured. Canvas text
+ * does not trigger font loading, so a weight the page has not shown yet would silently fall back.
+ */
+async function ensureFonts(sample: string) {
+  try {
+    await Promise.all([`600 40px "Noto Sans Hebrew"`, `600 40px "Noto Sans Arabic"`, `600 40px "Noto Sans"`, `500 40px "Noto Sans"`].map((f) => document.fonts.load(f, sample)));
+  } catch { /* fall back to whatever the browser has */ }
+}
+
+/**
+ * Composes the promo image (16:9): the item photos fill the whole frame as a mosaic untouched
+ * (no colour wash), with a short neutral scrim plus text shadows so the white title and the item
+ * list read on any picture, and the tilted price sticker at the start corner.
+ */
 export async function composePromo(sources: PromoSource[], opts: PromoOptions): Promise<PromoResult> {
   const W = opts.width ?? 1600;
   const H = opts.height ?? 900;
@@ -148,117 +194,101 @@ export async function composePromo(sources: PromoSource[], opts: PromoOptions): 
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext('2d')!;
-  ctx.direction = rtl ? 'rtl' : 'ltr';
-  // Background: warm cream with a soft green panel.
-  ctx.fillStyle = BG;
-  ctx.fillRect(0, 0, W, H);
-  const g = ctx.createLinearGradient(0, 0, W, H);
-  g.addColorStop(0, SOFT);
-  g.addColorStop(1, BG);
-  ctx.fillStyle = g;
-  roundRect(ctx, 40, 40, W - 80, H - 80, 48);
-  ctx.fill();
+  await ensureFonts(`${opts.title} ${opts.badgeText} ${opts.stickerText} ${sources.map((s) => s.label).join(' ')}`);
+  ctx.imageSmoothingQuality = 'high';
 
   opts.onProgress?.('compose');
-  let cutoutUsed = false;
-  let cutoutError: string | undefined;
-  const tiles: Array<{ src: CanvasImageSource | null; sw: number; sh: number; label: string; quantity: number; cut: boolean }> = [];
-  for (const s of sources) {
-    if (!s.url) { tiles.push({ src: null, sw: 1, sh: 1, label: s.label, quantity: s.quantity, cut: false }); continue; }
+  const tiles: Tile[] = [];
+  for (const s of sources.slice(0, MAX_TILES)) {
+    if (!s.url) { tiles.push({ src: null, sw: 1, sh: 1, label: s.label, quantity: s.quantity }); continue; }
     try {
       const img = await loadImage(s.url).catch((e) => (s.fallbackUrl ? loadImage(s.fallbackUrl) : Promise.reject(e)));
-      let src: CanvasImageSource = img;
-      let cut = false;
-      if (opts.cutout) {
-        const c = await cutoutWithLocalModel(img, opts.onProgress);
-        if (c) { src = c; cut = true; cutoutUsed = true; } else cutoutError = 'model_unavailable';
-      }
-      tiles.push({ src, sw: img.naturalWidth, sh: img.naturalHeight, label: s.label, quantity: s.quantity, cut });
+      tiles.push({ src: img, sw: img.naturalWidth, sh: img.naturalHeight, label: s.label, quantity: s.quantity });
     } catch {
-      tiles.push({ src: null, sw: 1, sh: 1, label: s.label, quantity: s.quantity, cut: false });
+      tiles.push({ src: null, sw: 1, sh: 1, label: s.label, quantity: s.quantity });
     }
   }
+  if (tiles.length === 0) tiles.push({ src: null, sw: 1, sh: 1, label: opts.title, quantity: 1 });
+  const pad = Math.round(W * 0.04);
+  const chipSize = Math.round(H * 0.034);
+  ctx.direction = rtl ? 'rtl' : 'ltr';
 
-  // Photo area occupies the start 62%, text panel the rest.
-  const areaW = Math.round(W * 0.62);
-  const areaX = rtl ? W - 60 - areaW : 60;
-  const areaY = 60;
-  const areaH = H - 120;
-  const n = Math.max(1, tiles.length);
-  const cols = n === 1 ? 1 : n <= 4 ? 2 : 3;
-  const rows = Math.ceil(n / cols);
-  const gap = 20;
-  const tw = (areaW - gap * (cols - 1)) / cols;
-  const th = (areaH - gap * (rows - 1)) / rows;
-  ctx.font = `600 ${Math.round(th * 0.12)}px "Noto Sans Hebrew", "Noto Sans Arabic", "Noto Sans", sans-serif`;
+  ctx.fillStyle = SURFACE;
+  ctx.fillRect(0, 0, W, H);
+
+  const chips: Array<{ x: number; y: number; text: string }> = [];
+  const rects = mosaic(tiles.length, W, H, 6);
   tiles.forEach((tile, i) => {
-    const cx = areaX + (i % cols) * (tw + gap);
-    const cy = areaY + Math.floor(i / cols) * (th + gap);
-    ctx.fillStyle = SURFACE;
-    roundRect(ctx, cx, cy, tw, th, 28);
-    ctx.fill();
-    if (tile.src) drawCover(ctx, tile.src, tile.sw, tile.sh, cx, cy, tw, th, 28, tile.cut);
+    const r = rects[i]!;
+    if (tile.src) drawCover(ctx, tile.src, tile.sw, tile.sh, r);
     else {
-      ctx.fillStyle = TEXT;
+      ctx.fillStyle = SOFT;
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.fillStyle = GREEN;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(tile.label, cx + tw / 2, cy + th / 2, tw - 40);
+      ctx.font = `600 ${Math.round(Math.min(r.h * 0.11, r.w * 0.08))}px ${FONT}`;
+      ctx.fillText(fit(ctx, tile.label, r.w * 0.8), r.x + r.w / 2, r.y + r.h / 2);
     }
-    // Quantity chip.
-    const chip = `×${tile.quantity}`;
-    ctx.font = `600 ${Math.round(th * 0.11)}px "Noto Sans", sans-serif`;
-    const cw = ctx.measureText(chip).width + 28;
-    const chx = rtl ? cx + 16 : cx + tw - cw - 16;
-    ctx.fillStyle = GREEN;
-    roundRect(ctx, chx, cy + 16, cw, Math.round(th * 0.16), 999);
-    ctx.fill();
-    ctx.fillStyle = SURFACE;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(chip, chx + cw / 2, cy + 16 + Math.round(th * 0.08));
+    if (tile.quantity > 1) chips.push({ x: rtl ? r.x + 18 : r.x + r.w - 18, y: r.y + 18, text: `×${tile.quantity}` });
   });
+  // A short, neutral scrim under the text block only (never a coloured band): the photos keep
+  // their own colours and the white text still reads on a bright picture.
+  const scrimTop = H * 0.62;
+  const g = ctx.createLinearGradient(0, scrimTop, 0, H);
+  g.addColorStop(0, 'rgba(0, 0, 0, 0)');
+  g.addColorStop(0.5, 'rgba(0, 0, 0, 0.22)');
+  g.addColorStop(1, 'rgba(0, 0, 0, 0.5)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, scrimTop, W, H - scrimTop);
 
-  // Text panel.
-  const px = rtl ? 60 : areaX + areaW + 40;
-  const pw = W - areaW - 160;
-  const align = rtl ? 'right' : 'left';
-  const tx = rtl ? px + pw : px;
-  ctx.textAlign = align;
-  ctx.textBaseline = 'top';
-  // Discount badge.
-  ctx.font = `600 ${Math.round(H * 0.16)}px "Noto Sans", sans-serif`;
-  const badge = `-${opts.discountPercent}%`;
-  const bw = ctx.measureText(badge).width + 60;
-  const bh = Math.round(H * 0.21);
-  const bx = rtl ? tx - bw : tx;
-  ctx.fillStyle = ACCENT;
-  roundRect(ctx, bx, 100, bw, bh, 32);
-  ctx.fill();
-  ctx.fillStyle = '#fff';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(badge, bx + bw / 2, 100 + bh / 2);
-  // Title (wrapped).
-  ctx.textAlign = align;
-  ctx.textBaseline = 'top';
-  ctx.fillStyle = TEXT;
-  const titleSize = Math.round(H * 0.075);
-  ctx.font = `600 ${titleSize}px "Noto Sans Hebrew", "Noto Sans Arabic", "Noto Sans", sans-serif`;
-  const words = opts.title.split(/\s+/);
-  const lines: string[] = [];
-  let cur = '';
-  for (const w of words) {
-    const cand = cur ? `${cur} ${w}` : w;
-    if (ctx.measureText(cand).width > pw && cur) { lines.push(cur); cur = w; } else cur = cand;
+  // Quantity chips (only where more than one of an item is included), on the corner opposite the
+  // sticker: `ch.x` is the chip's left edge in RTL layouts and its right edge in LTR ones.
+  for (const ch of chips) {
+    ctx.direction = 'ltr';
+    drawPill(ctx, ch.x, ch.y, ch.text, chipSize, 'rgba(255, 254, 250, 0.94)', DEEP, !rtl);
   }
-  if (cur) lines.push(cur);
-  let ty = 100 + bh + 40;
-  for (const ln of lines.slice(0, 3)) { ctx.fillText(ln, tx, ty); ty += titleSize * 1.3; }
-  // Badge text (e.g. "Save 15%") in green.
-  ctx.fillStyle = GREEN;
-  ctx.font = `500 ${Math.round(H * 0.05)}px "Noto Sans Hebrew", "Noto Sans Arabic", "Noto Sans", sans-serif`;
-  ctx.fillText(opts.badgeText, tx, ty + 10);
+  ctx.direction = rtl ? 'rtl' : 'ltr';
 
-  const blob = await new Promise<Blob>((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('encode_failed'))), 'image/jpeg', 0.86));
-  return { blob, dataUrl: canvas.toDataURL('image/jpeg', 0.8), cutoutUsed, cutoutError };
+  // Price sticker at the top start corner.
+  const d = Math.round(H * 0.24);
+  drawSticker(ctx, rtl ? W - pad - d / 2 : pad + d / 2, pad + d / 2, d, opts.stickerText, rtl);
+  ctx.direction = rtl ? 'rtl' : 'ltr';
+
+  // Bottom text block: badge pill, title, item list — laid out upward from the bottom edge.
+  const tx = rtl ? W - pad : pad;
+  const maxW = W - pad * 2;
+  ctx.textAlign = rtl ? 'right' : 'left';
+  ctx.textBaseline = 'alphabetic';
+  let y = H - pad;
+  const itemsSize = Math.round(H * 0.038);
+  ctx.font = `500 ${itemsSize}px ${FONT}`;
+  const items = tiles.map((tl) => (tl.quantity > 1 ? `${tl.quantity}× ${tl.label}` : tl.label)).filter((s) => s.trim()).join('  ·  ');
+  if (items) {
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetY = 2;
+    ctx.fillText(fit(ctx, items, maxW), tx, y);
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+    y -= itemsSize * 1.5;
+  }
+  const titleSize = Math.round(H * 0.085);
+  ctx.font = `600 ${titleSize}px ${FONT}`;
+  const lines = wrap(ctx, opts.title, maxW, 2);
+  ctx.fillStyle = '#fff';
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+  ctx.shadowBlur = 20;
+  ctx.shadowOffsetY = 3;
+  for (let i = lines.length - 1; i >= 0; i--) { ctx.fillText(lines[i]!, tx, y); y -= titleSize * 1.18; }
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
+  const pillSize = Math.round(H * 0.04);
+  drawPill(ctx, tx, y - pillSize * 1.7 + titleSize * 0.18, opts.badgeText, pillSize, ACCENT, '#fff', rtl);
+
+  const blob = await new Promise<Blob>((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('encode_failed'))), 'image/jpeg', 0.88));
+  return { blob, dataUrl: canvas.toDataURL('image/jpeg', 0.8) };
 }
