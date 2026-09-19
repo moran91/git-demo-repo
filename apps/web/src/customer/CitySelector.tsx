@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
 import type { City } from '@qareeb/shared';
 import { normalizeDigits } from '@qareeb/shared';
-import { Dialog, TextInput } from '@/design/components';
+import { Dialog, TextInput, Button, Alert } from '@/design/components';
 import { useI18n, useT } from '@/lib/i18n';
 import { useCities } from './hooks';
 
-export function CitySelector({ open, onClose, value, onSelect }: { open: boolean; onClose: () => void; value: string; onSelect: (c: City) => void }) {
+export function CitySelector({ open, onClose, value, onSelect, location }: { location?: { busy: boolean; error: string | null; detect: () => Promise<boolean | null> }; open: boolean; onClose: () => void; value: string; onSelect: (c: City) => void }) {
   const t = useT();
   const { L } = useI18n();
   const { cities, loading, error } = useCities();
@@ -18,6 +18,7 @@ export function CitySelector({ open, onClose, value, onSelect }: { open: boolean
   return (
     <Dialog open={open} onClose={onClose} title={t('discovery.citySelectorTitle')}>
       <div className="stack">
+        {location ? <><Button variant="secondary" icon="pin" loading={location.busy} disabled={loading || !!error} onClick={() => { void location.detect().then((ok) => { if (ok) onClose(); }); }}>{t(location.busy ? 'location.finding' : 'location.use')}</Button><p className="muted">{t('location.hint')}</p>{location.error ? <Alert tone="warn">{location.error}</Alert> : null}</> : null}
         <TextInput label={t('discovery.citySearch')} value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
         {loading ? <div className="skeleton" style={{ height: 48 }} /> : null}
         {error ? <p className="muted" role="alert">{t('common.errorGeneric')}</p> : null}

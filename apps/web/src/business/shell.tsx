@@ -1,17 +1,19 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Link, NavLink, Outlet, useNavigate, useParams } from 'react-router';
+import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import type { Branch, Business, Membership, MembershipRole, Order } from '@qareeb/shared';
 import { BRAND } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
 import { useCollection, useDoc, where, limit, orderBy } from '@/lib/queries';
 import { BrandMark, Icon, type IconName } from '@/design/Icon';
-import { Badge, Button, IconButton, Skeleton, EmptyState, toast } from '@/design/components';
+import { Badge, Button, IconButton, Skeleton, EmptyState, toast, ConfirmDialog } from '@/design/components';
 import { LanguageSelect, OfflineBanner, UpdateBanner } from '@/app/Shell';
 import { call } from '@/lib/api';
+import { useOpenState } from '@/customer/hooks';
 import { errorKey } from '@/lib/errors';
+import { LoadError, useConfirmNavigation } from './BusinessExperience';
 
 export interface DashCtx {
   business: Business;
@@ -46,16 +48,20 @@ export function useDash(): DashCtx {
 export function DashboardShell() {
   const t = useT();
   const { L, dir } = useI18n();
-  const { user, memberships, isAdmin, loading, signOut } = useAuth();
+  const { user, memberships, membershipsError, isAdmin, loading, signOut } = useAuth();
   const { businessId, branchId } = useParams();
   const navigate = useNavigate();
   const [drawer, setDrawer] = useState(false);
+  const drawerRef = useRef<HTMLDialogElement>(null);
+  const location = useLocation();
+  const confirmNavigation = useConfirmNavigation();
   const membership = memberships.find((m) => m.businessId === businessId) ?? null;
   const allowed = isAdmin || !!membership;
   const business = useDoc<Business>(allowed && businessId ? `businesses/${businessId}` : null);
   const branchesQ = useBranches(allowed ? businessId ?? null : null, membership, isAdmin);
   const branches = branchesQ.data;
   const branch = branches.find((b) => b.id === branchId) ?? null;
+  const openState = useOpenState(branch);
   const placed = useCollection<Order>(branch ? 'orders' : null, [where('businessId', '==', businessId ?? '_'), where('branchId', '==', branch?.id ?? '_'), where('status', '==', 'placed'), limit(50)], [branch?.id]);
   useEffect(() => {
     // No branch in the URL, or a branch this membership does not cover → first permitted branch.
@@ -67,13 +73,17 @@ export function DashboardShell() {
     if (!loading && !user) navigate('/business/signin', { replace: true });
   }, [loading, user, navigate]);
   useEffect(() => {
-    if (!drawer) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setDrawer(false); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    if (!drawer || !drawerRef.current) return;
+    const dialog = drawerRef.current;
+    const opener = document.activeElement as HTMLElement | null;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    dialog.showModal();
+    return () => { dialog.close(); document.body.style.overflow = overflow; opener?.focus(); };
   }, [drawer]);
   if (loading || business.loading || branchesQ.loading) return <div className="page stack" aria-busy="true"><Skeleton height={40} /><Skeleton height={200} radius={16} /></div>;
   if (!user) return null;
+  if (membershipsError || business.error || branchesQ.error) return <main className="page"><LoadError /></main>;
   if (!allowed || !business.data) return <main className="page"><EmptyState icon="store" title={t('error.forbidden')} action={<Link className="btn btn--secondary" to="/business">{t('common.back')}</Link>} /></main>;
   if (branches.length === 0) return <main className="page stack"><h1>{L(business.data.name, business.data.defaultLocale)}</h1><EmptyState icon="building" title={t('dash.branches')} body={t('bizProfile.created')} action={membership?.role === 'owner' || isAdmin ? <Link className="btn btn--primary" to={`/business/${businessId}/_/branches/new`}>{t('branch.new')}</Link> : undefined} /></main>;
   if (!branch) return null;
@@ -114,7 +124,7 @@ export function DashboardShell() {
         <span className="dash__identity-mark" aria-hidden="true">{bizName.trim().charAt(0)}</span>
         <span className="dash__identity-text">
           <strong className="truncate">{bizName}</strong>
-          <span className="truncate muted">{L(branch.name, business.data!.defaultLocale)} · {branch.ordersPaused ? t('dash.ordersPausedShort') : t('dash.acceptingOrders')}</span>
+          <span className="truncate muted">{L(branch.name, business.data!.defaultLocale)} · {branch.ordersPaused ? t('dash.ordersPausedShort') : branch.approval !== 'approved' || business.data!.approval !== 'approved' ? t(`admin.state.${branch.approval !== 'approved' ? branch.approval : business.data!.approval}`) : openState.open ? t('dash.acceptingOrders') : t('common.closed')}</span>
         </span>
       </div>
       <nav className="dash__nav" aria-label={t('nav.business')}>
@@ -135,24 +145,20 @@ export function DashboardShell() {
       </nav>
       <div className="dash__sidebar-foot">
         <LanguageSelect />
-        <button type="button" className="dash__signout" onClick={() => void signOut()}><Icon name="logout" size={20} directional /><span>{t('common.signOut')}</span></button>
+        <button type="button" className="dash__signout" onClick={() => { if (confirmNavigation()) void signOut().catch((e) => toast(t(errorKey(e)), 'danger')); }}><Icon name="logout" size={20} directional /><span>{t('common.signOut')}</span></button>
       </div>
     </>
   );
   return (
     <Ctx.Provider value={ctx}>
+      <a className="skip-link" href="#main">{t('common.skipToContent')}</a>
       <UpdateBanner />
       <div className="dash">
         <aside className="dash__sidebar">{sidebar(false)}</aside>
-        {drawer ? (
-          <>
-            <button type="button" className="drawer-backdrop" aria-label={t('common.close')} onClick={() => setDrawer(false)} />
-            <aside className="dash__sidebar dash__sidebar--drawer" style={dir === 'rtl' ? { right: 0, left: 'auto' } : { left: 0, right: 'auto' }} role="dialog" aria-modal="true" aria-label={t('common.menu')}>{sidebar(true)}</aside>
-          </>
-        ) : null}
+        {drawer ? <dialog ref={drawerRef} className="dash__sidebar dash__sidebar--drawer" style={dir === 'rtl' ? { right: 0, left: 'auto' } : { left: 0, right: 'auto' }} aria-label={t('common.menu')} onCancel={(event) => { event.preventDefault(); setDrawer(false); }}>{sidebar(true)}</dialog> : null}
         <header className="dash__header">
           <span style={{ display: 'contents' }} className="no-desktop">
-            <IconButton icon="menu" label={t('common.menu')} onClick={() => setDrawer(true)} className="dash__menu-btn" aria-expanded={drawer} />
+            <Button variant="secondary" icon="menu" onClick={() => setDrawer(true)} className="dash__menu-btn" aria-expanded={drawer} aria-haspopup="dialog">{t('common.menu')}</Button>
           </span>
           <BusinessSwitcher currentBusinessId={businessId!} />
           <div className="dash__header-end row">
@@ -162,15 +168,15 @@ export function DashboardShell() {
           {/* Zero-height flex item: on a phone the branch picker and the pause button get a full row of
               their own instead of wrapping at whatever point they happen to run out of space. */}
           <span className="dash__header-break" aria-hidden="true" />
-          <select className="select dash__branch" value={branch.id} aria-label={t('dash.switchBranch')} onChange={(e) => navigate(`/business/${businessId}/${e.target.value}/orders`)}>
+          <select className="select dash__branch" value={branch.id} aria-label={t('dash.switchBranch')} onChange={(e) => { const section = location.pathname.split('/')[4] ?? 'orders'; navigate(`/business/${businessId}/${e.target.value}/${section === 'orders' ? 'orders' : section}`); }}>
             {branches.map((b) => <option key={b.id} value={b.id}>{L(b.name, business.data!.defaultLocale)}</option>)}
           </select>
           <PauseControl />
         </header>
-        <main className="dash__main" id="main">
+        <main className="dash__main" id="main" tabIndex={-1}>
           <OfflineBanner />
           {branch.ordersPaused ? <div className="alert alert--warn" role="status" style={{ marginBottom: 16 }}><Icon name="clock" size={18} /> {t('dash.pausedBanner')}</div> : null}
-          <Outlet />
+          <div key={`${businessId}/${branch.id}`}><Outlet /></div>
         </main>
       </div>
       <style>{`@media (min-width: 900px) { .dash__menu-btn { display: none; } }`}</style>
@@ -183,31 +189,32 @@ export function DashboardShell() {
  * branch-limited membership cannot prove a collection query, so limited members read their permitted
  * branches document by document; owners/admins query the collection.
  */
-function useBranches(businessId: string | null, membership: Membership | null, isAdmin: boolean): { data: Branch[]; loading: boolean } {
+function useBranches(businessId: string | null, membership: Membership | null, isAdmin: boolean): { data: Branch[]; loading: boolean; error?: Error | null } {
   const limited = !!membership && !membership.allBranches && !isAdmin;
   const all = useCollection<Branch>(businessId && !limited ? `businesses/${businessId}/branches` : null, [orderBy('createdAt'), limit(30)], [businessId, limited]);
-  const [docs, setDocs] = useState<{ data: Branch[]; loading: boolean }>({ data: [], loading: limited });
+  const [docs, setDocs] = useState<{ key: string; data: Branch[]; loading: boolean; error?: Error }>({ key: '', data: [], loading: limited });
   const ids = membership?.branchIds.join(',') ?? '';
+  const key = `${businessId}:${ids}`;
   useEffect(() => {
     if (!businessId || !limited) return;
     const list = ids.split(',').filter(Boolean);
     if (list.length === 0) {
-      setDocs({ data: [], loading: false });
+      setDocs({ key, data: [], loading: false });
       return;
     }
     const map = new Map<string, Branch>();
-    let pending = list.length;
+    const pending = new Set(list);
     const unsubs = list.map((id) =>
       onSnapshot(doc(db, `businesses/${businessId}/branches/${id}`), (snap) => {
         if (snap.exists()) map.set(id, { id: snap.id, ...snap.data() } as Branch);
         else map.delete(id);
-        pending = Math.max(0, pending - 1);
-        setDocs({ data: list.map((x) => map.get(x)).filter((b): b is Branch => !!b), loading: pending > 0 });
-      }, () => { pending = Math.max(0, pending - 1); setDocs((s) => ({ ...s, loading: pending > 0 })); }),
+        pending.delete(id);
+        setDocs({ key, data: list.map((x) => map.get(x)).filter((b): b is Branch => !!b), loading: pending.size > 0 });
+      }, (error) => { pending.delete(id); setDocs({ key, data: [], loading: pending.size > 0, error }); }),
     );
     return () => unsubs.forEach((u) => u());
-  }, [businessId, limited, ids]);
-  return limited ? docs : all;
+  }, [businessId, limited, ids, key]);
+  return limited ? docs.key === key ? docs : { data: [], loading: true } : all;
 }
 
 function BusinessSwitcher({ currentBusinessId }: { currentBusinessId: string }) {
@@ -219,7 +226,7 @@ function BusinessSwitcher({ currentBusinessId }: { currentBusinessId: string }) 
   const businesses = useCollection<Business>(ids.length ? 'businesses' : null, [where('__name__', 'in', ids.slice(0, 10)), limit(10)], [ids.join(',')]);
   if (memberships.length <= 1) return <strong className="truncate" style={{ maxWidth: 220 }}>{businesses.data[0] ? L(businesses.data[0].name, businesses.data[0].defaultLocale) : ''}</strong>;
   return (
-    <select className="select" value={currentBusinessId} aria-label={t('dash.switchBusiness')} onChange={(e) => navigate(`/business/${e.target.value}`)}>
+    <select className="select" value={currentBusinessId} aria-label={t('dash.switchBusiness')} onChange={(e) => { navigate(`/business/${e.target.value}`); }}>
       {businesses.data.map((b) => <option key={b.id} value={b.id}>{L(b.name, b.defaultLocale)}</option>)}
     </select>
   );
@@ -229,12 +236,20 @@ function PauseControl() {
   const t = useT();
   const { business, branch, can } = useDash();
   const [busy, setBusy] = useState(false);
+  const [confirm, setConfirm] = useState(false);
+  const change = async () => {
+    setBusy(true);
+    try { await call('setOrdersPaused', { businessId: business.id, branchId: branch.id, paused: !branch.ordersPaused }); setConfirm(false); toast(t('common.saved')); }
+    catch (e) { toast(t(errorKey(e)), 'danger'); }
+    finally { setBusy(false); }
+  };
   if (!can('settings')) return null;
-  return (
-    <Button variant={branch.ordersPaused ? 'primary' : 'secondary'} icon={branch.ordersPaused ? 'refresh' : 'clock'} loading={busy} onClick={async () => { setBusy(true); try { await call('setOrdersPaused', { businessId: business.id, branchId: branch.id, paused: !branch.ordersPaused }); } catch (e) { toast(t(errorKey(e)), 'danger'); } finally { setBusy(false); } }}>
+  return <>
+    <Button variant={branch.ordersPaused ? 'primary' : 'secondary'} icon={branch.ordersPaused ? 'refresh' : 'clock'} loading={busy} onClick={() => { if (branch.ordersPaused) void change(); else setConfirm(true); }}>
       {branch.ordersPaused ? t('dash.resumeOrders') : t('dash.pauseOrders')}
     </Button>
-  );
+    <ConfirmDialog open={confirm} onClose={() => setConfirm(false)} onConfirm={change} loading={busy} title={t('owner.pauseConfirm')} body={t('owner.pauseBody')} confirmLabel={t('dash.pauseOrders')} />
+  </>;
 }
 
 export function PageTitle({ title, children }: { title: string; children?: ReactNode }) {

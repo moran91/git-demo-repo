@@ -83,10 +83,12 @@ fi
 # Keep any values the user already set that Firebase cannot tell us (VAPID key, App Check key).
 KEEP_VAPID="$(grep -s '^VITE_FCM_VAPID_KEY=' "$ENV_PROD" | cut -d= -f2- || true)"
 KEEP_APPCHECK="$(grep -s '^VITE_APPCHECK_SITE_KEY=' "$ENV_PROD" | cut -d= -f2- || true)"
+KEEP_TILES="$(grep -s '^VITE_MAP_TILE_URL=' "$ENV_PROD" | cut -d= -f2- || true)"
+KEEP_TILES_ATTR="$(grep -s '^VITE_MAP_TILE_ATTRIBUTION=' "$ENV_PROD" | cut -d= -f2- || true)"
 
-node - "$SCRATCH/sdk.json" "$ENV_PROD" "$REGION" "$KEEP_VAPID" "$KEEP_APPCHECK" <<'EOF'
+node - "$SCRATCH/sdk.json" "$ENV_PROD" "$REGION" "$KEEP_VAPID" "$KEEP_APPCHECK" "$KEEP_TILES" "$KEEP_TILES_ATTR" <<'EOF'
 const fs = require('node:fs');
-const [file, out, region, vapid, appcheck] = process.argv.slice(2);
+const [file, out, region, vapid, appcheck, tiles, tilesAttr] = process.argv.slice(2);
 const raw = fs.readFileSync(file, 'utf8');
 let cfg = null;
 try { const j = JSON.parse(raw); cfg = j.result?.sdkConfig ?? j.sdkConfig ?? j.result ?? j; } catch { /* not JSON */ }
@@ -111,10 +113,13 @@ fs.writeFileSync(out, [
   'VITE_USE_EMULATORS=0',
   `VITE_FCM_VAPID_KEY=${vapid}`,
   `VITE_APPCHECK_SITE_KEY=${appcheck}`,
+  `VITE_MAP_TILE_URL=${tiles}`,
+  `VITE_MAP_TILE_ATTRIBUTION=${tilesAttr}`,
   '',
 ].join('\n'));
 console.log(`    wrote ${out} for project ${cfg.projectId} (app ${cfg.appId})`);
 EOF
+[ -n "$KEEP_TILES" ] || warn "No VITE_MAP_TILE_URL: the map picker falls back to tile.openstreetmap.org, which OSMF does not allow for production apps. Add a keyed tile provider to $ENV_PROD."
 [ -n "$KEEP_VAPID" ] || warn "No VITE_FCM_VAPID_KEY: web push stays off (in-app inbox still works). Add it to $ENV_PROD and re-run to enable."
 
 # ---------------------------------------------------------------- 4. env.local

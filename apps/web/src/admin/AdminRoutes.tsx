@@ -18,6 +18,7 @@ import { AddressSummary } from '@/customer/AddressForm';
 
 function AdminShell() {
   const t = useT();
+  const { dir } = useI18n();
   const { user, isAdmin, loading, signOut } = useAuth();
   const navigate = useNavigate();
   const [drawer, setDrawer] = useState(false);
@@ -36,7 +37,6 @@ function AdminShell() {
     { to: '/admin/audit', icon: 'list', label: t('admin.audit') },
     { to: '/admin/config', icon: 'settings', label: t('admin.config') },
   ];
-  const { dir } = useI18n();
   const sidebar = (
     <>
       <Link to="/" className="brand"><BrandMark size={28} label={t('brand.logoLabel')} /><span className="brand__word">{BRAND.wordmark}</span></Link>

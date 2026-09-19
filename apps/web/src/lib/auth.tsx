@@ -12,6 +12,7 @@ interface AuthCtx {
   user: User | null;
   profile: UserProfile | null;
   memberships: Membership[];
+  membershipsError: Error | null;
   isAdmin: boolean;
   loading: boolean;
   refreshProfile: () => Promise<void>;
@@ -24,8 +25,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [memberships, setMemberships] = useState<Membership[]>([]);
+  const [membershipsError, setMembershipsError] = useState<Error | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [membershipUid, setMembershipUid] = useState<string | null>(null);
   /**
    * The token listener below is registered once, so a captured `locale` would be frozen at mount.
    * Firebase refreshes the ID token about hourly, and each refresh re-sends it to ensureProfile —
@@ -48,32 +51,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [locale]);
 
   useEffect(() => {
-    return onIdTokenChanged(auth, async (u) => {
+    let generation = 0;
+    const unsubscribe = onIdTokenChanged(auth, async (u) => {
+      const current = ++generation;
       setUser(u);
       if (!u) {
         setProfile(null);
         setMemberships([]);
+        setMembershipUid(null);
+        setMembershipsError(null);
         setIsAdmin(false);
         setLoading(false);
         return;
       }
-      const token = await u.getIdTokenResult();
-      setIsAdmin(token.claims.admin === true);
       try {
+        const token = await u.getIdTokenResult();
+        if (current !== generation) return;
+        setIsAdmin(token.claims.admin === true);
         const res = await call<{ profile: UserProfile }>('ensureProfile', { locale: localeRef.current });
+        if (current !== generation) return;
         setProfile(res.profile);
       } catch {
+        if (current !== generation) return;
         setProfile(null);
       }
       setLoading(false);
     });
+    return () => { generation++; unsubscribe(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (!user) return;
     const q = query(collection(db, 'memberships'), where('uid', '==', user.uid), where('active', '==', true));
-    return onSnapshot(q, (snap) => setMemberships(snap.docs.map((d) => d.data() as Membership)), () => setMemberships([]));
+    return onSnapshot(q, (snap) => { setMemberships(snap.docs.map((d) => d.data() as Membership)); setMembershipsError(null); setMembershipUid(user.uid); }, (error) => { setMemberships([]); setMembershipsError(error); setMembershipUid(user.uid); });
   }, [user]);
 
   const signOut = useCallback(async () => {
@@ -86,7 +97,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await fbSignOut(auth);
   }, []);
 
-  const value = useMemo(() => ({ user, profile, memberships, isAdmin: isAdmin && profile?.isAdmin === true, loading, refreshProfile, signOut }), [user, profile, memberships, isAdmin, loading, refreshProfile, signOut]);
+  const ready = !loading && (!user || membershipUid === user.uid);
+  const value = useMemo(() => ({ user, profile, membershipsError, memberships: ready ? memberships : [], isAdmin: isAdmin && profile?.isAdmin === true, loading: !ready, refreshProfile, signOut }), [user, profile, memberships, membershipsError, isAdmin, ready, refreshProfile, signOut]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

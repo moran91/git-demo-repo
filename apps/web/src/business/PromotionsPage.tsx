@@ -10,6 +10,7 @@ import { call } from '@/lib/api';
 import { errorKey, uploadErrorKey } from '@/lib/errors';
 import { UPLOAD_ACCEPT, prepareImageUpload, recordUpload } from '@/lib/images';
 import { useDash } from './shell';
+import { LoadError, useDraftSafety } from './BusinessExperience';
 import { LocalizedInput } from './LocalizedInput';
 import { ItemPickerDialog } from './ItemPicker';
 import { formatDay, promotionExpired } from '@/lib/promotions';
@@ -31,6 +32,7 @@ export function PromotionsSection({ products, categories }: { products: Product[
   const [remove, setRemove] = useState<Promotion | null>(null);
   const [busy, setBusy] = useState(false);
   if (!can('catalog')) return null;
+  if (promotions.error) return <LoadError />;
   const list = promotions.data;
   const full = list.length >= MAX_PROMOTIONS;
 
@@ -126,6 +128,7 @@ function PromotionEditor({ initial, products, categories, onClose }: { initial: 
   const { L } = useI18n();
   const { business, branch } = useDash();
   const [d, setD] = useState<Draft>(initial.draft);
+  const safety = useDraftSafety(d);
   const [promotionId, setPromotionId] = useState(initial.id);
   const [imagePath, setImagePath] = useState(initial.imagePath);
   const [mode, setMode] = useState<'edit' | 'pick'>('edit');
@@ -138,7 +141,7 @@ function PromotionEditor({ initial, products, categories, onClose }: { initial: 
   const featured = d.productIds.map((id) => products.find((p) => p.id === id)).filter((p): p is Product => !!p);
   const toggleProduct = (p: Product) => set({ productIds: d.productIds.includes(p.id) ? d.productIds.filter((id) => id !== p.id) : d.productIds.length >= 10 ? d.productIds : [...d.productIds, p.id] });
 
-  const save = async (): Promise<string | null> => {
+  const save = async (keepBusy = false): Promise<string | null> => {
     setError(null);
     setDateError(null);
     if (!hasAnyTranslation(d.title)) { setError(t('validation.atLeastOneLanguage')); return null; }
@@ -149,8 +152,9 @@ function PromotionEditor({ initial, products, categories, onClose }: { initial: 
       const r = await call<{ promotion: Promotion }>('savePromotion', { businessId: business.id, branchId: branch.id, promotionId, promotion: d });
       setPromotionId(r.promotion.id);
       toast(t('catalog.savedOk'));
+      safety.markSaved();
       return r.promotion.id;
-    } catch (e) { setError(t('catalog.saveFailed') + ' ' + t(errorKey(e))); return null; } finally { setBusy(false); }
+    } catch (e) { setError(t('catalog.saveFailed') + ' ' + t(errorKey(e))); return null; } finally { if (!keepBusy) setBusy(false); }
   };
 
   const upload = async (file: File) => {
@@ -158,7 +162,7 @@ function PromotionEditor({ initial, products, categories, onClose }: { initial: 
     setBusy(true);
     try {
       // The banner lives under the promotion's id, so a brand-new promotion is saved first.
-      const id = promotionId ?? (await save());
+      const id = promotionId ?? (await save(true));
       if (!id) return;
       const image = await prepareImageUpload(file);
       const path = `businesses/${business.id}/branches/${branch.id}/promotions/${id}/${makeId(10)}.${image.ext}`;
@@ -193,7 +197,7 @@ function PromotionEditor({ initial, products, categories, onClose }: { initial: 
   }
 
   return (
-    <Dialog open onClose={onClose} title={promotionId ? t('promotions.edit') : t('promotions.new')} closeLabel={t('common.close')} footer={<><Button variant="secondary" onClick={onClose}>{t('common.cancel')}</Button><Button loading={busy} onClick={async () => { if (await save()) onClose(); }}>{t('common.save')}</Button></>}>
+    <Dialog open onClose={() => { if (!busy && safety.confirmDiscard()) onClose(); }} title={promotionId ? t('promotions.edit') : t('promotions.new')} closeLabel={t('common.close')} footer={<><Button variant="secondary" disabled={busy} onClick={() => { if (safety.confirmDiscard()) onClose(); }}>{t('common.cancel')}</Button><Button loading={busy} onClick={async () => { if (await save()) onClose(); }}>{t('common.save')}</Button></>}>
       <div className="combo-editor">
         {error ? <Alert tone="danger">{error}</Alert> : null}
 

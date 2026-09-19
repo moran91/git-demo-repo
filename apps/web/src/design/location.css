@@ -1,0 +1,6 @@
+.location-map { height: clamp(240px, 42dvh, 420px); width: 100%; border-radius: 12px; border: 1px solid var(--color-border-strong); direction: ltr; z-index: 0; }
+.location-map .leaflet-control-zoom a { width: 48px; height: 48px; line-height: 48px; font-size: 28px; }
+.location-map .leaflet-control-attribution { font-size: 12px; max-width: 100%; }
+.location-marker { background: transparent; border: 0; }
+.location-marker span { display: block; width: 32px; height: 32px; margin-top: 3px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: #20583b; border: 3px solid white; box-shadow: 0 2px 8px #193e2d66; }
+.location-marker span::after { content: ''; position: absolute; width: 10px; height: 10px; border-radius: 50%; background: white; top: 8px; left: 8px; }

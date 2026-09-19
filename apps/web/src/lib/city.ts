@@ -5,5 +5,6 @@ import { createStore } from './store';
 export interface DiscoveryPrefs {
   cityId: string;
   kind: BusinessType;
+  locationEnabled?: boolean;
 }
 export const discoveryStore = createStore<DiscoveryPrefs>('discovery', { cityId: 'beit-jann', kind: 'restaurant' });

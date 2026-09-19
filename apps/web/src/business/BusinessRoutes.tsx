@@ -10,10 +10,11 @@ import { QrPage } from './QrPage';
 import { DealsPage } from './DealsPage';
 import { EmailSignInPage, OwnerRegisterPage, ResetPasswordPage, VerifyEmailPage, InviteAcceptPage } from './AuthPages';
 import { NotFound } from '@/app/Shell';
+import { BusinessExperience } from './BusinessExperience';
 
 export function BusinessRoutes() {
   return (
-    <Routes>
+    <BusinessExperience><Routes>
       <Route index element={<BusinessHome />} />
       <Route path="signin" element={<EmailSignInPage />} />
       <Route path="register" element={<OwnerRegisterPage />} />
@@ -41,6 +42,6 @@ export function BusinessRoutes() {
         <Route path="qr" element={<QrPage />} />
       </Route>
       <Route path="*" element={<NotFound />} />
-    </Routes>
+    </Routes></BusinessExperience>
   );
 }

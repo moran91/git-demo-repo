@@ -3,6 +3,7 @@ import { normalizeIsraeliPhone, type SavedAddress } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
 import { Button, TextArea, TextInput, Select, Checkbox } from '@/design/components';
 import { Icon } from '@/design/Icon';
+import { LocationPicker } from '@/design/LocationPicker';
 import { useCities } from './hooks';
 import type { AddressInput } from '@qareeb/shared';
 
@@ -74,6 +75,7 @@ export function AddressForm({ initial, onSubmit, submitLabel, submitting, showDe
         <TextInput label={t('address.recipientPhone')} required value={v.recipientPhone} onChange={(e) => set({ recipientPhone: e.target.value })} error={errors.recipientPhone} inputMode="tel" autoComplete="tel" ltr hint={t('auth.phoneHint')} />
       </div>
       <TextInput label={t('address.neighborhood')} optional value={v.neighborhood ?? ''} onChange={(e) => set({ neighborhood: e.target.value || undefined })} />
+      <LocationPicker label={t('address.mapPin')} value={v.lat !== undefined && v.lng !== undefined ? { lat: v.lat, lng: v.lng } : undefined} center={(() => { const city = cities.find((c) => c.id === v.cityId); return city?.lat !== undefined && city.lng !== undefined ? { lat: city.lat, lng: city.lng } : undefined; })()} onChange={(point) => set({ lat: point?.lat, lng: point?.lng })} />
       <details className="card card--flat">
         <summary style={{ cursor: 'pointer', fontWeight: 500, minHeight: 44, display: 'flex', alignItems: 'center' }}>{t('address.optionalFields')} <span className="muted" style={{ marginInlineStart: 8 }}>· {t('address.optionalFieldsHint')}</span></summary>
         <div className="stack" style={{ marginTop: 12 }}>
@@ -86,7 +88,7 @@ export function AddressForm({ initial, onSubmit, submitLabel, submitting, showDe
             <TextInput label={t('address.floor')} optional value={v.floor ?? ''} onChange={(e) => set({ floor: e.target.value || undefined })} />
             <TextInput label={t('address.entrance')} optional value={v.entrance ?? ''} onChange={(e) => set({ entrance: e.target.value || undefined })} />
           </div>
-          <TextInput label={t('address.mapPin')} optional hint={t('address.mapPinHint')} ltr placeholder="32.9628, 35.3822" value={v.lat !== undefined && v.lng !== undefined ? `${v.lat}, ${v.lng}` : ''} onChange={(e) => { const m = /^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/.exec(e.target.value); set(m ? { lat: Number(m[1]), lng: Number(m[2]) } : { lat: undefined, lng: undefined }); }} />
+
         </div>
       </details>
       <TextArea label={t('address.instructions')} optional value={v.deliveryInstructions ?? ''} onChange={(e) => set({ deliveryInstructions: e.target.value || undefined })} style={{ minHeight: 72 }} maxLength={500} />

@@ -178,6 +178,8 @@ export const updateBranch = onCall(opts, handled(async (req: CallableRequest<unk
     const [bSnap, brSnap] = await Promise.all([tx.get(col.business(input.businessId)), tx.get(col.branch(input.businessId, input.branchId))]);
     if (!bSnap.exists || !brSnap.exists) fail('not_found');
     const branch = { ...(brSnap.data() as Branch), ...data, updatedAt: nowIso() };
+    // This endpoint receives the full form. Clearing its optional map pin must remove the old pin.
+    if (data.lat === undefined || data.lng === undefined) { delete branch.lat; delete branch.lng; }
     tx.set(brSnap.ref, branch);
     projectBranchInTx(tx, bSnap.data() as Business, branch);
   });

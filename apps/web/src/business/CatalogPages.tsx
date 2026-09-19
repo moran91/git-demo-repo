@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { ref as sref, uploadBytes } from 'firebase/storage';
-import { hasAnyTranslation, makeId, type Category, type Localized, type ModifierGroup, type Product, type ProductInput, type SharedModifierGroup } from '@qareeb/shared';
+import { hasAnyTranslation, makeId, productInputSchema, type Category, type Localized, type ModifierGroup, type Product, type ProductInput, type SharedModifierGroup } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
 import { storage } from '@/lib/firebase';
 import { useCollection, orderBy, limit } from '@/lib/queries';
-import { Button, Dialog, TextInput, Select, Checkbox, Segmented, IconButton, Badge, Alert, EmptyState, toast, ConfirmDialog } from '@/design/components';
+import { Button, Dialog, TextInput, Select, Checkbox, Segmented, IconButton, Badge, Alert, EmptyState, Skeleton, toast, ConfirmDialog } from '@/design/components';
 import { Icon } from '@/design/Icon';
 import { money } from '@/lib/format';
 import { call } from '@/lib/api';
 import { errorKey, uploadErrorKey } from '@/lib/errors';
 import { UPLOAD_ACCEPT, prepareImageUpload, recordUpload } from '@/lib/images';
 import { PageTitle, useDash } from './shell';
+import { FormError, LoadError, SaveStatus, useDraftSafety } from './BusinessExperience';
 import { StorageImage } from '@/customer/StorageImage';
 import { LocalizedInput } from './LocalizedInput';
 import { ModifierGroupFields, agorotInput, newGroupDraft, parseAgorot, type GroupDraft } from './ModifierGroupFields';
@@ -30,11 +31,14 @@ export function CatalogPage() {
   const [catEdit, setCatEdit] = useState<{ id?: string; name: Localized } | null>(null);
   const [prodEdit, setProdEdit] = useState<{ product?: Product; categoryId: string } | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [search, setSearch] = useState('');
+  const term = search.trim().toLocaleLowerCase();
+  const matches = (name: Localized) => Object.values(name).some((text) => text?.toLocaleLowerCase().includes(term));
   const [stockEdit, setStockEdit] = useState<{ product: Product; variantId?: string } | null>(null);
   const [copyTarget, setCopyTarget] = useState<{ productId?: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const grouped = useMemo(() => { const m = new Map<string, Product[]>(); for (const p of prods.data) { if (!m.has(p.categoryId)) m.set(p.categoryId, []); m.get(p.categoryId)!.push(p); } return m; }, [prods.data]);
-  const visibleCats = cats.data.filter((c) => showArchived || !c.archived);
+  const visibleCats = cats.data.filter((c) => (showArchived || !c.archived) && (!term || matches(c.name) || (grouped.get(c.id) ?? []).some((p) => (showArchived || !p.archived) && matches(p.name))));
   const move = async (list: string[], id: string, dir: -1 | 1, fn: 'reorderCategories' | 'reorderProducts') => {
     const i = list.indexOf(id);
     const j = i + dir;
@@ -49,6 +53,8 @@ export function CatalogPage() {
     try { await call('saveCategory', { businessId: business.id, branchId: branch.id, categoryId: catEdit.id, category: { name: catEdit.name } }); setCatEdit(null); toast(t('catalog.savedOk')); } catch (e) { toast(t(errorKey(e)), 'danger'); } finally { setBusy(false); }
   };
   if (!can('catalog')) return <EmptyState icon="shield" title={t('error.forbidden')} />;
+  if (cats.error || prods.error) return <LoadError />;
+  if (cats.loading || prods.loading) return <Skeleton height={260} />;
   return (
     <div className="stack">
       <PageTitle title={t('dash.catalog')}>
@@ -58,21 +64,22 @@ export function CatalogPage() {
         <Button size="sm" variant="secondary" icon="plus" onClick={() => setCatEdit({ name: {} })}>{t('catalog.newCategory')}</Button>
         <Button size="sm" icon="plus" disabled={cats.data.filter((c) => !c.archived).length === 0} onClick={() => setProdEdit({ categoryId: cats.data.find((c) => !c.archived)!.id })}>{t('catalog.newProduct')}</Button>
       </PageTitle>
-      {cats.data.length === 0 && !cats.loading ? <EmptyState icon="basket" title={t('catalog.noCategories')} /> : null}
+      <div className="catalog-search"><TextInput label={t('owner.searchCatalog')} type="search" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
+      {cats.data.filter((c) => !c.archived).length === 0 ? <EmptyState icon="basket" title={t('catalog.noCategories')} body={t('owner.catalogStart')} action={<Button icon="plus" onClick={() => setCatEdit({ name: {} })}>{t('catalog.newCategory')}</Button>} /> : visibleCats.length === 0 ? <EmptyState title={t('owner.noMatches')} /> : null}
       {visibleCats.map((c) => (
         <section key={c.id} className="card stack" aria-labelledby={`c-${c.id}`}>
           <div className="section-head">
             <h2 id={`c-${c.id}`} className="row">{L(c.name, business.defaultLocale)} {c.archived ? <Badge tone="muted">{t('catalog.archived')}</Badge> : null}</h2>
             <div className="actions">
-              <IconButton icon="arrow" label={t('catalog.moveUp')} onClick={() => move(visibleCats.map((x) => x.id), c.id, -1, 'reorderCategories')} style={{ transform: 'rotate(-90deg)' }} />
-              <IconButton icon="arrow" label={t('catalog.moveDown')} onClick={() => move(visibleCats.map((x) => x.id), c.id, 1, 'reorderCategories')} style={{ transform: 'rotate(90deg)' }} />
-              <IconButton icon="edit" label={t('catalog.editCategory')} onClick={() => setCatEdit({ id: c.id, name: c.name })} />
+              <IconButton icon="arrow" label={t('catalog.moveUp')} disabled={!!term || visibleCats[0]?.id === c.id} onClick={() => move(visibleCats.map((x) => x.id), c.id, -1, 'reorderCategories')} style={{ transform: 'rotate(-90deg)' }} />
+              <IconButton icon="arrow" label={t('catalog.moveDown')} disabled={!!term || visibleCats.at(-1)?.id === c.id} onClick={() => move(visibleCats.map((x) => x.id), c.id, 1, 'reorderCategories')} style={{ transform: 'rotate(90deg)' }} />
+              <Button size="sm" variant="secondary" icon="edit" onClick={() => setCatEdit({ id: c.id, name: c.name })}>{t('catalog.editCategory')}</Button>
               <Button size="sm" variant="ghost" onClick={() => call('setCategoryArchived', { businessId: business.id, branchId: branch.id, categoryId: c.id, archived: !c.archived }).catch((e) => toast(e?.details?.issues?.[0]?.message === 'category_has_products' ? t('catalog.deleteCategoryBlocked') : t(errorKey(e)), 'danger'))}>{c.archived ? t('catalog.unarchive') : t('catalog.archive')}</Button>
-              <Button size="sm" variant="secondary" icon="plus" onClick={() => setProdEdit({ categoryId: c.id })}>{t('catalog.newProduct')}</Button>
+              <Button size="sm" variant="secondary" icon="plus" disabled={c.archived} onClick={() => setProdEdit({ categoryId: c.id })}>{t('catalog.newProduct')}</Button>
             </div>
           </div>
           <ul className="list">
-            {(grouped.get(c.id) ?? []).filter((p) => showArchived || !p.archived).map((p, i, arr) => (
+            {(grouped.get(c.id) ?? []).filter((p) => (showArchived || !p.archived) && (!term || matches(c.name) || matches(p.name))).map((p, i, arr) => (
               <li key={p.id} className="list__item list__item--catalog">
                 <StorageImage path={p.imagePath} alt="" square className="product__img" fallbackLabel={t('discovery.imageFallback')} />
                 <div className="list__grow">
@@ -82,13 +89,13 @@ export function CatalogPage() {
                     {p.trackInventory ? <> · {t('dash.stock')}: <bdi className="num">{p.variants.length ? p.variants.map((v) => `${L(v.name, business.defaultLocale)} ${v.stockQty ?? 0}`).join(', ') : p.stockQty ?? 0}</bdi></> : null}
                   </div>
                 </div>
-                <div className="actions actions--icons">
-                  <IconButton icon="arrow" label={t('catalog.moveUp')} disabled={i === 0} onClick={() => move(arr.map((x) => x.id), p.id, -1, 'reorderProducts')} style={{ transform: 'rotate(-90deg)' }} />
-                  <IconButton icon="arrow" label={t('catalog.moveDown')} disabled={i === arr.length - 1} onClick={() => move(arr.map((x) => x.id), p.id, 1, 'reorderProducts')} style={{ transform: 'rotate(90deg)' }} />
+                <div className="actions catalog-actions">
+                  <IconButton icon="arrow" label={t('catalog.moveUp')} disabled={!!term || i === 0} onClick={() => move(arr.map((x) => x.id), p.id, -1, 'reorderProducts')} style={{ transform: 'rotate(-90deg)' }} />
+                  <IconButton icon="arrow" label={t('catalog.moveDown')} disabled={!!term || i === arr.length - 1} onClick={() => move(arr.map((x) => x.id), p.id, 1, 'reorderProducts')} style={{ transform: 'rotate(90deg)' }} />
                   <IconButton icon="star" label={t('product.mostOrdered')} active={!!p.mostOrdered} aria-pressed={!!p.mostOrdered} onClick={() => call('setProductMostOrdered', { businessId: business.id, branchId: branch.id, productId: p.id, mostOrdered: !p.mostOrdered }).catch((e) => toast(t(errorKey(e)), 'danger'))} />
                   {p.trackInventory ? <IconButton icon="scale" label={t('catalog.stockAdjust')} onClick={() => setStockEdit({ product: p, variantId: p.variants[0]?.id })} /> : null}
                   {branches.length > 1 ? <IconButton icon="copy" label={t('catalog.copyTo')} onClick={() => setCopyTarget({ productId: p.id })} /> : null}
-                  <IconButton icon="edit" label={t('catalog.editProduct')} onClick={() => setProdEdit({ product: p, categoryId: p.categoryId })} />
+                  <Button size="sm" variant="secondary" icon="edit" onClick={() => setProdEdit({ product: p, categoryId: p.categoryId })}>{t('common.edit')}</Button>
                 </div>
               </li>
             ))}
@@ -116,7 +123,7 @@ function StockDialog({ product, onClose }: { product: Product; onClose: () => vo
   const [busy, setBusy] = useState(false);
   useEffect(() => setQty(String(current)), [current]);
   return (
-    <Dialog open onClose={onClose} title={`${t('catalog.stockAdjust')} · ${L(product.name, business.defaultLocale)}`} sheet={false} footer={<><Button variant="secondary" onClick={onClose}>{t('common.cancel')}</Button><Button loading={busy} disabled={!reason.trim()} onClick={async () => { setBusy(true); try { await call('adjustStock', { businessId: business.id, branchId: branch.id, productId: product.id, variantId, newQty: Number(qty), reason: reason.trim() }); toast(t('catalog.savedOk')); onClose(); } catch (e) { toast(t(errorKey(e)), 'danger'); } finally { setBusy(false); } }}>{t('common.save')}</Button></>}>
+    <Dialog open onClose={onClose} title={`${t('catalog.stockAdjust')} · ${L(product.name, business.defaultLocale)}`} sheet={false} footer={<><Button variant="secondary" onClick={onClose}>{t('common.cancel')}</Button><Button loading={busy} disabled={reason.trim().length < 2 || qty.trim() === '' || !Number.isInteger(Number(qty)) || Number(qty) < 0 || Number(qty) > 1000000} onClick={async () => { setBusy(true); try { await call('adjustStock', { businessId: business.id, branchId: branch.id, productId: product.id, variantId, newQty: Number(qty), reason: reason.trim() }); toast(t('catalog.savedOk')); onClose(); } catch (e) { toast(t(errorKey(e)), 'danger'); } finally { setBusy(false); } }}>{t('common.save')}</Button></>}>
       <div className="stack">
         {product.variants.length ? <Select label={t('product.size')} value={variantId} onChange={(e) => setVariantId(e.target.value)}>{product.variants.map((v) => <option key={v.id} value={v.id}>{L(v.name, business.defaultLocale)}</option>)}</Select> : null}
         <TextInput label={t('catalog.stockNew')} type="number" inputMode="numeric" min={0} ltr value={qty} onChange={(e) => setQty(e.target.value)} hint={product.pricingMode === 'weight' ? t('common.weight') + ' (g)' : undefined} />
@@ -141,7 +148,10 @@ function CopyDialog({ productId, onClose }: { productId?: string; onClose: () =>
 type Draft = ProductInput & { imagePath?: string };
 function draftFrom(p: Product | undefined, categoryId: string): Draft {
   if (!p) return { categoryId, name: {}, description: {}, dietaryText: {}, pricingMode: 'unit', priceAgorot: 0, unitLabel: {}, quantityStep: 1, minQuantity: 1, variants: [], modifierGroups: [], available: true, trackInventory: false, stockQty: 0, weightStepGrams: 100, minWeightGrams: 100, mostOrdered: false };
-  const { id: _i, branchId: _b, businessId: _bz, archived: _a, createdAt: _c, updatedAt: _u, imagePath, sortOrder, ...rest } = p;
+  // Callable responses encode omitted optional values as null; Firestore snapshots omit them.
+  // Normalize both sources, including variant/extra fields, before editing and validating.
+  const normalized = JSON.parse(JSON.stringify(p, (_key, value) => value === null ? undefined : value)) as Product;
+  const { id: _i, branchId: _b, businessId: _bz, archived: _a, createdAt: _c, updatedAt: _u, imagePath, sortOrder, ...rest } = normalized;
   return { ...rest, imagePath, sortOrder };
 }
 
@@ -149,7 +159,10 @@ export function ProductEditor({ initial, categoryId, categories, onClose }: { in
   const t = useT();
   const { L } = useI18n();
   const { business, branch } = useDash();
+  const [savedProduct, setSavedProduct] = useState(initial);
   const [d, setD] = useState<Draft>(() => draftFrom(initial, categoryId));
+  const safety = useDraftSafety({ ...d, imagePath: undefined });
+  const close = () => { if (!busy && safety.confirmDiscard()) onClose(); };
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -158,17 +171,18 @@ export function ProductEditor({ initial, categoryId, categories, onClose }: { in
   const save = async () => {
     setError(null);
     if (!hasAnyTranslation(d.name)) return setError(t('validation.atLeastOneLanguage'));
-    if (d.priceAgorot < 0) return setError(t('validation.positive'));
+    const { imagePath: _image, ...validated } = d;
+    if (!productInputSchema.safeParse(validated).success) return setError(t('owner.invalidProduct'));
     setBusy(true);
     try {
       const { imagePath: _ip, ...product } = d;
-      const res = await call<{ product: Product }>('saveProduct', { businessId: business.id, branchId: branch.id, productId: initial?.id, product: { ...product, variants: product.variants.map((v) => ({ ...v, id: v.id || makeId(8) })), modifierGroups: product.modifierGroups.map((g) => ({ ...g, id: g.id || makeId(8), options: g.options.map((o) => ({ ...o, id: o.id || makeId(8) })) })) } });
+      const res = await call<{ product: Product }>('saveProduct', { businessId: business.id, branchId: branch.id, productId: savedProduct?.id, product: { ...product, variants: product.variants.map((v) => ({ ...v, id: v.id || makeId(8) })), modifierGroups: product.modifierGroups.map((g) => ({ ...g, id: g.id || makeId(8), options: g.options.map((o) => ({ ...o, id: o.id || makeId(8) })) })) } });
       toast(t('catalog.savedOk'));
-      if (!initial) {
-        // Keep editing the new product so a photo can be attached.
-        setD(draftFrom(res.product, res.product.categoryId));
-      }
-      if (initial) onClose();
+      const next = draftFrom(res.product, res.product.categoryId);
+      safety.markSaved({ ...next, imagePath: undefined });
+      setD(next);
+      setSavedProduct(res.product);
+      if (savedProduct) onClose();
       return res.product.id;
     } catch (e) {
       setError(t('catalog.saveFailed') + ' ' + t(errorKey(e)));
@@ -177,7 +191,7 @@ export function ProductEditor({ initial, categoryId, categories, onClose }: { in
       setBusy(false);
     }
   };
-  const productId = initial?.id;
+  const productId = savedProduct?.id;
   const upload = async (file: File) => {
     setUploadError(null);
     if (!productId) return; // the input is disabled without one; the prompt is shown under the button
@@ -210,9 +224,23 @@ export function ProductEditor({ initial, categoryId, categories, onClose }: { in
     }
   };
   return (
-    <Dialog open onClose={onClose} title={initial ? t('catalog.editProduct') : t('catalog.newProduct')} footer={<><Button variant="secondary" onClick={onClose}>{t('common.cancel')}</Button><Button loading={busy} onClick={() => void save()}>{t('common.save')}</Button></>}>
+    <Dialog open onClose={close} title={savedProduct ? t('catalog.editProduct') : t('catalog.newProduct')} footer={<><Button variant="secondary" disabled={busy} onClick={close}>{t(savedProduct && !safety.dirty ? 'deals.done' : 'common.cancel')}</Button><Button loading={busy} onClick={() => void save()}>{t('common.save')}</Button></>}>
       <div className="stack">
-        {error ? <Alert tone="danger">{error}</Alert> : null}
+        <FormError message={error} />
+        {!initial && savedProduct ? <Alert tone="success">{t('owner.productCreated')}</Alert> : null}
+        <SaveStatus {...safety} />
+        <LocalizedInput label={t('common.name')} value={d.name} required onChange={(name) => set({ name })} />
+        <Select label={t('catalog.category')} value={d.categoryId} onChange={(e) => set({ categoryId: e.target.value })}>{categories.map((c) => <option key={c.id} value={c.id}>{L(c.name, business.defaultLocale)}</option>)}</Select>
+        <section className="stack--sm stack">
+          <h3>{t('catalog.pricing')}</h3>
+          <Segmented label={t('catalog.pricing')} value={d.pricingMode} onChange={(pricingMode) => set({ pricingMode, variants: pricingMode === 'weight' ? [] : d.variants, modifierGroups: pricingMode === 'weight' ? [] : d.modifierGroups })} options={[{ value: 'unit', label: t('catalog.pricingUnit') }, { value: 'weight', label: t('catalog.pricingWeight') }]} />
+          <div className="form-row">
+            <TextInput label={d.pricingMode === 'weight' ? t('catalog.pricePerKg') : t('catalog.basePrice')} type="number" inputMode="decimal" min={0} step="0.1" ltr value={agorotInput(d.priceAgorot)} onChange={(e) => set({ priceAgorot: parseAgorot(e.target.value) })} />
+            {d.pricingMode === 'weight' ? <><TextInput label={t('catalog.weightStep')} type="number" ltr value={d.weightStepGrams ?? 100} onChange={(e) => set({ weightStepGrams: Number(e.target.value) })} /><TextInput label={t('catalog.minWeight')} type="number" ltr value={d.minWeightGrams ?? 100} onChange={(e) => set({ minWeightGrams: Number(e.target.value) })} /><TextInput label={t('catalog.estimatedGrams')} type="number" ltr optional value={d.estimatedGramsPerUnit ?? ''} onChange={(e) => set({ estimatedGramsPerUnit: e.target.value ? Number(e.target.value) : undefined })} /></> : <><TextInput label={t('catalog.quantityStep')} type="number" ltr min={1} value={d.quantityStep} onChange={(e) => set({ quantityStep: Math.max(1, Number(e.target.value)) })} /><TextInput label={t('catalog.minQuantity')} type="number" ltr min={1} value={d.minQuantity} onChange={(e) => set({ minQuantity: Math.max(1, Number(e.target.value)) })} /></>}
+          </div>
+          <LocalizedInput label={t('catalog.unitLabel')} value={d.unitLabel} onChange={(unitLabel) => set({ unitLabel })} />
+        </section>
+        <Checkbox label={t('catalog.available')} checked={d.available} onChange={(e) => set({ available: e.target.checked })} />
         <section className="stack--sm stack">
           <h3>{t('catalog.photo')}</h3>
           <div className="photo-area photo-area--inline">
@@ -226,20 +254,9 @@ export function ProductEditor({ initial, categoryId, categories, onClose }: { in
           <div className="muted">{t('catalog.photoHint')}</div>
           {!productId ? <div className="muted">{t('catalog.photoSaveFirst')}</div> : null}
         </section>
-        <p className="muted">{t('catalog.translationsHint')}</p>
-        <LocalizedInput label={t('common.name')} value={d.name} required onChange={(name) => set({ name })} />
+        <details className="advanced-settings"><summary>{t('owner.advanced')}</summary><div className="stack">
         <LocalizedInput label={t('catalog.descHe').replace(/ \(.*\)/, '')} value={d.description} multiline onChange={(description) => set({ description })} />
         <LocalizedInput label={t('catalog.dietary')} value={d.dietaryText} onChange={(dietaryText) => set({ dietaryText })} />
-        <Select label={t('catalog.category')} value={d.categoryId} onChange={(e) => set({ categoryId: e.target.value })}>{categories.map((c) => <option key={c.id} value={c.id}>{L(c.name, business.defaultLocale)}</option>)}</Select>
-        <section className="stack--sm stack">
-          <h3>{t('catalog.pricing')}</h3>
-          <Segmented label={t('catalog.pricing')} value={d.pricingMode} onChange={(pricingMode) => set({ pricingMode, variants: pricingMode === 'weight' ? [] : d.variants, modifierGroups: pricingMode === 'weight' ? [] : d.modifierGroups })} options={[{ value: 'unit', label: t('catalog.pricingUnit') }, { value: 'weight', label: t('catalog.pricingWeight') }]} />
-          <div className="form-row">
-            <TextInput label={d.pricingMode === 'weight' ? t('catalog.pricePerKg') : t('catalog.basePrice')} type="number" inputMode="decimal" min={0} step="0.1" ltr value={agorotInput(d.priceAgorot)} onChange={(e) => set({ priceAgorot: parseAgorot(e.target.value) })} />
-            {d.pricingMode === 'weight' ? <><TextInput label={t('catalog.weightStep')} type="number" ltr value={d.weightStepGrams ?? 100} onChange={(e) => set({ weightStepGrams: Number(e.target.value) })} /><TextInput label={t('catalog.minWeight')} type="number" ltr value={d.minWeightGrams ?? 100} onChange={(e) => set({ minWeightGrams: Number(e.target.value) })} /><TextInput label={t('catalog.estimatedGrams')} type="number" ltr optional value={d.estimatedGramsPerUnit ?? ''} onChange={(e) => set({ estimatedGramsPerUnit: e.target.value ? Number(e.target.value) : undefined })} /></> : <><TextInput label={t('catalog.quantityStep')} type="number" ltr min={1} value={d.quantityStep} onChange={(e) => set({ quantityStep: Math.max(1, Number(e.target.value)) })} /><TextInput label={t('catalog.minQuantity')} type="number" ltr min={1} value={d.minQuantity} onChange={(e) => set({ minQuantity: Math.max(1, Number(e.target.value)) })} /></>}
-          </div>
-          <LocalizedInput label={t('catalog.unitLabel')} value={d.unitLabel} onChange={(unitLabel) => set({ unitLabel })} />
-        </section>
         {business.type === 'supermarket' ? (
           <section className="stack--sm stack">
             <div className="form-row"><TextInput label={t('catalog.brand')} optional value={d.brand ?? ''} onChange={(e) => set({ brand: e.target.value || undefined })} /><TextInput label={t('catalog.sku')} optional ltr value={d.sku ?? ''} onChange={(e) => set({ sku: e.target.value || undefined })} /><TextInput label={t('catalog.barcode')} optional ltr inputMode="numeric" value={d.barcode ?? ''} onChange={(e) => set({ barcode: e.target.value || undefined })} /><TextInput label={t('catalog.packageSize')} optional value={d.packageSize ?? ''} onChange={(e) => set({ packageSize: e.target.value || undefined })} /></div>
@@ -247,10 +264,9 @@ export function ProductEditor({ initial, categoryId, categories, onClose }: { in
         ) : null}
         <section className="stack--sm stack">
           <h3>{t('catalog.availability')}</h3>
-          <Checkbox label={t('catalog.available')} checked={d.available} onChange={(e) => set({ available: e.target.checked })} />
           <Checkbox label={t('product.mostOrdered')} checked={!!d.mostOrdered} onChange={(e) => set({ mostOrdered: e.target.checked })} />
           <Checkbox label={t('catalog.trackInventory')} checked={d.trackInventory} onChange={(e) => set({ trackInventory: e.target.checked })} />
-          {d.trackInventory && d.variants.length === 0 && !initial?.trackInventory ? <TextInput label={t('catalog.stockQty')} type="number" ltr min={0} value={d.stockQty ?? 0} onChange={(e) => set({ stockQty: Number(e.target.value) })} hint={d.pricingMode === 'weight' ? '(g)' : undefined} /> : null}
+          {d.trackInventory && d.variants.length === 0 && !savedProduct?.trackInventory ? <TextInput label={t('catalog.stockQty')} type="number" ltr min={0} value={d.stockQty ?? 0} onChange={(e) => set({ stockQty: Number(e.target.value) })} hint={d.pricingMode === 'weight' ? '(g)' : undefined} /> : null}
         </section>
         {d.pricingMode === 'unit' ? (
           <>
@@ -263,7 +279,7 @@ export function ProductEditor({ initial, categoryId, categories, onClose }: { in
                       <LocalizedInput label={t('common.name')} value={v.name} required onChange={(name) => set({ variants: d.variants.map((x, j) => (j === i ? { ...x, name } : x)) })} />
                       <div className="form-row">
                         <TextInput label={t('product.price')} type="number" ltr step="0.1" value={agorotInput(v.priceAgorot)} onChange={(e) => set({ variants: d.variants.map((x, j) => (j === i ? { ...x, priceAgorot: parseAgorot(e.target.value) } : x)) })} />
-                        {d.trackInventory && !initial?.trackInventory ? <TextInput label={t('catalog.stockQty')} type="number" ltr value={v.stockQty ?? 0} onChange={(e) => set({ variants: d.variants.map((x, j) => (j === i ? { ...x, stockQty: Number(e.target.value) } : x)) })} /> : null}
+                        {d.trackInventory && !savedProduct?.trackInventory ? <TextInput label={t('catalog.stockQty')} type="number" ltr value={v.stockQty ?? 0} onChange={(e) => set({ variants: d.variants.map((x, j) => (j === i ? { ...x, stockQty: Number(e.target.value) } : x)) })} /> : null}
                         <Checkbox label={t('catalog.available')} checked={v.available} onChange={(e) => set({ variants: d.variants.map((x, j) => (j === i ? { ...x, available: e.target.checked } : x)) })} />
                       </div>
                     </div>
@@ -275,8 +291,9 @@ export function ProductEditor({ initial, categoryId, categories, onClose }: { in
             <ModifierGroupsSection groups={d.modifierGroups} onChange={(modifierGroups) => set({ modifierGroups })} />
           </>
         ) : null}
+        </div></details>
         {initial ? <Button variant={initial.archived ? 'secondary' : 'danger'} onClick={() => setArchiveConfirm(true)}>{initial.archived ? t('catalog.unarchive') : t('catalog.archive')}</Button> : null}
-        <ConfirmDialog open={archiveConfirm} onClose={() => setArchiveConfirm(false)} danger={!initial?.archived} title={initial?.archived ? t('catalog.unarchive') : t('catalog.archive')} confirmLabel={t('common.confirm')} onConfirm={async () => { setArchiveConfirm(false); await call('setProductArchived', { businessId: business.id, branchId: branch.id, productId: initial!.id, archived: !initial!.archived }).catch((e) => toast(t(errorKey(e)), 'danger')); onClose(); }} />
+        <ConfirmDialog open={archiveConfirm} onClose={() => setArchiveConfirm(false)} danger={!initial?.archived} title={initial?.archived ? t('catalog.unarchive') : t('catalog.archive')} confirmLabel={t('common.confirm')} onConfirm={async () => { setArchiveConfirm(false); try { await call('setProductArchived', { businessId: business.id, branchId: branch.id, productId: initial!.id, archived: !initial!.archived }); safety.markSaved(); onClose(); } catch (e) { toast(t(errorKey(e)), 'danger'); } }} />
       </div>
     </Dialog>
   );

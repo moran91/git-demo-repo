@@ -12,6 +12,7 @@ import { errorKey } from '@/lib/errors';
 import { imageSources, recordUpload } from '@/lib/images';
 import { PromotionsSection } from './PromotionsPage';
 import { PageTitle, useDash } from './shell';
+import { LoadError, useDraftSafety } from './BusinessExperience';
 import { LocalizedInput } from './LocalizedInput';
 import { ItemPickerDialog } from './ItemPicker';
 import { StorageImage } from '@/customer/StorageImage';
@@ -56,6 +57,7 @@ export function DealsPage() {
   const [edit, setEdit] = useState<{ id?: string; d: Draft; imagePath?: string } | null>(null);
   const [remove, setRemove] = useState<Combo | null>(null);
   if (!canCombos) return <EmptyState icon="shield" title={t('error.forbidden')} />;
+  if (combos.error || products.error || categories.error) return <LoadError />;
   const live = combos.data.filter((c) => !c.archived);
   const promoted = live.filter((c) => c.active).length;
   const liveCategories = categories.data.filter((c) => !c.archived);
@@ -136,6 +138,7 @@ function ComboEditor({ initial, products, categories, onClose }: { initial: { id
   const { L, locale, dir } = useI18n();
   const { business, branch } = useDash();
   const [d, setD] = useState<Draft>(initial.d);
+  const safety = useDraftSafety(d);
   const [priceText, setPriceText] = useState(toShekels(initial.d.priceAgorot));
   const [comboId, setComboId] = useState(initial.id);
   const [imagePath, setImagePath] = useState(initial.imagePath);
@@ -146,7 +149,7 @@ function ComboEditor({ initial, products, categories, onClose }: { initial: { id
   const [generating, setGenerating] = useState(false);
   const [preview, setPreview] = useState<PromoResult | null>(null);
   const set = (p: Partial<Draft>) => setD((s) => ({ ...s, ...p }));
-  const eligible = useMemo(() => products.filter((p) => p.pricingMode === 'unit' && p.available), [products]);
+  const eligible = useMemo(() => products.filter((p) => p.pricingMode === 'unit' && p.available && (p.variants.length === 0 || p.variants.some((v) => v.available))), [products]);
   const sum = sumOf(d.items, products);
   const price = d.priceAgorot;
   const priceAboveSum = sum !== null && price > sum;
@@ -155,7 +158,7 @@ function ComboEditor({ initial, products, categories, onClose }: { initial: { id
   const lineName = (it: ComboItem) => { const p = products.find((x) => x.id === it.productId); const v = p?.variants.find((x) => x.id === it.variantId); return p ? `${L(p.name, business.defaultLocale)}${v ? ` (${L(v.name, business.defaultLocale)})` : ''}` : it.productId; };
   const upsert = (productId: string, variantId: string | undefined, qty: number) => set({ items: qty <= 0 ? d.items.filter((i) => !(i.productId === productId && i.variantId === variantId)) : d.items.some((i) => i.productId === productId && i.variantId === variantId) ? d.items.map((i) => (i.productId === productId && i.variantId === variantId ? { ...i, quantity: qty } : i)) : [...d.items, { productId, variantId, quantity: qty }] });
 
-  const save = async (): Promise<string | null> => {
+  const save = async (keepBusy = false): Promise<string | null> => {
     setError(null);
     if (!hasAnyTranslation(d.name)) { setError(t('validation.atLeastOneLanguage')); return null; }
     if (d.items.length < 2) { setError(t('deals.minItems')); return null; }
@@ -166,8 +169,9 @@ function ComboEditor({ initial, products, categories, onClose }: { initial: { id
       const r = await call<{ combo: Combo }>('saveCombo', { businessId: business.id, branchId: branch.id, comboId, combo: { ...d, promoted: d.active } });
       setComboId(r.combo.id);
       toast(t('catalog.savedOk'));
+      safety.markSaved();
       return r.combo.id;
-    } catch (e) { setError(t('catalog.saveFailed') + ' ' + t(errorKey(e))); return null; } finally { setBusy(false); }
+    } catch (e) { setError(t('catalog.saveFailed') + ' ' + t(errorKey(e))); return null; } finally { if (!keepBusy) setBusy(false); }
   };
 
   const generate = async () => {
@@ -185,7 +189,7 @@ function ComboEditor({ initial, products, categories, onClose }: { initial: { id
     if (!preview) return;
     setBusy(true);
     try {
-      const id = comboId ?? (await save());
+      const id = comboId ?? (await save(true));
       if (!id) return;
       const path = `businesses/${business.id}/branches/${branch.id}/combos/${id}/${makeId(10)}.jpg`;
       await uploadBytes(sref(storage, path), preview.blob, { contentType: 'image/jpeg' });
@@ -207,14 +211,13 @@ function ComboEditor({ initial, products, categories, onClose }: { initial: { id
         count={(p) => d.items.filter((i) => i.productId === p.id).reduce((n, i) => n + i.quantity, 0)}
         pickedVariant={(p) => d.items.find((i) => i.productId === p.id)?.variantId}
         onPick={(p, vid) => { const needsVariant = p.variants.length > 0; const existing = d.items.find((i) => i.productId === p.id && (!needsVariant || i.variantId === vid)); upsert(p.id, needsVariant ? vid : undefined, (existing?.quantity ?? 0) + 1); }}
-        onVariant={(p, vid) => upsert(p.id, vid, 1)}
         onClose={() => setMode('edit')}
       />
     );
   }
 
   return (
-    <Dialog open onClose={onClose} title={comboId ? t('deals.edit') : t('deals.new')} footer={<><Button variant="secondary" onClick={onClose}>{t('common.cancel')}</Button><Button loading={busy} onClick={async () => { if (await save()) onClose(); }}>{t('common.save')}</Button></>}>
+    <Dialog open onClose={() => { if (!busy && safety.confirmDiscard()) onClose(); }} title={comboId ? t('deals.edit') : t('deals.new')} footer={<><Button variant="secondary" disabled={busy} onClick={() => { if (safety.confirmDiscard()) onClose(); }}>{t('common.cancel')}</Button><Button loading={busy} onClick={async () => { if (await save()) onClose(); }}>{t('common.save')}</Button></>}>
       <div className="combo-editor">
         {error ? <Alert tone="danger">{error}</Alert> : null}
 

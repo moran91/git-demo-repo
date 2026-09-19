@@ -55,9 +55,10 @@ export function OrderCard({ order, detailLink }: { order: Order; detailLink?: bo
     try {
       await call('decideOrder', { orderId: order.id, decision, reason: decision === 'rejected' ? reason.trim() : undefined, expectedVersion: order.version, idempotencyKey: newIdempotencyKey() });
       setRejecting(false);
+      toast(t(decision === 'accepted' ? 'owner.accepted' : 'owner.rejected', { reference: order.reference }));
     } catch (e) {
       if (e instanceof ApiError && (e.code === 'version_conflict' || e.code === 'invalid_status_transition')) setConflict(t('dash.decisionConflict'));
-      else toast(t(errorKey(e)), 'danger');
+      else setConflict(t(errorKey(e)));
     } finally {
       setBusy(null);
     }
@@ -116,8 +117,8 @@ export function OrderCard({ order, detailLink }: { order: Order; detailLink?: bo
         {can('print') ? <PrintOrderButton order={order} /> : null}
         {detailLink !== false ? <Link className="btn btn--ghost btn--sm" to={`/business/${order.businessId}/${order.branchId}/orders/${order.id}`}>{t('dash.orderDetail')} <Icon name="chevron" directional size={16} /></Link> : null}
       </div>
-      <Dialog open={rejecting} onClose={() => setRejecting(false)} title={t('dash.rejectTitle')} sheet={false} footer={<><Button variant="secondary" onClick={() => setRejecting(false)}>{t('common.cancel')}</Button><Button variant="danger-solid" loading={busy === 'rejected'} disabled={reason.trim().length < 2} onClick={() => decide('rejected')}>{t('dash.reject')}</Button></>}>
-        <TextArea label={t('dash.rejectReason')} required placeholder={t('dash.rejectReasonPlaceholder')} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} />
+      <Dialog open={rejecting} onClose={() => { if (!busy) setRejecting(false); }} title={t('dash.rejectTitle')} sheet={false} footer={<><Button variant="secondary" disabled={!!busy} onClick={() => setRejecting(false)}>{t('common.cancel')}</Button><Button variant="danger-solid" loading={busy === 'rejected'} disabled={reason.trim().length < 2} onClick={() => decide('rejected')}>{t('dash.reject')}</Button></>}>
+        <div className="stack">{conflict ? <Alert tone="danger">{conflict}</Alert> : null}<TextArea label={t('dash.rejectReason')} required placeholder={t('dash.rejectReasonPlaceholder')} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} /></div>
       </Dialog>
     </article>
   );

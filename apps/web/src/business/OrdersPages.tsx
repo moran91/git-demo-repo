@@ -16,13 +16,33 @@ import { PrintOrderButton } from './PrintOrderButton';
 import { AddressSummary } from '@/customer/AddressForm';
 import { Summary } from '@/customer/Summary';
 import { useNow } from '@/customer/hooks';
+import { useAuth } from '@/lib/auth';
+import { GettingStarted, LoadError } from './BusinessExperience';
 
-function useNewOrderAlert(orders: Order[]) {
+function useNewOrderAlert(orders: Order[], loading: boolean) {
   const t = useT();
-  const [sound, setSound] = useState(() => { try { return localStorage.getItem('qareeb.sound') === '1'; } catch { return false; } });
+  // Browsers require a fresh gesture after a reload: the stored preference is only re-armed by the
+  // first tap/keypress on the page, and "sound on" is never claimed before the context is running.
+  const [sound, setSound] = useState(false);
   const known = useRef<Set<string> | null>(null);
   const ctxRef = useRef<AudioContext | null>(null);
+  const arm = async (): Promise<boolean> => {
+    if (!ctxRef.current) ctxRef.current = new AudioContext();
+    await ctxRef.current.resume();
+    return ctxRef.current.state === 'running';
+  };
   useEffect(() => {
+    let wanted = false;
+    try { wanted = localStorage.getItem('qareeb.sound') === '1'; } catch { /* ignore */ }
+    if (!wanted) return;
+    const onGesture = () => { void arm().then((ok) => { if (ok) { setSound(true); remove(); } }).catch(() => undefined); };
+    const remove = () => { document.removeEventListener('pointerdown', onGesture, true); document.removeEventListener('keydown', onGesture, true); };
+    document.addEventListener('pointerdown', onGesture, true);
+    document.addEventListener('keydown', onGesture, true);
+    return remove;
+  }, []);
+  useEffect(() => {
+    if (loading) return;
     const ids = new Set(orders.map((o) => o.id));
     if (known.current === null) {
       known.current = ids;
@@ -43,14 +63,13 @@ function useNewOrderAlert(orders: Order[]) {
         osc.stop(ctx.currentTime + 0.35);
       }
     }
-  }, [orders, sound, t]);
-  const toggle = () => {
-    // Audio must be unlocked by a user gesture; the toggle click is that gesture.
-    if (!ctxRef.current) ctxRef.current = new AudioContext();
-    void ctxRef.current.resume();
+  }, [orders, loading, sound, t]);
+  useEffect(() => () => { void ctxRef.current?.close().catch(() => undefined); }, []);
+  const toggle = async () => {
     const next = !sound;
-    setSound(next);
     try { localStorage.setItem('qareeb.sound', next ? '1' : '0'); } catch { /* ignore */ }
+    if (!next) { setSound(false); return; }
+    try { setSound(await arm()); } catch { toast(t('common.errorGeneric'), 'danger'); }
   };
   return { sound, toggle };
 }
@@ -59,7 +78,7 @@ export function IncomingOrdersPage() {
   const t = useT();
   const { business, branch } = useDash();
   const placed = useCollection<Order>('orders', [where('businessId', '==', business.id), where('branchId', '==', branch.id), where('status', '==', 'placed'), orderBy('placedAt', 'asc'), limit(50)], [branch.id]);
-  const { sound, toggle } = useNewOrderAlert(placed.data);
+  const { sound, toggle } = useNewOrderAlert(placed.data, placed.loading);
   const nowMs = useNow().getTime();
   const aging = placed.data.some((o) => nowMs - Date.parse(o.placedAt) > 30 * 60000);
   return (
@@ -67,11 +86,13 @@ export function IncomingOrdersPage() {
       <PageTitle title={t('dash.incoming')}>
         <Button size="sm" variant="secondary" icon={sound ? 'volume' : 'volumeOff'} onClick={toggle} aria-pressed={sound} title={t('dash.soundHint')}>{sound ? t('dash.soundOn') : t('dash.soundOff')}</Button>
       </PageTitle>
+      <p className="muted">{t('owner.soundHelp')}</p>
       {aging ? <Alert tone="warn">{t('dash.agingWarning')}</Alert> : null}
-      {placed.error ? <Alert tone="danger">{t('common.errorGeneric')}</Alert> : null}
-      {placed.loading ? <div className="orders-grid" aria-busy="true"><Skeleton height={320} radius={16} /><Skeleton height={320} radius={16} /></div> : placed.data.length === 0 ? <EmptyState icon="bell" title={t('dash.noIncoming')} body={t('dash.noIncomingHint')} /> : (
+      {placed.error ? <LoadError /> : null}
+      {placed.loading ? <div className="orders-grid" aria-busy="true"><Skeleton height={320} radius={16} /><Skeleton height={320} radius={16} /></div> : placed.error ? null : placed.data.length === 0 ? <EmptyState icon="bell" title={t('dash.noIncoming')} body={t('dash.noIncomingHint')} /> : (
         <div className="orders-grid" aria-live="polite">{placed.data.map((o) => <OrderCard key={o.id} order={o} />)}</div>
       )}
+      {!placed.loading ? <GettingStarted /> : null}
     </div>
   );
 }
@@ -88,12 +109,19 @@ export function OrderHistoryPage() {
   return (
     <div className="stack">
       <PageTitle title={t('dash.history')} />
-      <div className="tabs" role="tablist">
-        {(['all', 'placed', 'accepted', 'rejected'] as const).map((f) => <button key={f} role="tab" aria-selected={filter === f} onClick={() => setFilter(f)}>{t(f === 'all' ? 'dash.filterAll' : f === 'placed' ? 'dash.filterPlaced' : f === 'accepted' ? 'dash.filterAccepted' : 'dash.filterRejected')}</button>)}
+      <div className="tabs" role="group" aria-label={t('common.status')}>
+        {(['all', 'placed', 'accepted', 'rejected'] as const).map((f) => <button key={f} type="button" aria-pressed={filter === f} onClick={() => setFilter(f)}>{t(f === 'all' ? 'dash.filterAll' : f === 'placed' ? 'dash.filterPlaced' : f === 'accepted' ? 'dash.filterAccepted' : 'dash.filterRejected')}</button>)}
       </div>
-      {paged.error ? <Alert tone="danger">{t('common.errorGeneric')}</Alert> : null}
-      {paged.items.length === 0 && !paged.loading ? <EmptyState icon="list" title={t('dash.noOrders')} /> : null}
-      <div className="table-wrap">
+      {paged.error ? <LoadError retry={paged.reload} /> : null}
+      {paged.items.length === 0 && !paged.loading && !paged.error ? <EmptyState icon="list" title={t('dash.noOrders')} /> : null}
+      <div className="history-cards">{paged.items.map((o) => <article className="card stack stack--sm" key={o.id}>
+        <div className="row row--between"><strong className="order-card__ref">{o.reference}</strong><OrderStatusBadge status={o.status} /></div>
+        <strong>{o.contactName}</strong><bdi className="muted">{formatLocalDateTime(o.placedAt, locale)}</bdi>
+        <div className="row row--between"><span>{t(o.mode === 'delivery' ? 'common.delivery' : o.mode === 'dine_in' ? 'common.dineIn' : 'common.pickup')}{o.tableNumber ? ` · ${t('orders.table', { n: o.tableNumber })}` : ''}</span><bdi className="price">{money(o.totals.cashDueAgorot, locale)}</bdi></div>
+        {o.cashRecordId && !o.cashReversedAt ? <span className="badge badge--success">{t('receipt.cashReceived')}</span> : null}
+        <Link className="btn btn--secondary" to={`/business/${o.businessId}/${o.branchId}/orders/${o.id}`}>{t('dash.orderDetail')}</Link>
+      </article>)}</div>
+      <div className="table-wrap history-table">
         <table className="table">
           <thead><tr><th>{t('orders.order')}</th><th>{t('common.status')}</th><th>{t('dash.customer')}</th><th>{t('common.date')}</th><th>{t('common.total')}</th><th></th></tr></thead>
           <tbody>
@@ -117,18 +145,20 @@ export function OrderHistoryPage() {
 
 export function OrderDetailPage() {
   const { orderId } = useParams();
+  const { user } = useAuth();
   const t = useT();
   const { L, locale } = useI18n();
   const { business, branch, can } = useDash();
   const order = useDoc<Order>(orderId ? `orders/${orderId}` : null);
   const events = useCollection<OrderEvent>(orderId ? `orders/${orderId}/events` : null, [orderBy('at', 'asc'), limit(100)], [orderId]);
-  const cash = useDoc<CashRecord>(order.data?.cashRecordId ? `cashRecords/${order.data.cashRecordId}` : null);
+  const cash = useDoc<CashRecord>(can('financials') && order.data?.cashRecordId ? `cashRecords/${order.data.cashRecordId}` : null);
   const [revise, setRevise] = useState(false);
   const [recordCash, setRecordCash] = useState(false);
   const [reverse, setReverse] = useState(false);
   const [reverseReason, setReverseReason] = useState('');
   const [busy, setBusy] = useState(false);
   if (order.loading) return <Skeleton height={300} radius={16} />;
+  if (order.error) return <LoadError />;
   if (!order.data || order.data.branchId !== branch.id) return <EmptyState icon="alert" title={t('common.notFound')} />;
   const o = order.data;
   // Staff cannot read cashRecords (owner/manager only), so settlement state has to come from the
@@ -150,6 +180,7 @@ export function OrderDetailPage() {
   };
   return (
     <div className="stack">
+      <Link className="btn btn--ghost" style={{ alignSelf: 'start' }} to={`/business/${business.id}/${branch.id}/history`}>{t('dash.history')}</Link>
       <PageTitle title={t('dash.orderNumber', { reference: o.reference })}>
         <OrderStatusBadge status={o.status} />
         {can('print') ? <PrintOrderButton order={o} /> : null}
@@ -169,18 +200,19 @@ export function OrderDetailPage() {
                 <Button icon="wallet" disabled={o.totals.isEstimated} onClick={() => setRecordCash(true)}>{t('dash.recordCash')}</Button>
               </>
             ) : null}
-            {cashPaidAgorot !== undefined ? <div className="alert alert--success"><Icon name="check" size={18} /><div>{t("dash.cashRecorded", { amount: money(cashPaidAgorot, locale) })}{cashRecord ? <div className="muted">{t('dash.cashRecordedBy', { name: cashRecord.recordedBy === o.decidedBy ? t('dash.actorYou') : cashRecord.recordedBy.slice(0, 6), time: formatLocalDateTime(cashRecord.recordedAt, locale) })}</div> : o.cashSettledAt ? <div className="muted"><bdi>{formatLocalDateTime(o.cashSettledAt, locale)}</bdi></div> : null}</div></div> : null}
+            {cashPaidAgorot !== undefined ? <div className="alert alert--success"><Icon name="check" size={18} /><div>{t("dash.cashRecorded", { amount: money(cashPaidAgorot, locale) })}{cashRecord ? <div className="muted">{t('dash.cashRecordedBy', { name: cashRecord.recordedBy === user?.uid ? t('dash.actorYou') : cashRecord.recordedBy.slice(0, 6), time: formatLocalDateTime(cashRecord.recordedAt, locale) })}</div> : o.cashSettledAt ? <div className="muted"><bdi>{formatLocalDateTime(o.cashSettledAt, locale)}</bdi></div> : null}</div></div> : null}
             {cashPaidAgorot !== undefined && can("reverse_cash") ? <Button variant="danger" size="sm" onClick={() => setReverse(true)}>{t('dash.reverseCash')}</Button> : null}
           </section>
         </div>
         <section className="card stack">
           <h2>{t('dash.events')}</h2>
+          {events.error ? <LoadError /> : null}
           <ul className="list">
             {events.data.map((e) => (
               <li key={e.id} className="list__item" style={{ alignItems: 'flex-start' }}>
                 <Icon name={e.type === 'placed' ? 'bag' : e.type === 'accepted' ? 'check' : e.type === 'rejected' ? 'x' : e.type === 'printed' ? 'printer' : e.type === 'revised' ? 'edit' : 'wallet'} size={18} />
                 <div className="list__grow">
-                  <div><strong>{e.type}</strong> · {e.actorRole}{e.phoneAgreement ? ` · ${t('dash.phoneAgreement')}` : ''}</div>
+                  <div><strong>{e.type === 'adjustment' ? t('loyalty.entry.admin_adjust') : t(`owner.event.${e.type}`)}</strong> · {e.actorRole === 'owner' || e.actorRole === 'manager' || e.actorRole === 'staff' ? t(`staff.role.${e.actorRole}`) : t(`owner.actor.${e.actorRole}`)}{e.phoneAgreement ? ` · ${t('dash.phoneAgreement')}` : ''}</div>
                   {e.reason ? <div className="muted">{e.reason}</div> : null}
                   <div className="muted"><bdi>{formatLocalDateTime(e.at, locale)}</bdi> · v{e.version}</div>
                 </div>
@@ -213,6 +245,7 @@ function ReviseDialog({ order, onClose }: { order: Order; onClose: () => void })
   const list = Object.values(changes);
   // The same function reviseOrder uses, so the dialog cannot drift from what the server enforces.
   const needsAgreement = list.some((c) => revisionAgreementReason(order.lines.find((l) => l.lineId === c.lineId), c) !== null);
+  const invalidChanges = list.some((c) => c.action === 'set_quantity' ? !Number.isInteger(c.quantity) || c.quantity! < 0 || c.quantity! > 999 : c.action === 'set_actual_weight' ? !Number.isInteger(c.actualGrams) || c.actualGrams! <= 0 : c.action === 'substitute' ? (c.replacementQuantity !== undefined && (!Number.isInteger(c.replacementQuantity) || c.replacementQuantity < 1)) || (c.replacementGrams !== undefined && (!Number.isInteger(c.replacementGrams) || c.replacementGrams < 1)) : false);
   const submit = async () => {
     setBusy(true);
     try {
@@ -226,7 +259,7 @@ function ReviseDialog({ order, onClose }: { order: Order; onClose: () => void })
     }
   };
   return (
-    <Dialog open onClose={onClose} title={t('dash.reviseTitle')} footer={<><Button variant="secondary" onClick={onClose}>{t('common.cancel')}</Button><Button loading={busy} disabled={list.length === 0 || reason.trim().length < 2 || (needsAgreement && !agreement)} onClick={submit}>{t('dash.saveRevision')}</Button></>}>
+    <Dialog open onClose={onClose} title={t('dash.reviseTitle')} footer={<><Button variant="secondary" onClick={onClose}>{t('common.cancel')}</Button><Button loading={busy} disabled={invalidChanges || list.length === 0 || reason.trim().length < 2 || (needsAgreement && !agreement)} onClick={submit}>{t('dash.saveRevision')}</Button></>}>
       <div className="stack">
         <p className="muted">{t('dash.reviseBody')}</p>
         {order.lines.filter((l) => !l.removed).map((l) => {
@@ -235,17 +268,17 @@ function ReviseDialog({ order, onClose }: { order: Order; onClose: () => void })
             <div key={l.lineId} className="card stack--sm stack">
               <strong>{L(l.name)}{l.variantName ? ` (${L(l.variantName)})` : ''} · {l.pricingMode === 'weight' ? `${l.actualGrams ?? l.requestedGrams} g` : `${l.quantity} ×`}</strong>
               <div className="row row--end">
-                {l.pricingMode === 'weight' ? (
-                  <TextInput label={t('dash.setActualWeight')} type="number" inputMode="numeric" min={0} ltr value={c?.action === 'set_actual_weight' ? c.actualGrams ?? '' : ''} onChange={(e) => set(l.lineId, e.target.value ? { lineId: l.lineId, action: 'set_actual_weight', actualGrams: Number(e.target.value) } : null)} />
+                {l.comboItems ? null : l.pricingMode === 'weight' ? (
+                  <TextInput label={t('dash.setActualWeight')} type="number" inputMode="numeric" min={1} ltr value={c?.action === 'set_actual_weight' ? c.actualGrams ?? '' : ''} onChange={(e) => set(l.lineId, e.target.value ? { lineId: l.lineId, action: 'set_actual_weight', actualGrams: Number(e.target.value) } : null)} />
                 ) : (
                   <TextInput label={t('dash.newQuantity')} type="number" inputMode="numeric" min={0} max={999} ltr value={c?.action === 'set_quantity' ? c.quantity ?? '' : ''} onChange={(e) => set(l.lineId, e.target.value !== '' ? { lineId: l.lineId, action: 'set_quantity', quantity: Number(e.target.value) } : null)} />
                 )}
                 <Button size="sm" variant={c?.action === 'remove' ? 'danger-solid' : 'danger'} icon="trash" onClick={() => set(l.lineId, c?.action === 'remove' ? null : { lineId: l.lineId, action: 'remove' })}>{t('dash.removeLine')}</Button>
               </div>
-              <Select label={t('dash.substitute')} optional value={c?.action === 'substitute' ? c.replacementProductId ?? '' : ''} onChange={(e) => { const pid = e.target.value; if (!pid) return set(l.lineId, null); const p = products.data.find((x) => x.id === pid)!; set(l.lineId, { lineId: l.lineId, action: 'substitute', replacementProductId: pid, replacementVariantId: p.variants[0]?.id, replacementQuantity: p.pricingMode === 'unit' ? 1 : undefined, replacementGrams: p.pricingMode === 'weight' ? p.minWeightGrams ?? 100 : undefined }); }}>
+              {!l.comboItems ? <Select label={t('dash.substitute')} optional value={c?.action === 'substitute' ? c.replacementProductId ?? '' : ''} onChange={(e) => { const pid = e.target.value; if (!pid) return set(l.lineId, null); const p = products.data.find((x) => x.id === pid)!; set(l.lineId, { lineId: l.lineId, action: 'substitute', replacementProductId: pid, replacementVariantId: p.variants[0]?.id, replacementQuantity: p.pricingMode === 'unit' ? p.minQuantity : undefined, replacementGrams: p.pricingMode === 'weight' ? p.minWeightGrams ?? 100 : undefined }); }}>
                 <option value="">{t('common.none')}</option>
-                {products.data.filter((p) => p.available).map((p) => <option key={p.id} value={p.id}>{L(p.name, business.defaultLocale)}</option>)}
-              </Select>
+                {products.data.filter((p) => p.available && !p.modifierGroups.some((g) => g.required || g.minSelect > 0)).map((p) => <option key={p.id} value={p.id}>{L(p.name, business.defaultLocale)}</option>)}
+              </Select> : null}
               {c?.action === 'substitute' ? (() => { const p = products.data.find((x) => x.id === c.replacementProductId); if (!p) return null; return (
                 <div className="form-row">
                   {p.variants.length ? <Select label={t('product.size')} value={c.replacementVariantId ?? ''} onChange={(e) => set(l.lineId, { ...c, replacementVariantId: e.target.value })}>{p.variants.map((v) => <option key={v.id} value={v.id}>{L(v.name, business.defaultLocale)}</option>)}</Select> : null}

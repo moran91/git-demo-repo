@@ -8,6 +8,7 @@ import { money } from '@/lib/format';
 import { call } from '@/lib/api';
 import { errorKey } from '@/lib/errors';
 import { PageTitle, useDash } from './shell';
+import { LoadError, useDraftSafety } from './BusinessExperience';
 import { ModifierGroupFields, newGroupDraft, type GroupDraft } from './ModifierGroupFields';
 
 export function ExtrasLibraryPage() {
@@ -35,6 +36,7 @@ export function ExtrasLibraryPage() {
     setParams({}, { replace: true });
   }, [wantedGroup, setParams]);
   if (!can('catalog')) return <EmptyState icon="shield" title={t('error.forbidden')} />;
+  if (groups.error || prods.error) return <LoadError />;
   const visible = groups.data.filter((g) => showArchived || !g.archived);
   return (
     <div className="stack">
@@ -73,6 +75,7 @@ export function SharedGroupDialog({ id, initial, onClose, onSaved }: { id?: stri
   const t = useT();
   const { business, branch } = useDash();
   const [d, setD] = useState<GroupDraft>(initial);
+  const safety = useDraftSafety(d);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const save = async () => {
@@ -82,6 +85,7 @@ export function SharedGroupDialog({ id, initial, onClose, onSaved }: { id?: stri
     try {
       const r = await call<{ group: SharedModifierGroup; linkedProducts: number }>('saveSharedModifierGroup', { businessId: business.id, branchId: branch.id, groupId: id, group: d });
       toast(id ? t('catalog.sharedGroupUpdated', { count: r.linkedProducts }) : t('catalog.savedOk'));
+      safety.markSaved();
       onSaved?.(r.group);
       onClose();
     } catch (e) {
@@ -91,7 +95,7 @@ export function SharedGroupDialog({ id, initial, onClose, onSaved }: { id?: stri
     }
   };
   return (
-    <Dialog open onClose={onClose} title={id ? t('catalog.editSharedGroup') : t('catalog.newSharedGroup')} footer={<><Button variant="secondary" onClick={onClose}>{t('common.cancel')}</Button><Button loading={busy} onClick={() => void save()}>{t('common.save')}</Button></>}>
+    <Dialog open onClose={() => { if (!busy && safety.confirmDiscard()) onClose(); }} title={id ? t('catalog.editSharedGroup') : t('catalog.newSharedGroup')} footer={<><Button variant="secondary" disabled={busy} onClick={() => { if (safety.confirmDiscard()) onClose(); }}>{t('common.cancel')}</Button><Button loading={busy} onClick={() => void save()}>{t('common.save')}</Button></>}>
       <div className="stack">
         {error ? <Alert tone="danger">{error}</Alert> : null}
         <div className="card stack--sm stack"><ModifierGroupFields value={d} onChange={setD} /></div>

@@ -64,7 +64,7 @@ export async function setLocale(page: Page, locale: 'he' | 'ar' | 'en') {
 export async function signInEmail(page: Page, email: string) {
   await page.goto('/business/signin');
   await page.getByLabel(/Email|אימייל|البريد/).fill(email);
-  await page.getByLabel(/Password|סיסמה|كلمة المرور/).fill(PASSWORD);
+  await page.getByLabel(/^(Password|סיסמה|كلمة المرور)$/).fill(PASSWORD);
   await page.getByRole('button', { name: /^(Sign in|כניסה|تسجيل الدخول)$/ }).click();
   await expect(page).toHaveURL(/\/business(\/(?!signin)|$)/);
 }

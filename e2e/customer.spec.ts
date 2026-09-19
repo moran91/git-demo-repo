@@ -12,11 +12,12 @@ test.describe('customer storefront', () => {
     // Supermarkets tab
     await page.getByRole('radio', { name: 'סופרמרקטים' }).click();
     await expect(page.getByText('מרכול בית ג׳ן').first()).toBeVisible();
-    // Pickup mode shows only branches physically in Beit Jann
-    await page.getByRole('radio', { name: 'איסוף עצמי' }).click();
+    // Discovery follows the selected town; fulfillment is chosen later at checkout.
+    await page.locator('.city-pill').click();
+    await page.getByRole('option', { name: 'חורפיש', exact: true }).click();
+    await expect(page.locator('.city-pill')).toContainText('חורפיש');
     await page.getByRole('radio', { name: 'מסעדות' }).click();
-    await expect(page.getByText('סניף ראשי – בית ג׳ן')).toBeVisible();
-    await expect(page.getByText('סניף חורפיש')).toHaveCount(0);
+    await expect(page.getByText('סניף חורפיש')).toBeVisible();
     // Language switch preserves route and direction flips
     await page.getByRole('button', { name: /^שפה:/ }).click();
     await page.getByRole('menuitemradio', { name: 'English' }).click();
@@ -47,11 +48,8 @@ test.describe('customer storefront', () => {
     await page.goto('/cart');
     await expect(page.getByText('Laffa, Fries inside')).toBeVisible();
     await expect(page.locator('.summary')).toContainText('₪86');
-    // Photo zoom: the thumbnail is a button that opens the enlarged image; Escape closes it.
-    await page.getByRole('button', { name: /Photo of Shawarma/ }).click();
-    await expect(page.getByRole('dialog', { name: /Photo of Shawarma/ }).locator('img')).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(page.getByRole('dialog')).toHaveCount(0);
+    // The seed deliberately has no product photos; owner-usability covers upload and customer zoom.
+    await expect(page.getByRole('img', { name: 'No photo provided by the business yet' })).toBeVisible();
     // Edit in place: the sheet opens prefilled, and saving replaces the same line (still one line).
     await page.getByRole('button', { name: /Edit: Shawarma/ }).click();
     const edit = page.getByRole('dialog');
@@ -59,7 +57,7 @@ test.describe('customer storefront', () => {
     await expect(edit.getByLabel('Fries inside')).toBeChecked();
     await expect(edit.getByRole('button', { name: /Save changes/ })).toContainText('₪86');
     await edit.getByLabel('Fries inside').uncheck();
-    await edit.getByLabel('Item note').fill('extra tahini');
+    await edit.getByLabel('Note for this item').fill('extra tahini');
     await edit.getByRole('button', { name: /Save changes/ }).click();
     await expect(page.getByText('“extra tahini”')).toBeVisible();
     await expect(page.locator('.list__item')).toHaveCount(1);

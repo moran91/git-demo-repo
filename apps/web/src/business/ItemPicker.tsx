@@ -12,7 +12,7 @@ import { StorageImage } from '@/customer/StorageImage';
  * product). `count` drives the badge on the add button; in `toggle` mode a selected product shows a
  * check instead of a counter and `onPick` is expected to toggle it.
  */
-export function ItemPickerDialog({ products, categories, title, summary, count, pickedVariant, onPick, onVariant, withVariants, toggle, onClose }: {
+export function ItemPickerDialog({ products, categories, title, summary, count, pickedVariant, onPick, withVariants, toggle, onClose }: {
   products: Product[];
   categories: Category[];
   title: string;
@@ -20,8 +20,6 @@ export function ItemPickerDialog({ products, categories, title, summary, count, 
   count: (product: Product) => number;
   pickedVariant?: (product: Product) => string | undefined;
   onPick: (product: Product, variantId: string | undefined) => void;
-  /** Size changed in the row's select (combos only). */
-  onVariant?: (product: Product, variantId: string) => void;
   withVariants?: boolean;
   toggle?: boolean;
   onClose: () => void;
@@ -30,6 +28,7 @@ export function ItemPickerDialog({ products, categories, title, summary, count, 
   const { L, locale } = useI18n();
   const { business } = useDash();
   const [q, setQ] = useState('');
+  const [variants, setVariants] = useState<Record<string, string>>({});
   const [cat, setCat] = useState<string | null>(null);
   const usedCategories = useMemo(() => categories.filter((c) => products.some((p) => p.categoryId === c.id)), [categories, products]);
   const filtered = useMemo(() => {
@@ -48,7 +47,7 @@ export function ItemPickerDialog({ products, categories, title, summary, count, 
           {filtered.length === 0 ? <p className="muted">{t('deals.noMatches')}</p> : null}
           {filtered.map((p) => {
             const needsVariant = !!withVariants && p.variants.length > 0;
-            const vid = needsVariant ? (pickedVariant?.(p) ?? p.variants.find((v) => v.available)?.id) : undefined;
+            const vid = needsVariant ? (variants[p.id] ?? pickedVariant?.(p) ?? p.variants.find((v) => v.available)?.id) : undefined;
             const n = count(p);
             const pname = L(p.name, business.defaultLocale);
             const price = needsVariant ? (p.variants.find((v) => v.id === vid)?.priceAgorot ?? p.priceAgorot) : p.priceAgorot;
@@ -58,9 +57,9 @@ export function ItemPickerDialog({ products, categories, title, summary, count, 
                 <StorageImage path={p.imagePath} alt="" square fallbackLabel={t('discovery.imageFallback')} />
                 <div className="picker-row__body">
                   <span className="picker-row__name">{pname} {p.pricingMode === 'unit' ? <span className="muted"><bdi>{money(price, locale)}</bdi></span> : null}</span>
-                  {needsVariant ? <select className="select picker-row__variant" aria-label={t('deals.variant', { name: pname })} value={vid ?? ''} onChange={(e) => onVariant?.(p, e.target.value)}>{p.variants.filter((v) => v.available).map((v) => <option key={v.id} value={v.id}>{L(v.name, business.defaultLocale)}</option>)}</select> : null}
+                  {needsVariant ? <select className="select picker-row__variant" aria-label={t('deals.variant', { name: pname })} value={vid ?? ''} onChange={(e) => setVariants((current) => ({ ...current, [p.id]: e.target.value }))}>{p.variants.filter((v) => v.available).map((v) => <option key={v.id} value={v.id}>{L(v.name, business.defaultLocale)}</option>)}</select> : null}
                 </div>
-                <button type="button" className={`btn--add ${selected ? 'btn--add--on' : ''}`} aria-pressed={toggle ? n > 0 : undefined} aria-label={`${selected ? t('common.remove') : t('common.add')}: ${pname}`} onClick={() => onPick(p, vid)}>
+                <button type="button" className={`btn--add ${selected ? 'btn--add--on' : ''}`} disabled={!!withVariants && ((needsVariant && !vid) || n >= 20)} aria-pressed={toggle ? n > 0 : undefined} aria-label={`${selected ? t('common.remove') : t('common.add')}: ${pname}`} onClick={() => onPick(p, vid)}>
                   <Icon name={selected ? 'check' : 'plus'} size={22} />
                   {!toggle && n > 0 ? <span className="btn--add__count" aria-hidden="true">{n}</span> : null}
                 </button>

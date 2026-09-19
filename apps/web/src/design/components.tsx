@@ -171,7 +171,11 @@ function DialogInner({ onClose, title, children, footer, sheet, closeLabel }: { 
       onCloseRef.current();
     };
     const onClick = (e: MouseEvent) => {
-      if (e.target === d) onCloseRef.current();
+      // Padding inside a dialog is not its backdrop. Business forms must not disappear
+      // when an imprecise tap lands outside a field.
+      const bounds = d.getBoundingClientRect();
+      const outside = e.clientX < bounds.left || e.clientX > bounds.right || e.clientY < bounds.top || e.clientY > bounds.bottom;
+      if (e.target === d && outside && !d.closest('.business-app')) onCloseRef.current();
     };
     d.addEventListener('cancel', onCancel);
     d.addEventListener('click', onClick);
@@ -186,13 +190,13 @@ function DialogInner({ onClose, title, children, footer, sheet, closeLabel }: { 
   // while it is scrolled to the top, follows the finger and closes past a distance/velocity threshold.
   useEffect(() => {
     const d = ref.current;
-    if (!d || !sheet || !window.matchMedia('(max-width: 639px)').matches) return;
+    if (!d || !sheet || d.closest('.business-app') || !window.matchMedia('(max-width: 639px)').matches) return;
     const body = d.querySelector<HTMLElement>('.dialog__body');
     let startY = 0, startT = 0, dy = 0, active = false, decided = false, fromBody = false;
     const onStart = (e: TouchEvent) => {
       if (e.touches.length !== 1) return;
       const target = e.target as HTMLElement;
-      if (target.closest('.dialog__footer')) return;
+      if (target.closest('.dialog__footer, .location-map')) return;
       fromBody = !!body && body.contains(target);
       if (fromBody && (body!.scrollTop > 0 || target.closest('textarea, input[type="range"]'))) return;
       startY = e.touches[0]!.clientY; startT = e.timeStamp; dy = 0; active = true; decided = false;
@@ -250,7 +254,7 @@ function DialogInner({ onClose, title, children, footer, sheet, closeLabel }: { 
 export function ConfirmDialog({ open, onClose, onConfirm, title, body, confirmLabel, danger, loading }: { open: boolean; onClose: () => void; onConfirm: () => void; title: string; body?: ReactNode; confirmLabel: string; danger?: boolean; loading?: boolean }) {
   const t = useT();
   return (
-    <Dialog open={open} onClose={onClose} title={title} sheet={false} footer={<><Button variant="secondary" onClick={onClose}>{t('common.cancel')}</Button><Button variant={danger ? 'danger-solid' : 'primary'} onClick={onConfirm} loading={loading}>{confirmLabel}</Button></>}>
+    <Dialog open={open} onClose={() => { if (!loading) onClose(); }} title={title} sheet={false} footer={<><Button variant="secondary" disabled={loading} onClick={onClose}>{t('common.cancel')}</Button><Button variant={danger ? 'danger-solid' : 'primary'} onClick={onConfirm} loading={loading}>{confirmLabel}</Button></>}>
       {body}
     </Dialog>
   );

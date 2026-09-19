@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useI18n, useT } from '@/lib/i18n';
 import { discoveryStore } from '@/lib/city';
-import { Segmented, Skeleton, EmptyState, Button } from '@/design/components';
+import { Segmented, Skeleton, EmptyState, Button, Alert } from '@/design/components';
 import { Icon } from '@/design/Icon';
 import { ErrorView } from '@/app/Shell';
-import { useCity, useDiscovery } from './hooks';
+import { useCity, useCities, useDiscovery } from './hooks';
 import { BusinessCard } from './BusinessCard';
+import { useDeviceCity } from './useDeviceCity';
 import { CitySelector } from './CitySelector';
 
 export function DiscoveryPage() {
@@ -13,6 +14,8 @@ export function DiscoveryPage() {
   const { L } = useI18n();
   const prefs = discoveryStore.use();
   const city = useCity(prefs.cityId);
+  const { cities, loading: citiesLoading, error: citiesError } = useCities();
+  const deviceCity = useDeviceCity(cities);
   const [cityOpen, setCityOpen] = useState(false);
   const { data, loading, error } = useDiscovery(prefs.cityId, prefs.kind);
   const cityName = city.data ? L(city.data.name) : '…';
@@ -26,9 +29,13 @@ export function DiscoveryPage() {
           <Icon name="chevronDown" size={16} />
           <span className="visually-hidden">{t('discovery.changeCity')}</span>
         </button>
+        <Button variant="ghost" icon="pin" loading={deviceCity.busy} disabled={citiesLoading || !!citiesError} onClick={() => { void deviceCity.detect().then((ok) => { if (ok === false) setCityOpen(true); }); }}>{t(deviceCity.busy ? 'location.finding' : 'location.use')}</Button>
         <h1>{t('brand.tagline')}</h1>
         <p>{t('brand.subtitle')}</p>
       </div>
+      {deviceCity.message ? <Alert tone="success">{deviceCity.message}</Alert> : null}
+      {deviceCity.error && !cityOpen ? <Alert tone="warn"><div className="stack stack--sm"><span>{deviceCity.error}</span><Button variant="secondary" onClick={() => setCityOpen(true)}>{t('discovery.changeCity')}</Button></div></Alert> : null}
+      {deviceCity.enabled ? <div className="row"><span className="muted">{t('location.enabled')}</span><Button variant="ghost" size="sm" onClick={deviceCity.disable}>{t('location.disable')}</Button></div> : null}
       <div className="controls">
         <div>
           <span className="control-label">{t('discovery.kind')}</span>
@@ -64,10 +71,12 @@ export function DiscoveryPage() {
       </section>
       <CitySelector
         open={cityOpen}
-        onClose={() => setCityOpen(false)}
+        location={deviceCity}
+        onClose={() => { if (deviceCity.busy) deviceCity.cancel(); setCityOpen(false); }}
         value={prefs.cityId}
         onSelect={(c) => {
-          discoveryStore.set({ cityId: c.id });
+          deviceCity.cancel();
+          discoveryStore.set({ cityId: c.id, locationEnabled: false });
         }}
       />
     </div>

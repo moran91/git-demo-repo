@@ -219,3 +219,25 @@ describe('clearing public contact details', () => {
     expect((await admin.db.collection('publicBusinesses').doc(IDS.market).get()).data()!.publicPhone).toBeUndefined();
   });
 });
+
+describe('branch map location', () => {
+  it('saves and clears an optional map pin without retaining the old location', async () => {
+    const ref = admin.db.doc(`businesses/${IDS.market}/branches/${IDS.marketBranch}`);
+    const original = (await ref.get()).data()!;
+    const branch = {
+      name: original.name, cityId: original.cityId, locationDescription: original.locationDescription,
+      phone: original.phone, hours: original.hours, hoursOverrides: original.hoursOverrides,
+      pickupEnabled: original.pickupEnabled, deliveryEnabled: original.deliveryEnabled, deliveryCities: original.deliveryCities,
+    };
+    try {
+      await owner2.call('updateBranch', { ...marketBase, branch: { ...branch, lat: 32.963, lng: 35.383 } });
+      expect((await ref.get()).data()!.lat).toBe(32.963);
+      expect((await ref.get()).data()!.lng).toBe(35.383);
+      await owner2.call('updateBranch', { ...marketBase, branch });
+      expect((await ref.get()).data()!.lat).toBeUndefined();
+      expect((await ref.get()).data()!.lng).toBeUndefined();
+    } finally {
+      await owner2.call('updateBranch', { ...marketBase, branch: { ...branch, lat: original.lat, lng: original.lng } });
+    }
+  });
+});

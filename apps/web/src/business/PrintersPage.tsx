@@ -8,6 +8,7 @@ import { call, newIdempotencyKey } from '@/lib/api';
 import { errorKey } from '@/lib/errors';
 import { formatLocalDateTime } from '@/lib/format';
 import { PageTitle, useDash } from './shell';
+import { LoadError } from './BusinessExperience';
 import { bleSupport, connectBle, PrintTransportError } from '@/print/webBluetooth';
 import { startStation, stopStation, stationStore, printSpecificJob } from '@/print/station';
 import { renderModel, bitmapToDataUrl } from '@/print/renderer';
@@ -17,14 +18,15 @@ import { useNow } from '@/customer/hooks';
 export function ReceiptPreview({ model }: { model: ReceiptModel }) {
   const t = useT();
   const [url, setUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
     let alive = true;
-    renderModel(model).then((bmp) => alive && setUrl(bitmapToDataUrl(bmp))).catch(() => setUrl(null));
+    renderModel(model).then((bmp) => alive && setUrl(bitmapToDataUrl(bmp))).catch(() => { if (alive) setFailed(true); });
     return () => { alive = false; };
   }, [model]);
   return (
     <div className="stack--sm stack">
-      <div className="print-preview">{url ? <img src={url} alt={t('printers.preview')} style={{ width: model.printableDots / 2 }} /> : <div className="skeleton" style={{ width: model.printableDots / 2, height: 400 }} />}</div>
+      <div className="print-preview">{failed ? <Alert tone="danger">{t('common.errorGeneric')}</Alert> : url ? <img src={url} alt={t('printers.preview')} style={{ width: model.printableDots / 2 }} /> : <div className="skeleton" style={{ width: model.printableDots / 2, height: 400 }} />}</div>
       {model.labels.simulation ? <Badge tone="accent">{t('printers.simulation')}</Badge> : null}
       <p className="muted">{model.paperWidthMm}mm · {model.printableDots} dots · {model.locale}</p>
     </div>
@@ -98,7 +100,8 @@ export function PrintersPage() {
 
   return (
     <div className="stack">
-      <PageTitle title={t('printers.title')}>{can('printers_config') ? <Button size="sm" icon="plus" onClick={() => setEdit({ d: defaultDraft() })}>{t('printers.add')}</Button> : null}</PageTitle>
+      <PageTitle title={t('printers.title')}>{can('printers_config') ? <Button size="sm" icon="plus" onClick={() => { const d = defaultDraft(); if (support !== 'ok') { d.transport = 'os_print_dialog'; d.profileId = 'os_print_dialog'; } d.receiptLocale = locale; setEdit({ d }); }}>{t('printers.add')}</Button> : null}</PageTitle>
+      {printers.error || stations.error || jobs.error ? <LoadError /> : null}
       <p className="muted">{t('printers.staffOnlyNote')} {t('printers.compat')}</p>
       {support !== 'ok' ? <Alert tone="info">{support === 'insecure' ? t('printers.insecure') : t('printers.unsupported')}</Alert> : null}
       {printers.data.length === 0 && !printers.loading ? <EmptyState icon="printer" title={t('printers.noPrinters')} /> : null}
@@ -141,7 +144,7 @@ export function PrintersPage() {
           {stale.map((j) => <Checkbox key={j.id} label={`${j.template} · ${j.orderId ?? 'test'} · ${formatLocalDateTime(j.requestedAt, locale)}`} checked={selectedStale.includes(j.id)} onChange={(e) => setSelectedStale(e.target.checked ? [...selectedStale, j.id] : selectedStale.filter((x) => x !== j.id))} />)}
           <div className="row">
             <Button size="sm" disabled={selectedStale.length === 0 || !station.connection} onClick={async () => { for (const id of selectedStale) await printSpecificJob(id); setSelectedStale([]); }}>{t('printers.printSelected')}</Button>
-            <Button size="sm" variant="secondary" disabled={selectedStale.length === 0} onClick={async () => { for (const id of selectedStale) await call('resolvePrintJob', { jobId: id, resolution: 'cancelled', note: 'skipped stale' }).catch(() => undefined); setSelectedStale([]); }}>{t('printers.skipSelected')}</Button>
+            <Button size="sm" variant="secondary" disabled={selectedStale.length === 0} onClick={async () => { for (const id of selectedStale) await call('resolvePrintJob', { jobId: id, resolution: 'cancelled', note: 'skipped stale' }).catch((e) => toast(t(errorKey(e)), 'danger')); setSelectedStale([]); }}>{t('printers.skipSelected')}</Button>
           </div>
         </section>
       ) : null}

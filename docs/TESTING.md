@@ -12,6 +12,18 @@ npm run test -w e2e                      # Playwright (needs emulators + seed + 
 npm run screenshots -w e2e               # design review captures into docs/screenshots
 ```
 
+Owner usability and location regression checks (see [audit](BUSINESS_OWNER_AUDIT.md)):
+```
+npm run test -w e2e -- owner-usability.spec.ts location.spec.ts
+```
+These cover saved drafts and browser Back, new product/photo and branch flows, map pins, location
+permission failures/manual overrides, mobile focus, and owner pages in all three languages. Use
+`--trace off` on machines with limited disk space. Set `PLAYWRIGHT_CHROMIUM_PATH` to an installed Chrome
+executable if Playwright's bundled Chromium is unavailable.
+
+Run function tests before browser tests: function global setup clears and reseeds the emulator database.
+Reseed again afterward because those tests intentionally alter business approvals and inventory.
+
 Seed (fictional, refuses to run without emulator hosts):
 ```
 SEED_ALWAYS_OPEN=1 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 \
