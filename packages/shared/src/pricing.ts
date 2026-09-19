@@ -174,15 +174,21 @@ export function revisionAgreementReason(
   }
 }
 
-/** Discounted total for a combo: floor(sum × (100 − discount) / 100), documented rounding. */
+/** Legacy percentage combos: floor(sum × (100 − discount) / 100), documented rounding. */
 export function comboTotal(itemsSumAgorot: Agorot, discountPercent: number, quantity: number): Agorot {
   return Math.floor((itemsSumAgorot * (100 - discountPercent)) / 100) * quantity;
 }
 
+/** The price one combo is sold at: the owner's fixed price, or the legacy percentage off the members' sum. */
+export function comboUnitPrice(combo: Pick<Combo, 'priceAgorot' | 'discountPercent'>, itemsSumAgorot: Agorot): Agorot {
+  return combo.priceAgorot ?? comboTotal(itemsSumAgorot, combo.discountPercent ?? 0, 1);
+}
+
 /**
  * Prices a combo cart line against the current combo definition and current products. Unit-priced
- * items only (weight items cannot be bundled). The client's expected price is the discounted unit
- * price of one combo; a mismatch requires review, exactly like a plain product.
+ * items only (weight items cannot be bundled). Members must all be live so the bundle can be
+ * fulfilled; the charged unit price is the combo's fixed price. A mismatch with the client's expected
+ * price requires review, exactly like a plain product.
  */
 export function priceComboLine(combo: Combo, products: Map<string, Product>, cart: CartLine): PricedLineResult {
   if (combo.archived || !combo.active) return { problem: { code: 'item_unavailable', lineId: cart.lineId } };
@@ -204,7 +210,7 @@ export function priceComboLine(combo: Combo, products: Map<string, Product>, car
   }
   const qty = cart.quantity;
   if (!Number.isInteger(qty) || qty < 1 || qty > 99) return { problem: { code: 'invalid_argument', lineId: cart.lineId, reason: 'quantity' } };
-  const unitPrice = comboTotal(sum, combo.discountPercent, 1);
+  const unitPrice = comboUnitPrice(combo, sum);
   if (cart.expectedUnitPriceAgorot !== unitPrice) return { problem: { code: 'price_changed', lineId: cart.lineId, expected: cart.expectedUnitPriceAgorot, actual: unitPrice } };
   return {
     line: {
@@ -212,7 +218,6 @@ export function priceComboLine(combo: Combo, products: Map<string, Product>, car
       productId: combo.id,
       comboId: combo.id,
       comboItems: items,
-      comboDiscountPercent: combo.discountPercent,
       name: combo.name,
       pricingMode: 'unit',
       unitLabel: {},

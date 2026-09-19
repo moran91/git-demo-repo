@@ -18,10 +18,12 @@ test.describe('customer storefront', () => {
     await expect(page.getByText('סניף ראשי – בית ג׳ן')).toBeVisible();
     await expect(page.getByText('סניף חורפיש')).toHaveCount(0);
     // Language switch preserves route and direction flips
-    await page.getByLabel('שפה').selectOption('en');
+    await page.getByRole('button', { name: /^שפה:/ }).click();
+    await page.getByRole('menuitemradio', { name: 'English' }).click();
     await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Good things. Close to home.');
-    await page.getByLabel('Language').selectOption('ar');
+    await page.getByRole('button', { name: /^Language:/ }).click();
+    await page.getByRole('menuitemradio', { name: 'العربية' }).click();
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('أشياء طيّبة. قريبة من البيت.');
   });

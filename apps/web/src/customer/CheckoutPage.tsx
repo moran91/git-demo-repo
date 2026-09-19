@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { formatGrams, normalizeIsraeliPhone, placementSuffix, type SavedAddress } from '@qareeb/shared';
+import { availableFulfillmentModes, formatGrams, normalizeIsraeliPhone, placementSuffix, type FulfillmentMode, type SavedAddress } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
-import { cartStore, clearCart } from '@/lib/cart';
-import { useCollection, limit } from '@/lib/queries';
-import { Button, TextInput, TextArea, Alert, EmptyState, Dialog } from '@/design/components';
+import { cartStore, clearCart, setCartMode } from '@/lib/cart';
+import { useCollection, useDoc, limit } from '@/lib/queries';
+import { Button, TextInput, TextArea, Alert, EmptyState, Dialog, Segmented } from '@/design/components';
 import { Icon } from '@/design/Icon';
 import { call, newIdempotencyKey, ApiError } from '@/lib/api';
 import { errorKey } from '@/lib/errors';
@@ -14,7 +14,7 @@ import { money } from '@/lib/format';
 import { useQuote } from './quote';
 import { Summary } from './Summary';
 import { AddressForm, AddressSummary, emptyAddress, type AddressFormValue } from './AddressForm';
-import { useCity } from './hooks';
+import { useCity, type PublicBranch } from './hooks';
 
 export function CheckoutPage() {
   const t = useT();
@@ -25,6 +25,11 @@ export function CheckoutPage() {
   const online = useOnline();
   const cart = state.cart;
   const city = useCity(cart?.cityId ?? 'beit-jann');
+  // The branch decides which fulfillment modes are on offer (delivery to the cart's city, pickup,
+  // dine-in for restaurants) via the same predicate the server enforces.
+  const branch = useDoc<PublicBranch>(cart ? `publicBranches/${cart.branchId}` : null);
+  const modes: FulfillmentMode[] = cart && branch.data ? availableFulfillmentModes(branch.data.type, branch.data, cart.cityId) : [];
+  const [tableNumber, setTableNumber] = useState('');
   const addresses = useCollection<SavedAddress>(user ? `users/${user.uid}/addresses` : null, [limit(20)], [user?.uid]);
   const [contactName, setContactName] = useState('');
   const [contactPhone, setContactPhone] = useState('');
@@ -42,13 +47,14 @@ export function CheckoutPage() {
     try {
       const raw = sessionStorage.getItem('qareeb.checkout.form');
       if (raw) {
-        const f = JSON.parse(raw) as { contactName?: string; contactPhone?: string; note?: string; addressId?: string | null; newAddress?: AddressFormValue | null; redeem?: number };
+        const f = JSON.parse(raw) as { contactName?: string; contactPhone?: string; note?: string; addressId?: string | null; newAddress?: AddressFormValue | null; redeem?: number; tableNumber?: string };
         setContactName(f.contactName ?? '');
         setContactPhone(f.contactPhone ?? '');
         setNote(f.note ?? '');
         setAddressId(f.addressId ?? null);
         setNewAddress(f.newAddress ?? null);
         setRedeem(f.redeem ?? 0);
+        setTableNumber(f.tableNumber ?? '');
       }
     } catch {
       /* ignore */
@@ -56,11 +62,16 @@ export function CheckoutPage() {
   }, []);
   useEffect(() => {
     try {
-      sessionStorage.setItem('qareeb.checkout.form', JSON.stringify({ contactName, contactPhone, note, addressId, newAddress, redeem }));
+      sessionStorage.setItem('qareeb.checkout.form', JSON.stringify({ contactName, contactPhone, note, addressId, newAddress, redeem, tableNumber }));
     } catch {
       /* ignore */
     }
-  }, [contactName, contactPhone, note, addressId, newAddress, redeem]);
+  }, [contactName, contactPhone, note, addressId, newAddress, redeem, tableNumber]);
+  // A cart carries the mode it was started with; once the branch is known, snap it to something the
+  // branch can actually serve so the quote never runs against an impossible mode.
+  useEffect(() => {
+    if (cart && branch.data && modes.length > 0 && !modes.includes(cart.mode)) setCartMode(modes[0]!, cart.cityId);
+  }, [cart, branch.data, modes]);
   useEffect(() => {
     if (profile) {
       setContactName((n) => n || profile.displayName || '');
@@ -90,9 +101,10 @@ export function CheckoutPage() {
   }
   const dl = state.meta.businessDefaultLocale;
   const cityName = city.data ? L(city.data.name) : cart.cityId;
-  const addressOk = cart.mode === 'pickup' || (selectedSaved && selectedSaved.cityId === cart.cityId) || (newAddress && newAddress.cityId === cart.cityId);
+  const modeOk = branch.loading || modes.includes(cart.mode);
+  const addressOk = cart.mode !== 'delivery' || (selectedSaved && selectedSaved.cityId === cart.cityId) || (newAddress && newAddress.cityId === cart.cityId);
   const phoneOk = !!normalizeIsraeliPhone(contactPhone);
-  const canPlace = online && !!quote && !quoteError && addressOk && phoneOk && contactName.trim().length > 0 && !submitting;
+  const canPlace = online && !!quote && !quoteError && modeOk && !branch.loading && addressOk && phoneOk && contactName.trim().length > 0 && !submitting;
 
   const place = async () => {
     if (!quote) return;
@@ -112,6 +124,7 @@ export function CheckoutPage() {
         addressId: cart.mode === 'delivery' && selectedSaved ? selectedSaved.id : undefined,
         address: cart.mode === 'delivery' && !selectedSaved && newAddress ? newAddress : undefined,
         saveAddress: cart.mode === 'delivery' && !selectedSaved && !!newAddress,
+        tableNumber: cart.mode === 'dine_in' && tableNumber.trim() ? tableNumber.trim() : undefined,
         customerNote: note.trim() || undefined,
         expectedCashDueAgorot: quote.totals.cashDueAgorot,
         locale,
@@ -140,12 +153,28 @@ export function CheckoutPage() {
       <h1>{t('checkout.title')}</h1>
       <div className="checkout-layout">
         <div className="stack--lg stack">
-          <section className="card stack">
-            <div className="row row--between">
-              <strong>{cart.mode === 'delivery' ? t('checkout.deliveryTo') : t('checkout.pickupAt')} {cart.mode === 'delivery' ? cityName : L(state.meta.branchName, dl)}</strong>
-              <Link className="btn btn--ghost btn--sm" to="/">{t('checkout.changeMode')}</Link>
+          <section className="card stack" aria-labelledby="mode-h">
+            <div className="stack--sm stack">
+              <strong>{L(state.meta.businessName, dl)}</strong>
+              <div className="muted">{cart.mode === 'delivery' ? `${t('checkout.deliveryTo')} ${cityName}` : `${cart.mode === 'dine_in' ? t('checkout.dineInAt') : t('checkout.pickupAt')} ${L(state.meta.branchName, dl)}`}</div>
             </div>
-            <div className="muted">{L(state.meta.businessName, dl)}</div>
+            {branch.loading ? <div className="skeleton" style={{ height: 48 }} aria-busy="true" /> : modes.length === 0 ? (
+              <Alert tone="warn">{t('checkout.noModeAvailable', { city: cityName })} <Link to="/">{t('discovery.changeCity')}</Link></Alert>
+            ) : (
+              <div>
+                <span className="control-label" id="mode-h">{t('checkout.mode')}</span>
+                <Segmented
+                  label={t('checkout.mode')}
+                  stacked={modes.length > 2}
+                  value={cart.mode}
+                  onChange={(mode) => setCartMode(mode, cart.cityId)}
+                  options={modes.map((m) => (m === 'delivery' ? { value: m, label: t('common.delivery'), icon: 'truck' as const } : m === 'pickup' ? { value: m, label: t('common.pickup'), icon: 'bag' as const } : { value: m, label: t('common.dineIn'), icon: 'chair' as const }))}
+                />
+              </div>
+            )}
+            {cart.mode === 'dine_in' && modes.includes('dine_in') ? (
+              <TextInput label={t('checkout.tableNumber')} optional hint={t('checkout.tableNumberHint')} value={tableNumber} onChange={(e) => setTableNumber(e.target.value)} inputMode="numeric" ltr maxLength={20} autoComplete="off" style={{ maxWidth: 160 }} />
+            ) : null}
           </section>
 
           {cart.mode === 'delivery' ? (
@@ -204,7 +233,7 @@ export function CheckoutPage() {
           {quote ? <ul className="order-lines card">
             {quote.lines.map((l) => (
               <li key={l.lineId} className="order-line">
-                <span className="wrap-anywhere">{l.pricingMode === 'weight' ? formatGrams(l.requestedGrams ?? 0, locale) : `${l.quantity} ×`} {L(l.name, dl)}{l.variantName ? ` (${L(l.variantName, dl)})` : ''}{l.modifiers.length ? <span className="muted"> · {l.modifiers.map((m) => L(m.optionName, dl) + placementSuffix(m.placement, t)).join(', ')}</span> : null}{l.comboItems ? <span className="muted"> · {l.comboItems.map((ci) => `${ci.quantity} × ${L(ci.name, dl)}`).join(' + ')} · -{l.comboDiscountPercent}%</span> : null}</span>
+                <span className="wrap-anywhere">{l.pricingMode === 'weight' ? formatGrams(l.requestedGrams ?? 0, locale) : `${l.quantity} ×`} {L(l.name, dl)}{l.variantName ? ` (${L(l.variantName, dl)})` : ''}{l.modifiers.length ? <span className="muted"> · {l.modifiers.map((m) => L(m.optionName, dl) + placementSuffix(m.placement, t)).join(', ')}</span> : null}{l.comboItems ? <span className="muted"> · {l.comboItems.map((ci) => `${ci.quantity} × ${L(ci.name, dl)}`).join(' + ')}</span> : null}</span>
                 <bdi className="num">{money(l.lineTotalAgorot, locale)}</bdi>
               </li>
             ))}

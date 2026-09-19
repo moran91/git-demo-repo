@@ -51,8 +51,8 @@ export const onImageUploaded = onObjectFinalized({ region: REGION, memory: '1GiB
     return;
   }
   const base = name.replace(/\.[^.]+$/, '');
-  // Business covers and combo promo images are 16:9 banners; everything else is a square-ish product photo.
-  const isCover = /\/cover[^/]*$/.test(name) || /\/combos\//.test(name);
+  // Business covers, combo promo images and promotion banners are 16:9; everything else is a square-ish product photo.
+  const isCover = /\/cover[^/]*$/.test(name) || /\/combos\//.test(name) || /\/promotions\//.test(name);
   const thumb = await sharp(buf).rotate().resize(isCover ? { width: 640, height: 360, fit: 'cover' } : { width: 400, height: 400, fit: 'cover' }).webp({ quality: 78 }).toBuffer();
   const display = await sharp(buf).rotate().resize(isCover ? { width: 1600, height: 900, fit: 'cover' } : { width: 1200, height: 1200, fit: 'inside' }).webp({ quality: 82 }).toBuffer();
   await Promise.all([

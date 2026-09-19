@@ -73,7 +73,7 @@ export function CatalogPage() {
           </div>
           <ul className="list">
             {(grouped.get(c.id) ?? []).filter((p) => showArchived || !p.archived).map((p, i, arr) => (
-              <li key={p.id} className="list__item">
+              <li key={p.id} className="list__item list__item--catalog">
                 <StorageImage path={p.imagePath} alt="" square className="product__img" fallbackLabel={t('discovery.imageFallback')} />
                 <div className="list__grow">
                   <div className="row" style={{ gap: 6 }}><strong>{L(p.name, business.defaultLocale)}</strong>{p.mostOrdered ? <span className="most-ordered">{t('product.mostOrdered')}</span> : null}{p.archived ? <Badge tone="muted">{t('catalog.archived')}</Badge> : null}{!p.available ? <Badge tone="danger">{t('common.unavailable')}</Badge> : null}{p.pricingMode === 'weight' ? <Badge tone="neutral">{t('common.perKg')}</Badge> : null}</div>

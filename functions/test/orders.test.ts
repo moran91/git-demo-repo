@@ -39,6 +39,20 @@ describe('quote + place order', () => {
     expect(await expectCode(customer1.call('placeOrder', { ...deliveryBase, lines: [shawarmaLine()], idempotencyKey: key(), expectedCashDueAgorot: 1 }))).toBe('price_changed');
   });
 
+  it('dine-in: a restaurant accepts it with a table number; another city or a supermarket is refused', async () => {
+    const lines = [shawarmaLine()];
+    const q = await customer1.call<{ totals: { cashDueAgorot: number; deliveryFeeAgorot: number } }>('quoteOrder', { ...quoteBase, mode: 'dine_in', lines });
+    expect(q.totals.deliveryFeeAgorot).toBe(0);
+    const r = await customer2.call<{ orderId: string }>('placeOrder', { ...deliveryBase, mode: 'dine_in', addressId: undefined, contactName: 'Maha', contactPhone: '0502222222', tableNumber: '7', lines, idempotencyKey: key(), expectedCashDueAgorot: q.totals.cashDueAgorot });
+    const order = (await admin.db.collection('orders').doc(r.orderId).get()).data()!;
+    expect(order.mode).toBe('dine_in');
+    expect(order.tableNumber).toBe('7');
+    expect(order.address).toBeUndefined();
+    expect(order.totals.deliveryFeeAgorot).toBe(0);
+    expect(await expectCode(customer1.call('quoteOrder', { ...quoteBase, mode: 'dine_in', cityId: 'hurfeish', lines }))).toBe('dine_in_not_available');
+    expect(await expectCode(customer1.call('quoteOrder', { businessId: IDS.market, branchId: IDS.marketBranch, mode: 'dine_in', cityId: 'beit-jann', lines: [{ lineId: 'l', productId: 'p-labneh', modifiers: [], quantity: 1, expectedUnitPriceAgorot: 1490 }] }))).toBe('dine_in_not_available');
+  });
+
   it('places a delivery order with only city + house description + recipient + phone, idempotently, and notifies branch staff', async () => {
     const k = key();
     const payload = { ...deliveryBase, addressId: undefined, address: { houseDescription: 'ליד בית הספר, השער הירוק', cityId: 'beit-jann', recipientName: 'סמיר', recipientPhone: '0501111111' }, lines: [shawarmaLine()], idempotencyKey: k, expectedCashDueAgorot: 9600, customerNote: 'בלי בצל' };

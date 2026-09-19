@@ -29,7 +29,7 @@ export function OrderLines({ order, compact }: { order: Order; compact?: boolean
             {l.removed ? <span className="badge badge--danger">{t('orders.removed')}</span> : l.substitutedFromLineId ? <span className="badge badge--accent">{t('orders.substituted')}</span> : null}{' '}
             <strong>{l.pricingMode === 'weight' ? (l.actualGrams !== undefined ? formatGrams(l.actualGrams, locale) : formatGrams(l.requestedGrams ?? 0, locale)) : `${l.quantity} ×`}</strong> {L(l.name)}{l.variantName ? ` (${L(l.variantName)})` : ''}
             {l.pricingMode === 'weight' && l.actualGrams !== undefined ? <span className="muted"> · {t("orders.requestedWeight")} {formatGrams(l.requestedGrams ?? 0, locale)}</span> : null}
-            {l.comboItems ? <div className="order-line__combo">{t('deals.combo')} -{l.comboDiscountPercent}%: {l.comboItems.map((ci) => `${ci.quantity * l.quantity} × ${L(ci.name)}${ci.variantName ? ` (${L(ci.variantName)})` : ''}`).join(' + ')}</div> : null}
+            {l.comboItems ? <div className="order-line__combo">{t('deals.combo')}: {l.comboItems.map((ci) => `${ci.quantity * l.quantity} × ${L(ci.name)}${ci.variantName ? ` (${L(ci.variantName)})` : ''}`).join(' + ')}</div> : null}
             {l.modifiers.length ? <div className="order-line__mods">+ {l.modifiers.map((m, i) => <span key={m.optionId + i}>{i ? ', ' : ''}{m.placement && m.placement !== 'whole' ? <PizzaIcon placement={m.placement} size={18} label={placementSuffix(m.placement, t)} /> : null} {L(m.optionName)}{placementSuffix(m.placement, t)}</span>)}</div> : null}
             {l.note ? <div className="order-line__mods">“{l.note}”</div> : null}
           </span>
@@ -71,7 +71,8 @@ export function OrderCard({ order, detailLink }: { order: Order; detailLink?: bo
           <span id={`o-${order.id}`} className="order-card__ref">{order.reference}</span>
           <div className="row" style={{ gap: 8 }}>
             <OrderStatusBadge status={order.status} />
-            <Badge tone="neutral" icon={order.mode === 'delivery' ? 'truck' : 'bag'}>{order.mode === 'delivery' ? t('dash.deliveryOrder') : t('common.pickup')}</Badge>
+            <Badge tone="neutral" icon={order.mode === 'delivery' ? 'truck' : order.mode === 'dine_in' ? 'chair' : 'bag'}>{order.mode === 'delivery' ? t('dash.deliveryOrder') : order.mode === 'dine_in' ? t('dash.dineInOrder') : t('common.pickup')}</Badge>
+            {order.mode === 'dine_in' && order.tableNumber ? <Badge tone="primary" icon="chair">{t('orders.table', { n: order.tableNumber })}</Badge> : null}
             {order.revision > 0 ? <Badge tone="accent">{t('orders.revised')}</Badge> : null}
           </div>
         </div>
@@ -91,6 +92,8 @@ export function OrderCard({ order, detailLink }: { order: Order; detailLink?: bo
           <div className="address-block__title"><Icon name="house" size={18} /> {t('dash.houseDescription')}</div>
           <AddressSummary a={{ ...order.address, cityName: order.address.cityName }} />
         </div>
+      ) : order.mode === 'dine_in' ? (
+        <div className={order.tableNumber ? 'address-block' : 'muted icon-text'}>{order.tableNumber ? <div className="address-block__title"><Icon name="chair" size={18} /> {t('orders.table', { n: order.tableNumber })}</div> : <><Icon name="chair" size={16} /> {t('dash.dineInNoTable')}</>}</div>
       ) : (
         <div className="muted icon-text"><Icon name="bag" size={16} /> {t('dash.pickupOrder')}</div>
       )}

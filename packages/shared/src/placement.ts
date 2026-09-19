@@ -42,7 +42,7 @@ export const PLACEMENT_LABEL_KEY = {
   br: 'product.quarterBR',
 } as const;
 export const QUARTER_KEY = { tl: 'product.quarterTL', tr: 'product.quarterTR', bl: 'product.quarterBL', br: 'product.quarterBR' } as const;
-export type PlacementKey = (typeof PLACEMENT_LABEL_KEY)[keyof typeof PLACEMENT_LABEL_KEY] | 'product.placementWhole' | 'product.placementQuarters';
+export type PlacementKey = (typeof PLACEMENT_LABEL_KEY)[keyof typeof PLACEMENT_LABEL_KEY] | 'product.placementWhole' | 'product.placementQuarters' | 'product.placementAllBut';
 
 /** Human label for a placement: '' for whole, else e.g. 'חצי ימני' or 'רבעים: …'. */
 export function placementLabel(placement: string | undefined, t: (key: PlacementKey, params?: Record<string, string | number>) => string): string {
@@ -50,6 +50,8 @@ export function placementLabel(placement: string | undefined, t: (key: Placement
   if (n === 'whole') return '';
   const key = (PLACEMENT_LABEL_KEY as Record<string, PlacementKey>)[n];
   if (key) return t(key);
+  const qs = placementQuarters(n);
+  if (qs.length === 3) return t('product.placementAllBut', { q: t(QUARTER_KEY[QUARTERS.find((x) => !qs.includes(x))!]) });
   return t('product.placementQuarters', { list: placementQuarters(n).map((q) => t(QUARTER_KEY[q])).join(', ') });
 }
 

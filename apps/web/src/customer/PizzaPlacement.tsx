@@ -1,4 +1,5 @@
-import { PLACEMENT_PRESETS, placementFromQuarters, placementLabel, placementQuarters, QUARTERS, type Quarter, type ToppingPlacement } from '@qareeb/shared';
+import { placementFromQuarters, placementLabel, placementQuarters, QUARTERS, type Quarter, type ToppingPlacement } from '@qareeb/shared';
+import { useState } from 'react';
 import { useT } from '@/lib/i18n';
 
 // Quadrant wedges of a unit circle centred at (50,50), r=44. Screen left is the customer's left.
@@ -15,9 +16,9 @@ const DOTS: Record<Quarter, [number, number][]> = {
   bl: [[30, 70], [22, 56], [40, 80]],
 };
 
-/** Pizza drawing with the chosen quarters filled. Read-only unless onToggle is given. */
-export function PizzaIcon({ placement, size = 24, onToggle, label }: { placement: ToppingPlacement | undefined; size?: number; onToggle?: (q: Quarter) => void; label?: string }) {
-  const on = new Set(placementQuarters(placement));
+/** Pizza drawing with the chosen quarters filled. Read-only unless onToggle is given. `quarters` overrides `placement` (lets the picker draw an empty pizza). */
+export function PizzaIcon({ placement, quarters, size = 24, onToggle, label }: { placement: ToppingPlacement | undefined; quarters?: Iterable<Quarter>; size?: number; onToggle?: (q: Quarter) => void; label?: string }) {
+  const on = new Set(quarters ?? placementQuarters(placement));
   return (
     <svg className={`pizza ${onToggle ? 'pizza--interactive' : ''}`} viewBox="0 0 100 100" width={size} height={size} role={onToggle ? 'group' : 'img'} aria-label={label}>
       <circle cx="50" cy="50" r="47" className="pizza__crust" />
@@ -33,31 +34,29 @@ export function PizzaIcon({ placement, size = 24, onToggle, label }: { placement
   );
 }
 
-/** Tap quarters on the big pizza, or pick a preset (whole / halves). Quarter is the minimum resolution. */
+/** One control: the pizza starts empty and asks "where?". Tap quarters, or "whole" to fill it. Empty or all four = whole; two adjacent quarters read as a half. */
 export function PlacementPicker({ value, onChange }: { value: ToppingPlacement | undefined; onChange: (p: ToppingPlacement) => void }) {
   const t = useT();
-  const current = value ?? 'whole';
-  const toggle = (q: Quarter) => {
-    const set = new Set(placementQuarters(current));
-    if (current === 'whole') { set.clear(); set.add(q); } // from "whole", a tap means "only this quarter"
-    else if (set.has(q)) set.delete(q);
-    else set.add(q);
-    onChange(set.size === 0 ? 'whole' : placementFromQuarters(set));
+  const [picked, setPicked] = useState<Quarter[]>(() => (!value ? [] : value === 'whole' ? [...QUARTERS] : placementQuarters(value)));
+  const apply = (qs: Quarter[]) => {
+    setPicked(qs);
+    onChange(qs.length === 0 ? 'whole' : placementFromQuarters(qs));
   };
-  const presets = Object.values(PLACEMENT_PRESETS);
+  const toggle = (q: Quarter) => apply(picked.includes(q) ? picked.filter((x) => x !== q) : [...picked, q]);
+  const empty = picked.length === 0;
+  const full = picked.length === 4;
+  const label = empty ? t('product.placementAsk') : full ? t('product.placementWhole') : placementLabel(placementFromQuarters(picked), t);
+  const hint = empty ? t('product.placementHintEmpty') : full ? t('product.placementHintFull') : t('product.placementHint');
   return (
     <div className="placement">
-      <PizzaIcon placement={current} size={88} onToggle={toggle} label={t('product.placementHint')} />
-      <div className="placement__side">
-        <div className="placement__presets" role="radiogroup" aria-label={t('product.placement')}>
-          {presets.map((p) => (
-            <button key={p} type="button" role="radio" aria-checked={current === p} aria-label={placementLabel(p, t) || t('product.placementWhole')} className={`placement__preset ${current === p ? 'is-active' : ''}`} onClick={() => onChange(p)}>
-              <PizzaIcon placement={p} size={30} />
-            </button>
-          ))}
-        </div>
-        <div className="placement__label">{placementLabel(current, t) || t('product.placementWhole')}</div>
+      <PizzaIcon placement={value} quarters={picked} size={64} onToggle={toggle} label={t('product.placement')} />
+      <div className="placement__text">
+        <div className="placement__value">{label}</div>
+        <div className="placement__hint">{hint}</div>
       </div>
+      {empty
+        ? <button type="button" className="placement__whole" onClick={() => apply([...QUARTERS])}>{t('product.placementWhole')}</button>
+        : <button type="button" className="placement__reset" onClick={() => apply([])}>{t('product.placementClear')}</button>}
     </div>
   );
 }

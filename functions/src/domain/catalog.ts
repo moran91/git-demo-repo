@@ -1,11 +1,11 @@
 import { onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { z } from 'zod';
-import { categoryInputSchema, cleanLocalized, comboInputSchema, idSchema, productInputSchema, sharedModifierGroupInputSchema, makeId, type Branch, type Business, type Category, type Combo, type ModifierGroup, type Product, type SharedModifierGroup } from '@qareeb/shared';
+import { MAX_PROMOTIONS, categoryInputSchema, cleanLocalized, comboInputSchema, idSchema, productInputSchema, promotionInputSchema, sharedModifierGroupInputSchema, makeId, type Branch, type Business, type Category, type Combo, type ModifierGroup, type Product, type Promotion, type SharedModifierGroup } from '@qareeb/shared';
 import { REGION, col, db, nowIso, storage } from '../lib/firebase.js';
 import { handled, fail } from '../lib/errors.js';
 import { parse } from '../lib/validate.js';
 import { requireCaller, requireMembership } from '../lib/auth.js';
-import { isPubliclyVisible, projectCategoryInTx, projectComboInTx, projectProductInTx, reprojectCatalog, toPublicProduct } from '../lib/projections.js';
+import { isPubliclyVisible, projectCategoryInTx, projectComboInTx, projectProductInTx, projectPromotionInTx, reprojectCatalog, toPublicProduct } from '../lib/projections.js';
 import { writeAudit } from '../lib/audit.js';
 import { deleteImageWithVariants } from '../lib/images.js';
 
@@ -428,6 +428,7 @@ export const saveCombo = onCall(opts, handled(async (req: CallableRequest<unknow
     if (input.comboId && !existingSnap.exists) fail('not_found');
     // Every bundled item must be a live, unit-priced product of this branch (weight items cannot be bundled).
     const seen = new Set<string>();
+    let sum = 0;
     for (const it of input.combo.items) {
       const key = `${it.productId}:${it.variantId ?? ''}`;
       if (seen.has(key)) fail('invalid_argument', { issues: [{ path: 'items', message: 'duplicate_item' }] });
@@ -436,8 +437,12 @@ export const saveCombo = onCall(opts, handled(async (req: CallableRequest<unknow
       const p = ps.data() as Product | undefined;
       if (!p || p.archived) fail('invalid_argument', { issues: [{ path: 'items', message: 'unknown_product', productId: it.productId }] });
       if (p.pricingMode !== 'unit') fail('invalid_argument', { issues: [{ path: 'items', message: 'weight_items_cannot_be_bundled', productId: it.productId }] });
-      if (p.variants.length > 0 && !p.variants.some((v) => v.id === it.variantId)) fail('invalid_argument', { issues: [{ path: 'items', message: 'variant_required', productId: it.productId }] });
+      const v = p.variants.find((x) => x.id === it.variantId);
+      if (p.variants.length > 0 && !v) fail('invalid_argument', { issues: [{ path: 'items', message: 'variant_required', productId: it.productId }] });
+      sum += (v?.priceAgorot ?? p.priceAgorot) * it.quantity;
     }
+    // A combo that costs more than its members bought separately is a mistake, not a bundle.
+    if (input.combo.priceAgorot > sum) fail('invalid_argument', { issues: [{ path: 'priceAgorot', message: 'price_above_items', itemsSumAgorot: sum }] });
     const existing = existingSnap.data() as Combo | undefined;
     const now = nowIso();
     const doc: Combo = {
@@ -447,7 +452,7 @@ export const saveCombo = onCall(opts, handled(async (req: CallableRequest<unknow
       name: cleanLocalized(input.combo.name),
       description: cleanLocalized(input.combo.description),
       items: input.combo.items,
-      discountPercent: input.combo.discountPercent,
+      priceAgorot: input.combo.priceAgorot,
       imagePath: existing?.imagePath,
       promoted: input.combo.promoted,
       active: input.combo.active,
@@ -480,10 +485,33 @@ export const setComboArchived = onCall(opts, handled(async (req: CallableRequest
   return { ok: true };
 }));
 
-/** Records the locally generated promo image uploaded to businesses/{b}/branches/{br}/combos/{id}/. */
+/**
+ * Permanently deletes a combo, its public projection and its promo image. Past orders keep their own
+ * line snapshots, so nothing else references the document.
+ */
+export const deleteCombo = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
+  const c = await requireCaller(req);
+  const input = parse(z.object({ businessId: idSchema, branchId: idSchema, comboId: idSchema }).strict(), req.data);
+  await requireMembership(c, input.businessId, [...CATALOG_ROLES], input.branchId);
+  let imagePath: string | undefined;
+  await db.runTransaction(async (tx) => {
+    const ref = col.combos(input.businessId, input.branchId).doc(input.comboId);
+    const snap = await tx.get(ref);
+    if (!snap.exists) fail('not_found');
+    const combo = snap.data() as Combo;
+    imagePath = combo.imagePath;
+    tx.delete(ref);
+    tx.delete(col.publicCombos(input.branchId).doc(input.comboId));
+    writeAudit(tx, { actorUid: c.uid, action: 'combo.delete', targetType: 'combo', targetId: `${input.branchId}/${input.comboId}`, before: combo, after: undefined });
+  });
+  if (imagePath) await deleteImageWithVariants(imagePath);
+  return { ok: true };
+}));
+
+/** Records the locally generated promo image uploaded to businesses/{b}/branches/{br}/combos/{id}/; an absent/null path clears it (nulls are stripped before parsing). */
 export const setComboImage = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
   const c = await requireCaller(req);
-  const input = parse(z.object({ businessId: idSchema, branchId: idSchema, comboId: idSchema, path: z.string().max(400).nullable() }).strict(), req.data);
+  const input = parse(z.object({ businessId: idSchema, branchId: idSchema, comboId: idSchema, path: z.string().max(400).optional() }).strict(), req.data);
   await requireMembership(c, input.businessId, [...CATALOG_ROLES], input.branchId);
   const prefix = `businesses/${input.businessId}/branches/${input.branchId}/combos/${input.comboId}/`;
   if (input.path && !input.path.startsWith(prefix)) fail('invalid_argument', { issues: [{ path: 'path', message: 'wrong_tenant_path' }] });
@@ -508,3 +536,100 @@ export const setComboImage = onCall(opts, handled(async (req: CallableRequest<un
   if (removed) await storage.bucket().file(removed).delete({ ignoreNotFound: true }).catch(() => undefined);
   return { ok: true };
 }));
+
+/** ---------- Limited-time promotions ---------- */
+
+/**
+ * Upsert one promotion of a branch. Owners and managers of the branch; capped per branch so the
+ * storefront strip stays short. Featured products must be live products of the same branch.
+ */
+export const savePromotion = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
+  const c = await requireCaller(req);
+  const input = parse(z.object({ businessId: idSchema, branchId: idSchema, promotionId: idSchema.optional(), promotion: promotionInputSchema }).strict(), req.data);
+  await requireMembership(c, input.businessId, [...CATALOG_ROLES], input.branchId);
+  const ref = input.promotionId ? col.promotions(input.businessId, input.branchId).doc(input.promotionId) : col.promotions(input.businessId, input.branchId).doc();
+  const promotion = await db.runTransaction(async (tx) => {
+    const ctx = await loadContext(tx, input.businessId, input.branchId);
+    const existingSnap = await tx.get(ref);
+    if (input.promotionId && !existingSnap.exists) fail('not_found');
+    const all = await tx.get(col.promotions(input.businessId, input.branchId));
+    if (!existingSnap.exists && all.size >= MAX_PROMOTIONS) fail('invalid_argument', { issues: [{ path: 'promotion', message: 'too_many_promotions' }] });
+    const productIds = Array.from(new Set(input.promotion.productIds));
+    for (const productId of productIds) {
+      const ps = await tx.get(col.products(input.businessId, input.branchId).doc(productId));
+      const p = ps.data() as Product | undefined;
+      if (!p || p.archived) fail('invalid_argument', { issues: [{ path: 'productIds', message: 'unknown_product', productId }] });
+    }
+    const existing = existingSnap.data() as Promotion | undefined;
+    const now = nowIso();
+    const doc: Promotion = {
+      id: ref.id,
+      businessId: input.businessId,
+      branchId: input.branchId,
+      title: cleanLocalized(input.promotion.title),
+      body: cleanLocalized(input.promotion.body),
+      productIds,
+      imagePath: existing?.imagePath,
+      endsAt: input.promotion.endsAt,
+      active: input.promotion.active,
+      sortOrder: existing?.sortOrder ?? (all.empty ? 0 : Math.max(...all.docs.map((d) => (d.data() as Promotion).sortOrder)) + 1),
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    tx.set(ref, doc);
+    projectPromotionInTx(tx, ctx.business, ctx.branch, doc);
+    writeAudit(tx, { actorUid: c.uid, action: existing ? 'promotion.update' : 'promotion.create', targetType: 'promotion', targetId: `${input.branchId}/${ref.id}`, before: existing, after: doc });
+    return doc;
+  });
+  return { promotion };
+}));
+
+/** Permanently removes a promotion, its public projection and its banner. */
+export const removePromotion = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
+  const c = await requireCaller(req);
+  const input = parse(z.object({ businessId: idSchema, branchId: idSchema, promotionId: idSchema }).strict(), req.data);
+  await requireMembership(c, input.businessId, [...CATALOG_ROLES], input.branchId);
+  let imagePath: string | undefined;
+  await db.runTransaction(async (tx) => {
+    const ref = col.promotions(input.businessId, input.branchId).doc(input.promotionId);
+    const snap = await tx.get(ref);
+    if (!snap.exists) fail('not_found');
+    const promotion = snap.data() as Promotion;
+    imagePath = promotion.imagePath;
+    tx.delete(ref);
+    tx.delete(col.publicPromotions(input.branchId).doc(input.promotionId));
+    writeAudit(tx, { actorUid: c.uid, action: 'promotion.remove', targetType: 'promotion', targetId: `${input.branchId}/${input.promotionId}`, before: promotion, after: undefined });
+  });
+  if (imagePath) await deleteImageWithVariants(imagePath);
+  return { ok: true };
+}));
+
+/** Records a banner uploaded to businesses/{b}/branches/{br}/promotions/{id}/; an absent/null path clears it (nulls are stripped before parsing). */
+export const setPromotionImage = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
+  const c = await requireCaller(req);
+  const input = parse(z.object({ businessId: idSchema, branchId: idSchema, promotionId: idSchema, path: z.string().max(400).optional() }).strict(), req.data);
+  await requireMembership(c, input.businessId, [...CATALOG_ROLES], input.branchId);
+  const prefix = `businesses/${input.businessId}/branches/${input.branchId}/promotions/${input.promotionId}/`;
+  if (input.path && !input.path.startsWith(prefix)) fail('invalid_argument', { issues: [{ path: 'path', message: 'wrong_tenant_path' }] });
+  let removed: string | undefined;
+  await db.runTransaction(async (tx) => {
+    const ctx = await loadContext(tx, input.businessId, input.branchId);
+    const ref = col.promotions(input.businessId, input.branchId).doc(input.promotionId);
+    const snap = await tx.get(ref);
+    if (!snap.exists) fail('not_found');
+    const promotion = snap.data() as Promotion;
+    if (input.path) {
+      const [meta] = await storage.bucket().file(input.path).getMetadata().catch(() => [undefined]);
+      if (!meta) fail('invalid_argument', { issues: [{ path: 'path', message: 'missing_object' }] });
+      const ct = String(meta.contentType ?? '');
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(ct) || Number(meta.size ?? 0) > 5 * 1024 * 1024) fail('invalid_argument', { issues: [{ path: 'path', message: 'invalid_image' }] });
+    }
+    if (promotion.imagePath && promotion.imagePath !== input.path) removed = promotion.imagePath;
+    const next = { ...promotion, imagePath: input.path ?? undefined, updatedAt: nowIso() };
+    tx.set(ref, next);
+    projectPromotionInTx(tx, ctx.business, ctx.branch, next);
+  });
+  if (removed) await deleteImageWithVariants(removed);
+  return { ok: true };
+}));
+

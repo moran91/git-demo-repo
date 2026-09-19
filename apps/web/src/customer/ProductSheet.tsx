@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { formatGrams, makeId, placementSuffix, priceLine, weightLineTotal, type CartLine, type CartModifierSelection, type Product, type ToppingPlacement } from '@qareeb/shared';
+import { formatGrams, makeId, placementSuffix, priceLine, weightLineTotal, type CartLine, type CartModifierSelection, type FulfillmentMode, type Product, type ToppingPlacement } from '@qareeb/shared';
 import { PlacementPicker } from './PizzaPlacement';
 import { useI18n, useT } from '@/lib/i18n';
 import { Button, Checkbox, ConfirmDialog, Dialog, Stepper, TextArea, toast } from '@/design/components';
@@ -10,7 +10,7 @@ import { StorageImage } from './StorageImage';
 import { PhotoLightbox } from './PhotoLightbox';
 
 /** When `editLine` is given the sheet opens prefilled and "Save" replaces that cart line in place. */
-export function ProductSheet({ product, business, branch, mode, cityId, onClose, editLine }: { product: Product; business: PublicBusiness; branch: PublicBranch; mode: 'pickup' | 'delivery'; cityId: string; onClose: () => void; editLine?: CartLine }) {
+export function ProductSheet({ product, business, branch, mode, cityId, onClose, editLine }: { product: Product; business: PublicBusiness; branch: PublicBranch; mode: FulfillmentMode; cityId: string; onClose: () => void; editLine?: CartLine }) {
   const t = useT();
   const { L, locale } = useI18n();
   const cart = cartStore.use();

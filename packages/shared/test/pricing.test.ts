@@ -121,13 +121,16 @@ describe('combo pricing', () => {
   const shawarma: Product = { ...base, id: 'p-shawarma', priceAgorot: 3500 };
   const fries: Product = { ...base, id: 'p-fries', priceAgorot: 1200, trackInventory: true, stockQty: 5 };
   const products = new Map([[shawarma.id, shawarma], [fries.id, fries]]);
-  const combo = { id: 'combo1', businessId: 'biz', branchId: 'b1', name: { en: 'Two + fries' }, description: {}, items: [{ productId: 'p-shawarma', quantity: 2 }, { productId: 'p-fries', quantity: 1 }], discountPercent: 15, promoted: true, active: true, archived: false, sortOrder: 0, createdAt: '', updatedAt: '' };
-  it('applies the percentage to the current member prices with floor rounding', () => {
+  const combo = { id: 'combo1', businessId: 'biz', branchId: 'b1', name: { en: 'Two + fries' }, description: {}, items: [{ productId: 'p-shawarma', quantity: 2 }, { productId: 'p-fries', quantity: 1 }], priceAgorot: 6970, promoted: true, active: true, archived: false, sortOrder: 0, createdAt: '', updatedAt: '' };
+  it('charges the fixed combo price and snapshots the members', () => {
     expect(comboTotal(8200, 15, 1)).toBe(6970);
     const r = priceComboLine(combo, products, { lineId: 'c', productId: 'combo1', comboId: 'combo1', modifiers: [], quantity: 2, expectedUnitPriceAgorot: 6970 });
     expect(r.line?.lineTotalAgorot).toBe(13940);
     expect(r.line?.comboItems?.map((i) => [i.productId, i.quantity, i.trackInventory])).toEqual([['p-shawarma', 2, false], ['p-fries', 1, true]]);
-    expect(r.line?.comboDiscountPercent).toBe(15);
+    expect(r.line?.comboDiscountPercent).toBeUndefined();
+    expect(r.line?.unitPriceAgorot).toBe(6970);
+    // Legacy percentage combos keep pricing from the members' sum until re-saved with a fixed price.
+    expect(priceComboLine({ ...combo, priceAgorot: undefined as unknown as number, discountPercent: 15 }, products, { lineId: 'c', productId: 'combo1', comboId: 'combo1', modifiers: [], quantity: 1, expectedUnitPriceAgorot: 6970 }).line?.unitPriceAgorot).toBe(6970);
   });
   it('flags stale prices and unavailable members', () => {
     expect(priceComboLine(combo, products, { lineId: 'c', productId: 'combo1', comboId: 'combo1', modifiers: [], quantity: 1, expectedUnitPriceAgorot: 8200 }).problem).toMatchObject({ code: 'price_changed', actual: 6970 });

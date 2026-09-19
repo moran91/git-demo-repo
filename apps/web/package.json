@@ -12,7 +12,6 @@
     "build:emulator": "QAREEB_ALLOW_EMULATOR_BUILD=1 VITE_ALLOW_EMULATOR_BUILD=1 npm run build"
   },
   "dependencies": {
-    "@huggingface/transformers": "^4.2.0",
     "@qareeb/shared": "*",
     "firebase": "^12.18.0",
     "libheif-js": "^1.23.2",

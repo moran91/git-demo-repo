@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { LOCALES, type Locale } from '@qareeb/shared';
 import { LOCALE_NAMES, useI18n, useT } from '@/lib/i18n';
@@ -9,29 +9,56 @@ import { applyUpdate, hasUpdate, subscribeNeedRefresh } from '@/lib/sw';
 import { useAuth } from '@/lib/auth';
 import { call } from '@/lib/api';
 
+/**
+ * Language control. Full form: a three-way segmented control (settings pages, the dashboard sidebar).
+ * Compact form: a globe pill that opens a small menu — the customer topbar has no room for a select.
+ */
 export function LanguageSelect({ compact }: { compact?: boolean }) {
   const { locale, setLocale } = useI18n();
   const t = useT();
   const { user } = useAuth();
-  return (
-    <label className="row row--nowrap" style={{ gap: 6 }}>
-      <Icon name="globe" size={18} />
-      <span className={compact ? 'visually-hidden' : 'muted'}>{t('common.language')}</span>
-      <select
-        className="lang-select"
-        value={locale}
-        aria-label={t('common.language')}
-        onChange={(e) => {
-          const l = e.target.value as Locale;
-          setLocale(l);
-          if (user) void call('updateProfile', { locale: l }).catch(() => undefined);
-        }}
-      >
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const pick = (l: Locale) => {
+    setLocale(l);
+    setOpen(false);
+    if (user) void call('updateProfile', { locale: l }).catch(() => undefined);
+  };
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => { if (!rootRef.current?.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('pointerdown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('pointerdown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [open]);
+  if (!compact) {
+    return (
+      <div className="lang-seg" role="radiogroup" aria-label={t('common.language')}>
         {LOCALES.map((l) => (
-          <option key={l} value={l} lang={l}>{LOCALE_NAMES[l]}</option>
+          <button key={l} type="button" role="radio" lang={l} aria-checked={l === locale} className={`lang-seg__opt ${l === locale ? 'is-active' : ''}`} onClick={() => pick(l)}>{LOCALE_NAMES[l]}</button>
         ))}
-      </select>
-    </label>
+      </div>
+    );
+  }
+  return (
+    <div className="lang-menu" ref={rootRef}>
+      <button type="button" className="lang-menu__btn" aria-haspopup="menu" aria-expanded={open} aria-label={`${t('common.language')}: ${LOCALE_NAMES[locale]}`} onClick={() => setOpen((o) => !o)}>
+        <Icon name="globe" size={18} />
+        <span lang={locale}>{LOCALE_NAMES[locale]}</span>
+        <Icon name="chevronDown" size={16} />
+      </button>
+      {open ? (
+        <div className="lang-menu__list" role="menu" aria-label={t('common.language')}>
+          {LOCALES.map((l) => (
+            <button key={l} type="button" role="menuitemradio" lang={l} aria-checked={l === locale} className={`lang-menu__item ${l === locale ? 'is-active' : ''}`} onClick={() => pick(l)}>
+              <span>{LOCALE_NAMES[l]}</span>
+              {l === locale ? <Icon name="check" size={18} /> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

@@ -37,7 +37,7 @@ export function OrdersPage() {
                 <strong className="order-card__ref">{o.reference}</strong>
                 <StatusBadge status={o.status} />
               </div>
-              <div className="wrap-anywhere">{L(o.businessName)} · {o.mode === 'delivery' ? t('orders.mode.delivery') : t('orders.mode.pickup')}</div>
+              <div className="wrap-anywhere">{L(o.businessName)} · {o.mode === 'delivery' ? t('orders.mode.delivery') : o.mode === 'dine_in' ? (o.tableNumber ? `${t('orders.mode.dineIn')} · ${t('orders.table', { n: o.tableNumber })}` : t('orders.mode.dineIn')) : t('orders.mode.pickup')}</div>
               <div className="row row--between muted"><span><bdi>{formatLocalDateTime(o.placedAt, locale)}</bdi></span><bdi className="price">{money(o.totals.cashDueAgorot, locale)}</bdi></div>
             </Link>
           </li>
@@ -88,7 +88,7 @@ export function OrderPage() {
       <p className="muted">{t('orders.contactBusiness')}</p>
       <section className="card stack--sm stack">
         <strong className="wrap-anywhere">{L(o.businessName)} · {L(o.branchName)}</strong>
-        <div className="muted"><bdi>{formatLocalDateTime(o.placedAt, locale)}</bdi> · {o.mode === 'delivery' ? t('orders.mode.delivery') : t('orders.mode.pickup')}</div>
+        <div className="muted"><bdi>{formatLocalDateTime(o.placedAt, locale)}</bdi> · {o.mode === 'delivery' ? t('orders.mode.delivery') : o.mode === 'dine_in' ? (o.tableNumber ? `${t('orders.mode.dineIn')} · ${t('orders.table', { n: o.tableNumber })}` : t('orders.mode.dineIn')) : t('orders.mode.pickup')}</div>
         {o.mode === 'delivery' && o.address ? <div className="address-block"><div className="address-block__title"><Icon name="house" size={18} /> {t('dash.houseDescription')}</div><AddressSummary a={{ ...o.address, cityName: o.address.cityName }} /></div> : <div className="muted">{o.contactName} · <bdi className="num">{formatPhoneDisplay(o.contactPhone)}</bdi></div>}
         {o.customerNote ? <div className="muted">“{o.customerNote}”</div> : null}
       </section>
@@ -101,7 +101,7 @@ export function OrderPage() {
               <span className="wrap-anywhere">
                 {l.removed ? <span className="badge badge--danger">{t('orders.removed')}</span> : l.substitutedFromLineId ? <span className="badge badge--accent">{t('orders.substituted')}</span> : null}{' '}
                 {l.pricingMode === 'weight' ? (l.actualGrams !== undefined ? `${t('orders.actualWeight')} ${formatGrams(l.actualGrams, locale)}` : `${t('orders.requestedWeight')} ${formatGrams(l.requestedGrams ?? 0, locale)}`) : `${l.quantity} ×`} {L(l.name)}{l.variantName ? ` (${L(l.variantName)})` : ''}
-                {l.comboItems ? <span className="order-line__mods"> ({l.comboItems.map((ci) => `${ci.quantity} × ${L(ci.name)}`).join(' + ')}, -{l.comboDiscountPercent}%)</span> : null}
+                {l.comboItems ? <span className="order-line__mods"> ({l.comboItems.map((ci) => `${ci.quantity} × ${L(ci.name)}`).join(' + ')})</span> : null}
                 {l.modifiers.length ? <span className="order-line__mods"> {l.modifiers.map((m) => L(m.optionName) + placementSuffix(m.placement, t)).join(', ')}</span> : null}
                 {l.note ? <span className="muted"> “{l.note}”</span> : null}
               </span>

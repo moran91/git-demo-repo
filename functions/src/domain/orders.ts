@@ -2,6 +2,7 @@ import { onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { z } from 'zod';
 import {
   addressInputSchema,
+  availableFulfillmentModes,
   clampRedemption,
   computeTotals,
   decideOrderSchema,
@@ -26,6 +27,7 @@ import {
   type CashRecord,
   type City,
   type Combo,
+  type FulfillmentMode,
   type LoyaltyAccount,
   type LoyaltyLedgerEntry,
   type Order,
@@ -56,7 +58,7 @@ interface Eligibility {
   deliveryRule?: Branch['deliveryCities'][number];
 }
 
-async function loadEligibility(tx: Tx | null, businessId: string, branchId: string, mode: 'pickup' | 'delivery', cityId: string): Promise<Eligibility> {
+async function loadEligibility(tx: Tx | null, businessId: string, branchId: string, mode: FulfillmentMode, cityId: string): Promise<Eligibility> {
   const bRef = col.business(businessId);
   const brRef = col.branch(businessId, branchId);
   const [b, br] = await Promise.all([tx ? tx.get(bRef) : bRef.get(), tx ? tx.get(brRef) : brRef.get()]);
@@ -67,13 +69,17 @@ async function loadEligibility(tx: Tx | null, businessId: string, branchId: stri
   if (branch.approval !== 'approved') fail('branch_not_approved');
   if (branch.ordersPaused) fail('orders_paused');
   if (!evaluateOpen(new Date(), branch.hours, branch.hoursOverrides).open) fail('branch_closed');
+  const deliveryCities = branch.deliveryEnabled ? effectiveDeliveryCities(branch) : [];
+  const modes = availableFulfillmentModes(business.type, { cityId: branch.cityId, pickupEnabled: branch.pickupEnabled, deliveryCities }, cityId);
   if (mode === 'pickup') {
-    if (!branch.pickupEnabled) fail('pickup_not_available');
-    if (branch.cityId !== cityId) fail('pickup_not_available', { reason: 'city' });
+    if (!modes.includes('pickup')) fail('pickup_not_available', branch.pickupEnabled ? { reason: 'city' } : undefined);
     return { business, branch };
   }
-  if (!branch.deliveryEnabled) fail('delivery_not_available');
-  const rule = effectiveDeliveryCities(branch).find((d) => d.cityId === cityId);
+  if (mode === 'dine_in') {
+    if (!modes.includes('dine_in')) fail('dine_in_not_available', business.type === 'restaurant' ? { reason: 'city' } : undefined);
+    return { business, branch };
+  }
+  const rule = deliveryCities.find((d) => d.cityId === cityId);
   if (!rule) fail('delivery_not_available', { cityId });
   return { business, branch, deliveryRule: rule };
 }
@@ -350,6 +356,7 @@ export const placeOrder = onCall(opts, handled(async (req: CallableRequest<unkno
       address: addr?.snapshot,
       contactName: input.contactName,
       contactPhone,
+      tableNumber: input.mode === 'dine_in' && input.tableNumber ? input.tableNumber : undefined,
       customerNote: input.customerNote,
       lines,
       originalLines: lines,

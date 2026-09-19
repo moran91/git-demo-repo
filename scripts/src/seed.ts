@@ -10,7 +10,7 @@
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import type { Branch, Business, Category, City, Combo, Membership, PlatformConfig, Product, SavedAddress, UserProfile, WeeklyHours } from '@qareeb/shared';
+import type { Branch, Business, Category, City, Combo, Membership, PlatformConfig, Product, Promotion, SavedAddress, UserProfile, WeeklyHours } from '@qareeb/shared';
 
 if (!process.env.FIREBASE_AUTH_EMULATOR_HOST || !process.env.FIRESTORE_EMULATOR_HOST) {
   console.error('Refusing to seed: FIREBASE_AUTH_EMULATOR_HOST and FIRESTORE_EMULATOR_HOST must point at the emulators.');
@@ -180,9 +180,17 @@ async function main() {
     id: 'combo-family', businessId: restaurant.id, branchId: branchA.id,
     name: { he: 'ארוחה משפחתית', ar: 'وجبة عائلية', en: 'Family meal' }, description: { he: 'שני פלאפל, צ׳יפס ושתי פחיות', ar: 'صحنا فلافل وبطاطا وعلبتا كولا', en: 'Two falafel plates, fries and two cans' },
     items: [{ productId: 'p-falafel', variantId: 'v-reg', quantity: 2 }, { productId: 'p-fries', quantity: 1 }, { productId: 'p-cola', quantity: 2 }],
-    discountPercent: 15, promoted: true, active: true, archived: false, sortOrder: 0, createdAt: now, updatedAt: now,
+    // Members: 2×2800 + 1200 + 2×800 = 8400; sold at a fixed ₪69.90.
+    priceAgorot: 6990, promoted: true, active: true, archived: false, sortOrder: 0, createdAt: now, updatedAt: now,
   };
   await db.collection('businesses').doc(restaurant.id).collection('branches').doc(branchA.id).collection('combos').doc(combo.id).set(combo);
+  const promotion: Promotion = {
+    id: 'promo-shawarma-week', businessId: restaurant.id, branchId: branchA.id,
+    title: { he: 'שבוע השווארמה: תוספת חינם', ar: 'أسبوع الشاورما: إضافة مجانًا', en: 'Shawarma week: free extra' },
+    body: { he: 'כל שווארמה מגיעה עם תוספת לבחירה, בלי תוספת תשלום.', ar: 'كل شاورما مع إضافة على اختيارك، بدون تكلفة.', en: 'Every shawarma comes with an extra of your choice, at no charge.' },
+    productIds: ['p-shawarma'], endsAt: '2099-12-31', active: true, sortOrder: 0, createdAt: now, updatedAt: now,
+  };
+  await db.collection('businesses').doc(restaurant.id).collection('branches').doc(branchA.id).collection('promotions').doc(promotion.id).set(promotion);
 
   // ---------- Supermarket: Beit Jann Market (tracked stock, weight produce) ----------
   const market: Business = {

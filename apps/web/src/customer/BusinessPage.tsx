@@ -1,23 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router';
-import { formatPhoneDisplay, minutesToHHMM, type Category, type Product } from '@qareeb/shared';
+import { availableFulfillmentModes, formatPhoneDisplay, minutesToHHMM, type Category, type Product } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
 import { useCollection, useDoc, orderBy, where, limit } from '@/lib/queries';
-import { Badge, Button, Skeleton, EmptyState, Alert, IconButton, toast } from '@/design/components';
+import { Badge, Skeleton, EmptyState, Alert, IconButton, toast } from '@/design/components';
 import { Icon } from '@/design/Icon';
 import { discoveryStore } from '@/lib/city';
 import { cartStore } from '@/lib/cart';
 import { money } from '@/lib/format';
 import { telHref } from '@/lib/format';
 import { ErrorView } from '@/app/Shell';
-import { useCity, useCombos, useFavorites, useOpenState, type PublicBranch, type PublicBusiness } from './hooks';
+import { useCity, useCombos, useFavorites, useOpenState, usePromotions, type PublicBranch, type PublicBusiness } from './hooks';
 import { StorageImage } from './StorageImage';
 import { ProductSheet } from './ProductSheet';
 import { PhotoLightbox } from './PhotoLightbox';
 import { useHeightVar } from '@/lib/stickyVars';
 import { useScrollSpy } from '@/lib/scrollSpy';
-import { formatDay, promotionExpired } from '@/lib/promotions';
+import { promotionExpired } from '@/lib/promotions';
+import { PromoCard } from './PromoCard';
 import { ComboSheet, comboPricing } from './ComboSheet';
+import { ComboMedia } from './ComboMedia';
 import type { Combo } from '@qareeb/shared';
 
 export type PublicProduct = Product & { inStock: boolean; stockLeft?: number };
@@ -43,6 +45,7 @@ export function BusinessPage() {
   const [photo, setPhoto] = useState<{ path: string; alt: string } | null>(null);
   const [activeCombo, setActiveCombo] = useState<Combo | null>(null);
   const combos = useCombos(branch?.id ?? null);
+  const promotionsQ = usePromotions(branch?.id ?? null);
   const cart = cartStore.use();
   // The category nav is sticky under the topbar; publishing its height lets a #cat- anchor jump clear
   // both bars instead of parking the heading behind them.
@@ -85,10 +88,13 @@ export function BusinessPage() {
   const biz = business.data;
   const name = L(biz.name, biz.defaultLocale);
   const orderable = open.open && !branch.ordersPaused;
-  const deliveryRule = branch.deliveryCities.find((d) => d.cityId === prefs.cityId);
-  const modeMismatch = prefs.mode === 'delivery' ? !deliveryRule : branch.cityId !== prefs.cityId || !branch.pickupEnabled;
+  // Fulfillment is chosen at checkout; here we only need "can this branch serve the city at all" and
+  // a sensible default for the cart (kept if the existing cart already has a valid one).
+  const modes = availableFulfillmentModes(biz.type, branch, prefs.cityId);
+  const modeMismatch = modes.length === 0;
+  const cartMode = cart.cart && cart.cart.branchId === branch.id && modes.includes(cart.cart.mode) ? cart.cart.mode : (modes[0] ?? 'pickup');
   const isFav = ids.has(biz.id);
-  const promotions = (biz.promotions ?? []).filter((p) => !promotionExpired(p));
+  const promotions = promotionsQ.data.filter((p) => !promotionExpired(p));
 
   return (
     <div className="stack">
@@ -96,45 +102,38 @@ export function BusinessPage() {
         <div className="biz-header__cover">
           <StorageImage path={biz.coverPath} size="display" alt="" wide priority fallbackLabel={t('discovery.imageFallback')} />
         </div>
-        <div className="row row--between" style={{ alignItems: 'flex-start' }}>
-          <div className="stack--sm stack" style={{ minWidth: 0 }}>
+        <div className="row row--between row--nowrap" style={{ alignItems: 'flex-start' }}>
+          <div className="stack--sm stack" style={{ minWidth: 0, flex: '1 1 0' }}>
             <h1 className="wrap-anywhere" lang={biz.defaultLocale}>{name}</h1>
             {biz.description ? <p className="muted wrap-anywhere">{L(biz.description, biz.defaultLocale)}</p> : null}
             <div className="row">
               {branch.ordersPaused ? <Badge tone="accent" icon="clock">{t('common.paused')}</Badge> : open.open ? <Badge tone="success" icon="check">{t('business.openNow')}{open.closesInMin !== undefined ? ` · ${t('discovery.closesAt', { time: minutesToHHMM(new Date().getHours() * 60 + new Date().getMinutes() + open.closesInMin).replace(/^0/, "") })}` : ''}</Badge> : <Badge tone="muted" icon="clock">{t('business.closedNow')}{open.opensInMin !== undefined ? ` · ${t('discovery.opensAt', { time: minutesToHHMM(new Date().getHours() * 60 + new Date().getMinutes() + open.opensInMin).replace(/^0/, "") })}` : ''}</Badge>}
               {L(branch.locationDescription, biz.defaultLocale) ? <span className="muted icon-text"><Icon name="pin" size={16} /> {L(branch.locationDescription, biz.defaultLocale)}</span> : null}
+              <a className="biz-phone" href={telHref(branch.phone)} aria-label={`${t('business.callBusiness')} ${formatPhoneDisplay(branch.phone)}`}><span className="biz-phone__icon"><Icon name="phone" size={16} /></span><bdi className="num">{formatPhoneDisplay(branch.phone)}</bdi></a>
             </div>
           </div>
           <IconButton icon="heart" label={isFav ? t('discovery.unfavorite') : t('discovery.favorite')} pressed={isFav} onClick={async () => { if (!signedIn) { navigate('/signin'); return; } await toggle({ id: biz.id, kind: 'business', businessId: biz.id }).catch(() => toast(t('common.errorGeneric'), 'danger')); }} />
         </div>
-        <div className="row">
-          <a className="btn btn--secondary" href={telHref(branch.phone)}><Icon name="phone" size={18} /> {t('business.callBusiness')} <bdi className="num">{formatPhoneDisplay(branch.phone)}</bdi></a>
-          {branches.data.length > 1 ? (
+        {branches.data.length > 1 ? (
+          <div className="row">
             <label className="row row--nowrap" style={{ gap: 8 }}>
               <span className="muted">{t('business.branch')}</span>
               <select className="select" style={{ width: 'auto', minHeight: 44 }} value={branch.id} aria-label={t('business.chooseBranch')} onChange={(e) => navigate(`/b/${biz.id}/${e.target.value}`)}>
                 {branches.data.map((b) => <option key={b.id} value={b.id}>{L(b.name, biz.defaultLocale)}</option>)}
               </select>
             </label>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
         {!orderable ? <Alert tone="warn">{branch.ordersPaused ? t('checkout.paused') : t('business.notOrderable')}</Alert> : null}
-        {orderable && modeMismatch ? <Alert tone="info">{prefs.mode === 'delivery' ? t('business.noDeliveryToCity', { city: city.data ? L(city.data.name) : prefs.cityId }) : t('checkout.pickupUnavailable')} <Button size="sm" variant="ghost" onClick={() => discoveryStore.set({ mode: prefs.mode === 'delivery' ? 'pickup' : 'delivery' })}>{t('checkout.changeMode')}</Button></Alert> : null}
+        {orderable && modeMismatch ? <Alert tone="info">{t('checkout.noModeAvailable', { city: city.data ? L(city.data.name) : prefs.cityId })} <Link className="btn btn--ghost btn--sm" to="/">{t('discovery.changeCity')}</Link></Alert> : null}
       </header>
 
       {promotions.length > 0 ? (
         <section className="promo-strip" aria-label={t('promotions.section')}>
-          {promotions.map((p) => (
-            <article key={p.id} className="promo">
-              <div className="promo__head">
-                <Icon name="tag" size={18} />
-                <span className="promo__kicker">{t('promotions.badge')}</span>
-                {p.endsAt ? <span className="promo__until"><bdi>{t('promotions.until', { date: formatDay(p.endsAt) })}</bdi></span> : null}
-              </div>
-              <h2 className="promo__title wrap-anywhere" lang={biz.defaultLocale}>{L(p.title, biz.defaultLocale)}</h2>
-              {L(p.body, biz.defaultLocale) ? <p className="promo__body wrap-anywhere">{L(p.body, biz.defaultLocale)}</p> : null}
-            </article>
-          ))}
+          {promotions.map((p) => {
+            const featured = (p.productIds ?? []).map((id) => products.data.find((x) => x.id === id)).filter((x): x is PublicProduct => !!x);
+            return <PromoCard key={p.id} promotion={p} products={featured} defaultLocale={biz.defaultLocale} onProduct={(fp) => { const full = products.data.find((x) => x.id === fp.id); if (!full) return; if (full.available && orderable && !modeMismatch) setActive(full); else if (full.imagePath) setPhoto({ path: full.imagePath, alt: t('product.photoAlt', { name: L(full.name, biz.defaultLocale) }) }); }} />;
+          })}
         </section>
       ) : null}
 
@@ -148,13 +147,13 @@ export function BusinessPage() {
               return (
                 <button key={c.id} type="button" className={`deal-card card--interactive ${off ? 'deal-card--off' : ''}`} onClick={() => setActiveCombo(c)} aria-label={`${t('deals.combo')}: ${L(c.name, biz.defaultLocale)}`}>
                   <div className="deal-card__media">
-                    <StorageImage path={c.imagePath} size="display" alt="" wide fallbackLabel={t('discovery.imageFallback')} />
-                    <span className="deal-card__badge">-{c.discountPercent}%</span>
+                    <ComboMedia combo={c} products={products.data} fallbackLabel={t('discovery.imageFallback')} />
+                    {c.imagePath ? null : <span className="deal-card__badge">{t('deals.combo')}</span>}
                   </div>
                   <div className="deal-card__body">
                     <strong className="wrap-anywhere">{L(c.name, biz.defaultLocale)}</strong>
                     <span className="muted wrap-anywhere">{c.items.map((it) => { const p = products.data.find((x) => x.id === it.productId); return p ? `${it.quantity} × ${L(p.name, biz.defaultLocale)}` : null; }).filter(Boolean).join(' + ')}</span>
-                    {pricing ? <span className="deal-card__prices"><bdi className="price price--lg">{money(pricing.price, locale)}</bdi><bdi className="deal-card__was">{money(pricing.sum, locale)}</bdi></span> : <span className="badge badge--muted">{t('deals.unavailable')}</span>}
+                    {pricing ? <span className="deal-card__prices"><bdi className="price price--lg">{money(pricing.price, locale)}</bdi></span> : <span className="badge badge--muted">{t('deals.unavailable')}</span>}
                   </div>
                 </button>
               );
@@ -220,9 +219,9 @@ export function BusinessPage() {
           </div>
         </section>
       ))}
-      {active ? <ProductSheet product={active} business={biz} branch={branch} mode={prefs.mode} cityId={prefs.cityId} onClose={() => setActive(null)} /> : null}
+      {active ? <ProductSheet product={active} business={biz} branch={branch} mode={cartMode} cityId={prefs.cityId} onClose={() => setActive(null)} /> : null}
       {photo ? <PhotoLightbox path={photo.path} alt={photo.alt} onClose={() => setPhoto(null)} /> : null}
-      {activeCombo ? <ComboSheet combo={activeCombo} products={products.data} business={biz} branch={branch} mode={prefs.mode} cityId={prefs.cityId} onClose={() => setActiveCombo(null)} /> : null}
+      {activeCombo ? <ComboSheet combo={activeCombo} products={products.data} business={biz} branch={branch} mode={cartMode} cityId={prefs.cityId} onClose={() => setActiveCombo(null)} /> : null}
     </div>
   );
 }

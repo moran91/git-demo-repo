@@ -10,4 +10,5 @@ export * from './schemas.js';
 export * from './i18n/index.js';
 export * from './brand.js';
 export * from './links.js';
+export * from './fulfillment.js';
 export * from './receipt/index.js';

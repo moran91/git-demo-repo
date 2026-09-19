@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { createHash, randomBytes } from 'node:crypto';
 import {
   DEFAULT_LOYALTY_RULES,
-  MAX_PROMOTIONS,
   branchInputSchema,
   businessInputSchema,
   cleanLocalized,
@@ -11,11 +10,9 @@ import {
   loyaltyRulesInputSchema,
   membershipInputSchema,
   normalizeIsraeliPhone,
-  promotionInputSchema,
   type Branch,
   type Business,
   type Membership,
-  type Promotion,
 } from '@qareeb/shared';
 import { APP_ORIGIN, FieldValue, REGION, auth, col, db, nowIso, storage } from '../lib/firebase.js';
 import { handled, fail } from '../lib/errors.js';
@@ -130,60 +127,6 @@ export const setLoyaltyRules = onCall(opts, handled(async (req: CallableRequest<
     const after = { ...input.rules, version: before.version + 1 };
     tx.set(ref, { loyalty: after, updatedAt: nowIso() }, { merge: true });
     writeAudit(tx, { actorUid: c.uid, action: 'loyalty.rules.update', targetType: 'business', targetId: input.businessId, before, after });
-  });
-  await reprojectBusiness(input.businessId);
-  return { ok: true };
-}));
-
-/** Upsert one promotion. Owners and managers; the list is capped so the storefront strip stays short. */
-export const savePromotion = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
-  const c = await requireCaller(req);
-  const input = parse(z.object({ businessId: idSchema, promotionId: idSchema.optional(), promotion: promotionInputSchema }).strict(), req.data);
-  await requireMembership(c, input.businessId, ['owner', 'manager']);
-  const saved = await db.runTransaction(async (tx) => {
-    const ref = col.business(input.businessId);
-    const snap = await tx.get(ref);
-    if (!snap.exists) fail('not_found');
-    const b = snap.data() as Business;
-    const list = [...(b.promotions ?? [])];
-    const idx = input.promotionId ? list.findIndex((p) => p.id === input.promotionId) : -1;
-    if (input.promotionId && idx < 0) fail('not_found');
-    if (idx < 0 && list.length >= MAX_PROMOTIONS) fail('invalid_argument', { issues: [{ path: 'promotion', message: 'too_many_promotions' }] });
-    const now = nowIso();
-    const before = idx >= 0 ? list[idx] : undefined;
-    const next: Promotion = {
-      id: before?.id ?? col.businesses().doc().id,
-      title: cleanLocalized(input.promotion.title),
-      body: cleanLocalized(input.promotion.body),
-      // `endsAt` is optional; spread-in only when present so a cleared date is removed instead of stored as undefined.
-      ...(input.promotion.endsAt ? { endsAt: input.promotion.endsAt } : {}),
-      active: input.promotion.active,
-      sortOrder: before?.sortOrder ?? (list.length ? Math.max(...list.map((p) => p.sortOrder)) + 1 : 0),
-      createdAt: before?.createdAt ?? now,
-      updatedAt: now,
-    };
-    if (idx >= 0) list[idx] = next; else list.push(next);
-    tx.set(ref, { promotions: list, updatedAt: now }, { merge: true });
-    writeAudit(tx, { actorUid: c.uid, action: idx >= 0 ? 'promotion.update' : 'promotion.create', targetType: 'business', targetId: input.businessId, before, after: next });
-    return next;
-  });
-  await reprojectBusiness(input.businessId);
-  return { promotion: saved };
-}));
-
-export const removePromotion = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
-  const c = await requireCaller(req);
-  const input = parse(z.object({ businessId: idSchema, promotionId: idSchema }).strict(), req.data);
-  await requireMembership(c, input.businessId, ['owner', 'manager']);
-  await db.runTransaction(async (tx) => {
-    const ref = col.business(input.businessId);
-    const snap = await tx.get(ref);
-    if (!snap.exists) fail('not_found');
-    const b = snap.data() as Business;
-    const before = (b.promotions ?? []).find((p) => p.id === input.promotionId);
-    if (!before) fail('not_found');
-    tx.set(ref, { promotions: (b.promotions ?? []).filter((p) => p.id !== input.promotionId), updatedAt: nowIso() }, { merge: true });
-    writeAudit(tx, { actorUid: c.uid, action: 'promotion.remove', targetType: 'business', targetId: input.businessId, before });
   });
   await reprojectBusiness(input.businessId);
   return { ok: true };

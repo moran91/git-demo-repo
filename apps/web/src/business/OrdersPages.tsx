@@ -99,7 +99,7 @@ export function OrderHistoryPage() {
           <tbody>
             {paged.items.map((o) => (
               <tr key={o.id}>
-                <td><span className="order-card__ref" style={{ fontSize: 16 }}>{o.reference}</span><div className="muted">{o.mode === 'delivery' ? t('common.delivery') : t('common.pickup')}</div></td>
+                <td><span className="order-card__ref" style={{ fontSize: 16 }}>{o.reference}</span><div className="muted">{o.mode === 'delivery' ? t('common.delivery') : o.mode === 'dine_in' ? (o.tableNumber ? `${t('common.dineIn')} · ${t('orders.table', { n: o.tableNumber })}` : t('common.dineIn')) : t('common.pickup')}</div></td>
                 <td><OrderStatusBadge status={o.status} />{o.cashRecordId && !o.cashReversedAt ? <div className="badge badge--success" style={{ marginTop: 4 }}>{t('receipt.cashReceived')}</div> : null}</td>
                 <td>{o.contactName}<div className="muted">{L(o.lines.map((l) => l.name)[0] ?? {})}{o.lines.length > 1 ? ` +${o.lines.length - 1}` : ''}</div></td>
                 <td><bdi>{formatLocalDateTime(o.placedAt, locale)}</bdi></td>
@@ -190,7 +190,7 @@ export function OrderDetailPage() {
         </section>
       </div>
       {revise ? <ReviseDialog order={o} onClose={() => setRevise(false)} /> : null}
-      <ConfirmDialog open={recordCash} onClose={() => setRecordCash(false)} onConfirm={doRecordCash} loading={busy} title={t('dash.recordCashTitle')} confirmLabel={t('dash.recordCash')} body={<div className="stack--sm stack"><p>{t('dash.recordCashBody')}</p><div className="summary__row summary__row--total"><span>{t('dash.cashAmount')}</span><bdi>{money(o.totals.cashDueAgorot, locale)}</bdi></div><p className="muted">{o.mode === 'delivery' ? t('checkout.cashOnDelivery') : t('checkout.cashOnPickup')} · {L(business.name, business.defaultLocale)}</p></div>} />
+      <ConfirmDialog open={recordCash} onClose={() => setRecordCash(false)} onConfirm={doRecordCash} loading={busy} title={t('dash.recordCashTitle')} confirmLabel={t('dash.recordCash')} body={<div className="stack--sm stack"><p>{t('dash.recordCashBody')}</p><div className="summary__row summary__row--total"><span>{t('dash.cashAmount')}</span><bdi>{money(o.totals.cashDueAgorot, locale)}</bdi></div><p className="muted">{o.mode === 'delivery' ? t('checkout.cashOnDelivery') : o.mode === 'dine_in' ? t('checkout.cashAtTable') : t('checkout.cashOnPickup')} · {L(business.name, business.defaultLocale)}</p></div>} />
       <Dialog open={reverse} onClose={() => setReverse(false)} title={t('dash.reverseCash')} sheet={false} footer={<><Button variant="secondary" onClick={() => setReverse(false)}>{t('common.cancel')}</Button><Button variant="danger-solid" loading={busy} disabled={reverseReason.trim().length < 3} onClick={async () => { setBusy(true); try { await call('reverseCash', { orderId: o.id, reason: reverseReason.trim(), idempotencyKey: newIdempotencyKey() }); setReverse(false); toast(t('common.saved')); } catch (e) { toast(t(errorKey(e)), 'danger'); } finally { setBusy(false); } }}>{t('dash.reverseCash')}</Button></>}>
         <div className="stack"><p>{t('dash.reverseCashBody')}</p><TextArea label={t('common.reason')} required value={reverseReason} onChange={(e) => setReverseReason(e.target.value)} /></div>
       </Dialog>

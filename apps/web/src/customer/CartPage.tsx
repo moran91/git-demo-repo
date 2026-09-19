@@ -14,7 +14,7 @@ import { ProductSheet } from './ProductSheet';
 import { useDoc } from '@/lib/queries';
 import type { PublicBranch, PublicBusiness } from './hooks';
 import type { PublicProduct } from './BusinessPage';
-import type { CartLine } from '@qareeb/shared';
+import type { CartLine, FulfillmentMode } from '@qareeb/shared';
 
 export function CartPage() {
   const t = useT();
@@ -39,7 +39,7 @@ export function CartPage() {
         <h1>{t('cart.title')}</h1>
         <IconButton icon="trash" label={t('cart.clear')} onClick={() => setConfirmClear(true)} />
       </div>
-      <p className="muted">{t('cart.from', { business: L(state.meta.businessName, dl) })} · {L(state.meta.branchName, dl)} · {cart.mode === 'delivery' ? t('common.delivery') : t('common.pickup')}</p>
+      <p className="muted">{t('cart.from', { business: L(state.meta.businessName, dl) })} · {L(state.meta.branchName, dl)} · {cart.mode === 'delivery' ? t('common.delivery') : cart.mode === 'dine_in' ? t('common.dineIn') : t('common.pickup')}</p>
       {/* Per-line problems are shown inline below, so those codes are suppressed here — but only when
           there actually is a line to attach them to. A whole-cart rejection (e.g. more than the 60
           lines the server accepts) carries no `problems`, and used to leave the cart silently dead:
@@ -60,7 +60,7 @@ export function CartPage() {
               <StorageImage path={meta?.imagePath} alt={t('product.photoAlt', { name: L(meta?.name ?? {}, dl) })} square className="cart-line__img" fallbackLabel={t('discovery.imageFallback')} onClick={() => meta?.imagePath && setPhoto({ path: meta.imagePath, alt: t('product.photoAlt', { name: L(meta.name, dl) }) })} />
               <div className="cart-line__body">
                 <div className="cart-line__head">
-                  <strong className="wrap-anywhere">{meta?.isCombo ? <span className="badge badge--accent" style={{ marginInlineEnd: 6 }}>{t('deals.combo')} -{meta.discountPercent}%</span> : null}{L(meta?.name ?? {}, dl)}{meta?.variantName ? ` · ${L(meta.variantName, dl)}` : ''}</strong>
+                  <strong className="wrap-anywhere">{meta?.isCombo ? <span className="badge badge--accent" style={{ marginInlineEnd: 6 }}>{t('deals.combo')}</span> : null}{L(meta?.name ?? {}, dl)}{meta?.variantName ? ` · ${L(meta.variantName, dl)}` : ''}</strong>
                   {meta?.isCombo ? null : <IconButton icon="edit" size={18} label={`${t('common.edit')}: ${L(meta?.name ?? {}, dl)}`} onClick={() => setEditing(l)} />}
                   <IconButton icon="x" size={18} label={t('common.remove')} onClick={() => removeLine(l.lineId)} />
                 </div>
@@ -98,7 +98,7 @@ export function CartPage() {
  * public business/branch the sheet needs for names and the default locale). If the product has
  * vanished or become unavailable the customer is told and the line stays as it was.
  */
-function EditLineSheet({ cart, line, onClose }: { cart: { businessId: string; branchId: string; mode: 'pickup' | 'delivery'; cityId: string }; line: CartLine; onClose: () => void }) {
+function EditLineSheet({ cart, line, onClose }: { cart: { businessId: string; branchId: string; mode: FulfillmentMode; cityId: string }; line: CartLine; onClose: () => void }) {
   const t = useT();
   const business = useDoc<PublicBusiness>(`publicBusinesses/${cart.businessId}`);
   const branch = useDoc<PublicBranch>(`publicBranches/${cart.branchId}`);

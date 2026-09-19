@@ -21,8 +21,6 @@ export interface PublicBusinessDoc {
   loyaltyRedeemValueAgorot: number;
   loyaltyEarnPerAgorot: number;
   loyaltyPointsPerStep: number;
-  /** Active promotions only; the client hides those past `endsAt`. */
-  promotions: Promotion[];
   updatedAt: string;
 }
 
@@ -76,7 +74,6 @@ export function toPublicBusiness(b: Business): PublicBusinessDoc {
     loyaltyRedeemValueAgorot: b.loyalty.redeemValueAgorot,
     loyaltyEarnPerAgorot: b.loyalty.earnPerAgorot,
     loyaltyPointsPerStep: b.loyalty.pointsPerStep,
-    promotions: (b.promotions ?? []).filter((p) => p.active).sort((x, y) => x.sortOrder - y.sortOrder),
     updatedAt: nowIso(),
   };
 }
@@ -156,22 +153,29 @@ export async function reprojectCatalog(businessId: string, branchId: string): Pr
   const [bSnap, brSnap] = await Promise.all([col.business(businessId).get(), col.branch(businessId, branchId).get()]);
   if (!bSnap.exists || !brSnap.exists) return;
   const visible = isPubliclyVisible(bSnap.data() as Business, brSnap.data() as Branch);
-  const [cats, prods, combos, pubCats, pubProds, pubCombos] = await Promise.all([
+  const [cats, prods, combos, promos, pubCats, pubProds, pubCombos, pubPromos] = await Promise.all([
     col.categories(businessId, branchId).get(),
     col.products(businessId, branchId).get(),
     col.combos(businessId, branchId).get(),
+    col.promotions(businessId, branchId).get(),
     col.publicCategories(branchId).get(),
     col.publicProducts(branchId).get(),
     col.publicCombos(branchId).get(),
+    col.publicPromotions(branchId).get(),
   ]);
   const batch = db.batch();
   for (const d of pubCats.docs) batch.delete(d.ref);
   for (const d of pubProds.docs) batch.delete(d.ref);
   for (const d of pubCombos.docs) batch.delete(d.ref);
+  for (const d of pubPromos.docs) batch.delete(d.ref);
   if (visible) {
     for (const d of combos.docs) {
       const c = d.data() as Combo;
       if (!c.archived && c.active) batch.set(col.publicCombos(branchId).doc(c.id), c);
+    }
+    for (const d of promos.docs) {
+      const p = d.data() as Promotion;
+      if (p.active) batch.set(col.publicPromotions(branchId).doc(p.id), p);
     }
     for (const d of cats.docs) {
       const c = d.data() as Category;
@@ -195,6 +199,13 @@ export function projectProductInTx(tx: Tx, business: Business, branch: Branch, p
 export function projectComboInTx(tx: Tx, business: Business, branch: Branch, combo: Combo): void {
   const ref = col.publicCombos(branch.id).doc(combo.id);
   if (isPubliclyVisible(business, branch) && !combo.archived && combo.active) tx.set(ref, combo);
+  else tx.delete(ref);
+}
+
+/** Active promotions are public; expiry is applied by the client so the projection needs no clock. */
+export function projectPromotionInTx(tx: Tx, business: Business, branch: Branch, promotion: Promotion): void {
+  const ref = col.publicPromotions(branch.id).doc(promotion.id);
+  if (isPubliclyVisible(business, branch) && promotion.active) tx.set(ref, promotion);
   else tx.delete(ref);
 }
 

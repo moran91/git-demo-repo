@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useI18n, useT } from '@/lib/i18n';
 import { discoveryStore } from '@/lib/city';
-import { setCartMode, cartStore } from '@/lib/cart';
 import { Segmented, Skeleton, EmptyState, Button } from '@/design/components';
 import { Icon } from '@/design/Icon';
 import { ErrorView } from '@/app/Shell';
@@ -15,8 +14,7 @@ export function DiscoveryPage() {
   const prefs = discoveryStore.use();
   const city = useCity(prefs.cityId);
   const [cityOpen, setCityOpen] = useState(false);
-  const { data, loading, error } = useDiscovery(prefs.cityId, prefs.mode, prefs.kind);
-  const cart = cartStore.use();
+  const { data, loading, error } = useDiscovery(prefs.cityId, prefs.kind);
   const cityName = city.data ? L(city.data.name) : '…';
 
   return (
@@ -24,7 +22,7 @@ export function DiscoveryPage() {
       <div className="hero">
         <button type="button" className="city-pill" onClick={() => setCityOpen(true)} aria-haspopup="dialog">
           <Icon name="pin" size={18} />
-          <span>{prefs.mode === 'delivery' ? t('discovery.deliveringTo', { city: cityName }) : t('discovery.pickupIn', { city: cityName })}</span>
+          <span>{t('discovery.inCity', { city: cityName })}</span>
           <Icon name="chevronDown" size={16} />
           <span className="visually-hidden">{t('discovery.changeCity')}</span>
         </button>
@@ -32,21 +30,6 @@ export function DiscoveryPage() {
         <p>{t('brand.subtitle')}</p>
       </div>
       <div className="controls">
-        <div>
-          <span className="control-label" id="mode-label">{t('discovery.mode')}</span>
-          <Segmented
-            label={t('discovery.mode')}
-            value={prefs.mode}
-            onChange={(mode) => {
-              discoveryStore.set({ mode });
-              if (cart.cart) setCartMode(mode, prefs.cityId);
-            }}
-            options={[
-              { value: 'delivery', label: t('common.delivery'), icon: 'truck' },
-              { value: 'pickup', label: t('common.pickup'), icon: 'bag' },
-            ]}
-          />
-        </div>
         <div>
           <span className="control-label">{t('discovery.kind')}</span>
           <Segmented
@@ -74,7 +57,7 @@ export function DiscoveryPage() {
         ) : (
           <div className="grid-cards">
             {data.map((b) => (
-              <BusinessCard key={b.id} branch={b} mode={prefs.mode} cityId={prefs.cityId} />
+              <BusinessCard key={b.id} branch={b} cityId={prefs.cityId} />
             ))}
           </div>
         )}
@@ -85,7 +68,6 @@ export function DiscoveryPage() {
         value={prefs.cityId}
         onSelect={(c) => {
           discoveryStore.set({ cityId: c.id });
-          if (cart.cart) setCartMode(prefs.mode, c.id);
         }}
       />
     </div>

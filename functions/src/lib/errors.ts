@@ -14,6 +14,7 @@ const codeMap: Record<QareebErrorCode, FunctionsErrorCode> = {
   orders_paused: 'failed-precondition',
   delivery_not_available: 'failed-precondition',
   pickup_not_available: 'failed-precondition',
+  dine_in_not_available: 'failed-precondition',
   below_minimum: 'failed-precondition',
   price_changed: 'failed-precondition',
   item_unavailable: 'failed-precondition',

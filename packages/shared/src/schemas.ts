@@ -61,7 +61,7 @@ export const quoteRequestSchema = z
   .object({
     businessId: idSchema,
     branchId: idSchema,
-    mode: z.enum(['pickup', 'delivery']),
+    mode: z.enum(['pickup', 'delivery', 'dine_in']),
     cityId: idSchema,
     lines: z.array(cartLineSchema).min(1).max(60),
     redeemPoints: z.number().int().min(0).max(1_000_000).optional(),
@@ -78,6 +78,8 @@ export const placeOrderSchema = quoteRequestSchema
     addressId: idSchema.optional(),
     address: addressInputSchema.optional(),
     saveAddress: z.boolean().optional(),
+    /** Dine-in: table number (optional, free text). */
+    tableNumber: shortText(20).optional(),
     customerNote: shortText(500).optional(),
     /** Client must echo the quoted cash total so a changed price is surfaced for review. */
     expectedCashDueAgorot: agorotSchema,
@@ -266,7 +268,7 @@ export const comboInputSchema = z
     name: requiredLocalizedSchema,
     description: localizedSchema,
     items: z.array(comboItemSchema).min(2).max(10),
-    discountPercent: z.number().int().min(1).max(90),
+    priceAgorot: z.number().int().min(1).max(100_000_000),
     promoted: z.boolean(),
     active: z.boolean(),
     sortOrder: z.number().int().min(0).max(10000).optional(),
@@ -353,7 +355,8 @@ export const promotionInputSchema = z
   .object({
     title: requiredLocalizedSchema,
     body: localizedSchema,
-    endsAt: isoDateSchema.optional(),
+    productIds: z.array(idSchema).max(10),
+    endsAt: isoDateSchema,
     active: z.boolean(),
   })
   .strict();

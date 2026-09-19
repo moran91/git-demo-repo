@@ -26,7 +26,6 @@ export interface CartState {
     quantityStep?: number;
     minQuantity?: number;
     isCombo?: boolean;
-    discountPercent?: number;
   }>;
 }
 

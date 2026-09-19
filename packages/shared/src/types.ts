@@ -14,7 +14,8 @@ export const RTL_LOCALES: readonly Locale[] = ['he', 'ar'] as const;
 export type Localized = Partial<Record<Locale, string>>;
 
 export type BusinessType = 'restaurant' | 'supermarket';
-export type FulfillmentMode = 'pickup' | 'delivery';
+export type FulfillmentMode = 'pickup' | 'delivery' | 'dine_in';
+export const FULFILLMENT_MODES: readonly FulfillmentMode[] = ['delivery', 'pickup', 'dine_in'] as const;
 
 /** Approval states for businesses and branches. Completely separate from order statuses. */
 export type ApprovalState = 'pending' | 'approved' | 'rejected' | 'suspended';
@@ -113,13 +114,23 @@ export interface LoyaltyRules {
   maxDiscountPercent: number;
 }
 
-/** An owner-managed announcement shown above the menu on every branch's public page. */
+/**
+ * A limited-time promotion of a branch: a headline plus optional details, optional featured menu
+ * items and an optional uploaded banner. Unlike a combo it carries no price and cannot be added to
+ * the cart; it always has an end date and customers see it as "limited time" until then.
+ */
 export interface Promotion {
   id: string;
+  businessId: string;
+  branchId: string;
   title: Localized;
   body: Localized;
-  /** ISO date (YYYY-MM-DD, Asia/Jerusalem). Hidden from customers from the following day. */
-  endsAt?: string;
+  /** Featured products of this branch (tapping one opens the product). Up to 10. */
+  productIds: string[];
+  /** Uploaded banner (Storage path, 16:9) or undefined for the text-only card. */
+  imagePath?: string;
+  /** ISO date (YYYY-MM-DD, Asia/Jerusalem). Required; hidden from customers from the following day. */
+  endsAt: string;
   /** Hidden promotions stay in the owner's list but never reach the public projection. */
   active: boolean;
   sortOrder: number;
@@ -142,7 +153,6 @@ export interface Business {
   approval: ApprovalState;
   approvalReason?: string;
   loyalty: LoyaltyRules;
-  promotions?: Promotion[];
   createdAt: string;
   updatedAt: string;
 }
@@ -302,9 +312,9 @@ export interface ComboItem {
 }
 
 /**
- * A combo is an owner-built bundle of catalog items with a percentage discount on the sum of the
- * items' current prices. Prices are never stored on the combo; they are resolved at quote time so a
- * catalog price change flows through and a stale client price triggers `price_changed`.
+ * A combo is an owner-built bundle of catalog items sold at a fixed price the owner sets. The sum of
+ * the members' current prices is shown to the owner only (never to customers) so the "original"
+ * price stays private; the cart charges `priceAgorot`.
  */
 export interface Combo {
   id: string;
@@ -313,11 +323,13 @@ export interface Combo {
   name: Localized;
   description: Localized;
   items: ComboItem[];
-  /** 1–90. Applied to the merchandise sum of the items. */
-  discountPercent: number;
+  /** Fixed combo price set by the owner. */
+  priceAgorot: Agorot;
+  /** @deprecated Pre-2026-09-16 combos stored a percentage instead of a price; read only as a fallback. */
+  discountPercent?: number;
   /** Locally generated promo image (Storage path) or undefined for the branded fallback. */
   imagePath?: string;
-  /** Promoted combos appear in the Deals section at the top of the storefront. */
+  /** Promoted combos appear in the Combos section at the top of the storefront. */
   promoted: boolean;
   active: boolean;
   archived: boolean;
@@ -382,9 +394,10 @@ export interface OrderLine {
   lineId: string;
   productId: string;
   name: Localized;
-  /** Combo snapshot: bundled items and the discount that was applied. */
+  /** Combo snapshot: the bundled items; the line's unit price is the combo's fixed price. */
   comboId?: string;
   comboItems?: OrderLineComboItem[];
+  /** @deprecated Only on orders placed before combos moved to fixed prices. */
   comboDiscountPercent?: number;
   variantId?: string;
   variantName?: Localized;
@@ -450,6 +463,8 @@ export interface Order {
   /** Pickup contact (name + phone) — also present for delivery. */
   contactName: string;
   contactPhone: string;
+  /** Dine-in only: table number as typed by the customer (optional). */
+  tableNumber?: string;
   customerNote?: string;
   lines: OrderLine[];
   /** Original (as-placed) lines and totals — never modified after placement. */
@@ -747,6 +762,7 @@ export type QareebErrorCode =
   | 'orders_paused'
   | 'delivery_not_available'
   | 'pickup_not_available'
+  | 'dine_in_not_available'
   | 'below_minimum'
   | 'price_changed'
   | 'item_unavailable'

@@ -39,7 +39,6 @@ export interface PublicBusiness {
   loyaltyEnabled: boolean;
   loyaltyMaxDiscountPercent: number;
   loyaltyRedeemValueAgorot: number;
-  promotions?: Promotion[];
 }
 
 /** Ticks every 30s so open/closed state follows server-defined hours without a reload. */
@@ -66,14 +65,24 @@ export function useCity(cityId: string) {
   return useDoc<City>(`cities/${cityId}`);
 }
 
-export function useDiscovery(cityId: string, mode: 'pickup' | 'delivery', kind: 'restaurant' | 'supermarket') {
-  // Delivery is filtered implicitly (deliveryCityIds is empty unless deliveryEnabled), but pickup was
-  // not, so branches with pickup switched off were listed under "collect" and turned the customer
-  // away once they opened them.
-  const constraints = mode === 'delivery'
-    ? [where('visible', '==', true), where('type', '==', kind), where('deliveryCityIds', 'array-contains', cityId), limit(60)]
-    : [where('visible', '==', true), where('type', '==', kind), where('cityId', '==', cityId), where('pickupEnabled', '==', true), limit(60)];
-  return useCollection<PublicBranch>('publicBranches', constraints, [cityId, mode, kind]);
+export function useDiscovery(cityId: string, kind: 'restaurant' | 'supermarket') {
+  // Fulfillment is picked at checkout, so the home page lists every branch that can serve the city
+  // in at least one way: delivers to it, or is located in it (pickup / dine-in). Two queries merged
+  // client-side because Firestore cannot OR an array-contains with an equality on another field.
+  const delivering = useCollection<PublicBranch>('publicBranches', [where('visible', '==', true), where('type', '==', kind), where('deliveryCityIds', 'array-contains', cityId), limit(60)], [cityId, kind]);
+  const local = useCollection<PublicBranch>('publicBranches', [where('visible', '==', true), where('type', '==', kind), where('cityId', '==', cityId), limit(60)], [cityId, kind]);
+  return useMemo(() => {
+    const seen = new Set<string>();
+    const data: PublicBranch[] = [];
+    for (const b of [...local.data, ...delivering.data]) {
+      if (seen.has(b.id)) continue;
+      // A local branch with neither pickup nor delivery nor dine-in (supermarket) cannot be ordered from.
+      if (b.cityId === cityId && !b.pickupEnabled && b.type !== 'restaurant' && !b.deliveryCityIds.includes(cityId)) continue;
+      seen.add(b.id);
+      data.push(b);
+    }
+    return { data, loading: delivering.loading || local.loading, error: delivering.error ?? local.error };
+  }, [delivering, local, cityId]);
 }
 
 export function useFavorites() {
@@ -92,4 +101,9 @@ export function useFavorites() {
 
 export function useCombos(branchId: string | null) {
   return useCollection<Combo>(branchId ? `publicBranches/${branchId}/combos` : null, [orderBy('sortOrder'), limit(50)], [branchId]);
+}
+
+/** Active promotions of a branch; expiry (`endsAt`) is applied by the caller. */
+export function usePromotions(branchId: string | null) {
+  return useCollection<Promotion>(branchId ? `publicBranches/${branchId}/promotions` : null, [orderBy('sortOrder'), limit(20)], [branchId]);
 }

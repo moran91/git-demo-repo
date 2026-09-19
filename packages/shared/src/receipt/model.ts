@@ -91,7 +91,7 @@ export function buildOrderReceipt(order: Order, opts: BuildReceiptOptions): Rece
   if (opts.isCopy) blocks.push({ kind: 'text', text: `*** ${t('receipt.copy')} ***`, size: 'md', bold: true, align: 'center' });
   if (opts.isRevised || order.revision > 0) blocks.push({ kind: 'text', text: `*** ${t('receipt.revised')} ***`, size: 'md', bold: true, align: 'center' });
   blocks.push({ kind: 'text', text: order.reference, size: 'xl', bold: true, align: 'center', dir: 'ltr' });
-  blocks.push({ kind: 'text', text: order.mode === 'delivery' ? t('receipt.delivery') : t('receipt.pickup'), size: 'xl', bold: true, align: 'center' });
+  blocks.push({ kind: 'text', text: order.mode === 'delivery' ? t('receipt.delivery') : order.mode === 'dine_in' ? t('receipt.dineIn') : t('receipt.pickup'), size: 'xl', bold: true, align: 'center' });
 
   const statusText =
     order.status === 'placed' ? t('receipt.awaitingAcceptance') : order.status === 'accepted' ? t('receipt.accepted') : t('receipt.rejected');
@@ -102,6 +102,7 @@ export function buildOrderReceipt(order: Order, opts: BuildReceiptOptions): Rece
   // Customer & address
   blocks.push({ kind: 'row', start: t('receipt.customer'), end: order.contactName, bold: true });
   blocks.push({ kind: 'row', start: t('receipt.phone'), end: formatPhoneDisplay(order.contactPhone), endDir: 'ltr' });
+  if (order.mode === 'dine_in' && order.tableNumber) blocks.push({ kind: 'box', title: t('receipt.table'), lines: [order.tableNumber], size: 'lg', bold: true });
   if (order.mode === 'delivery' && order.address) {
     const a = order.address;
     blocks.push({ kind: 'spacer', px: 6 });
@@ -143,7 +144,6 @@ export function buildOrderReceipt(order: Order, opts: BuildReceiptOptions): Rece
       for (const ci of line.comboItems) {
         blocks.push({ kind: 'row', start: `  ${ci.quantity * line.quantity} × ${resolveLocalized(ci.name, L)}${ci.variantName ? ` (${resolveLocalized(ci.variantName, L)})` : ''}`, end: '', size: 'sm' });
       }
-      if (line.comboDiscountPercent) blocks.push({ kind: 'text', text: `  -${line.comboDiscountPercent}%`, size: 'sm' });
     }
     for (const m of line.modifiers) {
       blocks.push({ kind: 'row', start: `  + ${resolveLocalized(m.optionName, L)}${placementSuffix(m.placement, t)}`, end: m.priceDeltaAgorot ? formatILSPlain(m.priceDeltaAgorot) : '', size: 'sm', endDir: 'ltr' });
@@ -173,7 +173,7 @@ export function buildOrderReceipt(order: Order, opts: BuildReceiptOptions): Rece
     if (opts.cashReceivedAgorot !== undefined) {
       blocks.push({ kind: 'row', start: t('receipt.cashReceived'), end: formatILSPlain(opts.cashReceivedAgorot), bold: true, endDir: 'ltr' });
     } else {
-      blocks.push({ kind: 'text', text: order.mode === 'delivery' ? t('receipt.cashOnDelivery') : t('receipt.cashOnPickup'), size: 'md', bold: true, align: 'center' });
+      blocks.push({ kind: 'text', text: order.mode === 'delivery' ? t('receipt.cashOnDelivery') : order.mode === 'dine_in' ? t('receipt.cashAtTable') : t('receipt.cashOnPickup'), size: 'md', bold: true, align: 'center' });
     }
   }
   blocks.push({ kind: 'rule', style: 'dashed' });

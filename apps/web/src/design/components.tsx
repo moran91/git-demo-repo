@@ -110,9 +110,9 @@ export function Checkbox({ label, hint, ...rest }: { label: ReactNode; hint?: st
 }
 
 /* ---------- Segmented control ---------- */
-export function Segmented<T extends string>({ label, value, onChange, options }: { label: string; value: T; onChange: (v: T) => void; options: Array<{ value: T; label: string; icon?: IconName }> }) {
+export function Segmented<T extends string>({ label, value, onChange, options, stacked }: { label: string; value: T; onChange: (v: T) => void; options: Array<{ value: T; label: string; icon?: IconName }>; /** Icon above the label: fits three options at phone width. */ stacked?: boolean }) {
   return (
-    <div className="segmented" role="radiogroup" aria-label={label}>
+    <div className={`segmented ${stacked ? 'segmented--stacked' : ''}`} role="radiogroup" aria-label={label}>
       {options.map((o) => (
         <button key={o.value} type="button" role="radio" aria-checked={value === o.value} className="segmented__btn" onClick={() => onChange(o.value)}>
           {o.icon ? <Icon name={o.icon} size={18} /> : null}

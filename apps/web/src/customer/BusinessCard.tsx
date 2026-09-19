@@ -8,7 +8,7 @@ import { useFavorites, useOpenState, type PublicBranch } from './hooks';
 import { StorageImage } from './StorageImage';
 import { useNavigate } from 'react-router';
 
-export function BusinessCard({ branch, mode, cityId }: { branch: PublicBranch; mode: 'pickup' | 'delivery'; cityId: string }) {
+export function BusinessCard({ branch, cityId }: { branch: PublicBranch; cityId: string }) {
   const t = useT();
   const { L, locale } = useI18n();
   const open = useOpenState(branch);
@@ -51,13 +51,14 @@ export function BusinessCard({ branch, mode, cityId }: { branch: PublicBranch; m
         </div>
         <div className="biz-card__meta">
           <span className="icon-text"><Icon name={branch.type === 'restaurant' ? 'utensils' : 'basket'} size={16} /> {branch.type === 'restaurant' ? t('common.restaurant') : t('common.supermarket')}</span>
-          {mode === 'delivery' && rule ? (
+          {rule ? (
             <>
               <span className="icon-text"><Icon name="truck" size={16} /> {rule.feeAgorot === 0 ? t('discovery.freeDelivery') : t('discovery.deliveryFee', { amount: money(rule.feeAgorot, locale) })}</span>
               {rule.minSubtotalAgorot > 0 ? <span>{t('discovery.minOrder', { amount: money(rule.minSubtotalAgorot, locale) })}</span> : null}
             </>
           ) : null}
           {branch.pickupEnabled ? <span className="icon-text"><Icon name="bag" size={16} /> {t('discovery.pickupAvailable')}</span> : null}
+          {branch.type === 'restaurant' ? <span className="icon-text"><Icon name="chair" size={16} /> {t('discovery.dineInAvailable')}</span> : null}
           {!open.open && open.opensInMin !== undefined ? <span>{t('discovery.opensAt', { time: minutesToHHMM(new Date().getHours() * 60 + new Date().getMinutes() + open.opensInMin) })}</span> : null}
           {closesAt ? <span>{t('discovery.closesAt', { time: closesAt })}</span> : null}
         </div>

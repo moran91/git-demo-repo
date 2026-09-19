@@ -66,6 +66,12 @@ export function DashboardShell() {
   useEffect(() => {
     if (!loading && !user) navigate('/business/signin', { replace: true });
   }, [loading, user, navigate]);
+  useEffect(() => {
+    if (!drawer) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setDrawer(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [drawer]);
   if (loading || business.loading || branchesQ.loading) return <div className="page stack" aria-busy="true"><Skeleton height={40} /><Skeleton height={200} radius={16} /></div>;
   if (!user) return null;
   if (!allowed || !business.data) return <main className="page"><EmptyState icon="store" title={t('error.forbidden')} action={<Link className="btn btn--secondary" to="/business">{t('common.back')}</Link>} /></main>;
@@ -75,32 +81,61 @@ export function DashboardShell() {
   const can = (p: Perm) => ROLE_PERMS[role].includes(p);
   const ctx: DashCtx = { business: business.data, branch, branches, membership, role, can };
   const base = `/business/${businessId}/${branch.id}`;
-  const nav: Array<{ to: string; icon: IconName; label: string; perm?: Perm; count?: number }> = [
-    { to: `${base}/orders`, icon: 'bell', label: t('dash.incoming'), count: placed.data.length },
-    { to: `${base}/history`, icon: 'list', label: t('dash.history') },
-    { to: `${base}/catalog`, icon: 'basket', label: t('dash.catalog'), perm: 'catalog' },
-    { to: `${base}/deals`, icon: 'tag', label: t('deals.manage'), perm: 'catalog' },
-    { to: `${base}/branch`, icon: 'building', label: t('dash.branchSettings'), perm: 'settings' },
-    { to: `${base}/printers`, icon: 'printer', label: t('dash.printers') },
-    { to: `${base}/cash`, icon: 'wallet', label: t('dash.cash'), perm: 'financials' },
-    { to: `${base}/loyalty`, icon: 'star', label: t('dash.loyalty'), perm: 'financials' },
-    { to: `${base}/staff`, icon: 'users', label: t('dash.staff'), perm: 'staff' },
-    { to: `${base}/business`, icon: 'store', label: t('dash.business'), perm: 'settings' },
-    { to: `${base}/qr`, icon: 'qr', label: t('dash.qr'), perm: 'settings' },
+  type NavItem = { to: string; icon: IconName; label: string; perm?: Perm; count?: number };
+  const sections: Array<{ label: string; items: NavItem[] }> = [
+    { label: t('dash.section.orders'), items: [
+      { to: `${base}/orders`, icon: 'bell', label: t('dash.incoming'), count: placed.data.length },
+      { to: `${base}/history`, icon: 'list', label: t('dash.history') },
+    ] },
+    { label: t('dash.section.menu'), items: [
+      { to: `${base}/catalog`, icon: 'basket', label: t('dash.catalog'), perm: 'catalog' },
+      { to: `${base}/deals`, icon: 'tag', label: t('deals.manage'), perm: 'catalog' },
+    ] },
+    { label: t('dash.section.manage'), items: [
+      { to: `${base}/branch`, icon: 'building', label: t('dash.branchSettings'), perm: 'settings' },
+      { to: `${base}/printers`, icon: 'printer', label: t('dash.printers') },
+      { to: `${base}/cash`, icon: 'wallet', label: t('dash.cash'), perm: 'financials' },
+      { to: `${base}/loyalty`, icon: 'star', label: t('dash.loyalty'), perm: 'financials' },
+      { to: `${base}/staff`, icon: 'users', label: t('dash.staff'), perm: 'staff' },
+    ] },
+    { label: t('dash.section.business'), items: [
+      { to: `${base}/business`, icon: 'store', label: t('dash.business'), perm: 'settings' },
+      { to: `${base}/qr`, icon: 'qr', label: t('dash.qr'), perm: 'settings' },
+    ] },
   ];
-  const sidebar = (
+  const bizName = L(business.data.name, business.data.defaultLocale);
+  const sidebar = (inDrawer: boolean) => (
     <>
-      <Link to="/" className="brand" style={{ marginBottom: 8 }}><BrandMark size={28} label={t('brand.logoLabel')} /><span className="brand__word">{BRAND.wordmark}</span></Link>
-      <nav className="dash__nav stack--sm stack" aria-label={t('nav.business')}>
-        {nav.filter((n) => !n.perm || can(n.perm)).map((n) => (
-          <NavLink key={n.to} to={n.to} onClick={() => setDrawer(false)}>
-            <Icon name={n.icon} size={20} /> {n.label} {n.count ? <Badge tone="accent">{n.count}</Badge> : null}
-          </NavLink>
-        ))}
+      <div className="dash__sidebar-head">
+        <Link to="/" className="brand"><BrandMark size={28} label={t('brand.logoLabel')} /><span className="brand__word">{BRAND.wordmark}</span></Link>
+        {inDrawer ? <IconButton icon="x" label={t('common.close')} onClick={() => setDrawer(false)} /> : null}
+      </div>
+      <div className="dash__identity">
+        <span className="dash__identity-mark" aria-hidden="true">{bizName.trim().charAt(0)}</span>
+        <span className="dash__identity-text">
+          <strong className="truncate">{bizName}</strong>
+          <span className="truncate muted">{L(branch.name, business.data!.defaultLocale)} · {branch.ordersPaused ? t('dash.ordersPausedShort') : t('dash.acceptingOrders')}</span>
+        </span>
+      </div>
+      <nav className="dash__nav" aria-label={t('nav.business')}>
+        {sections.map((sec) => {
+          const items = sec.items.filter((n) => !n.perm || can(n.perm));
+          if (items.length === 0) return null;
+          return (
+            <div key={sec.label} className="dash__nav-group">
+              <div className="dash__nav-label">{sec.label}</div>
+              {items.map((n) => (
+                <NavLink key={n.to} to={n.to} onClick={() => setDrawer(false)}>
+                  <Icon name={n.icon} size={20} /><span className="dash__nav-text">{n.label}</span>{n.count ? <span className="dash__count">{n.count}</span> : null}
+                </NavLink>
+              ))}
+            </div>
+          );
+        })}
       </nav>
-      <div style={{ marginTop: 'auto' }} className="stack--sm stack">
+      <div className="dash__sidebar-foot">
         <LanguageSelect />
-        <Button variant="ghost" icon="logout" onClick={() => void signOut()}>{t('common.signOut')}</Button>
+        <button type="button" className="dash__signout" onClick={() => void signOut()}><Icon name="logout" size={20} directional /><span>{t('common.signOut')}</span></button>
       </div>
     </>
   );
@@ -108,11 +143,11 @@ export function DashboardShell() {
     <Ctx.Provider value={ctx}>
       <UpdateBanner />
       <div className="dash">
-        <aside className="dash__sidebar">{sidebar}</aside>
+        <aside className="dash__sidebar">{sidebar(false)}</aside>
         {drawer ? (
           <>
             <button type="button" className="drawer-backdrop" aria-label={t('common.close')} onClick={() => setDrawer(false)} />
-            <aside className="dash__sidebar dash__sidebar--drawer" style={dir === 'rtl' ? { right: 0, left: 'auto' } : { left: 0, right: 'auto' }} role="dialog" aria-modal="true" aria-label={t('common.menu')}>{sidebar}</aside>
+            <aside className="dash__sidebar dash__sidebar--drawer" style={dir === 'rtl' ? { right: 0, left: 'auto' } : { left: 0, right: 'auto' }} role="dialog" aria-modal="true" aria-label={t('common.menu')}>{sidebar(true)}</aside>
           </>
         ) : null}
         <header className="dash__header">
