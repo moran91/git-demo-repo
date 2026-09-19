@@ -86,7 +86,6 @@ function ComboEditor({ initial, products, onClose }: { initial: { id?: string; d
   const [error, setError] = useState<string | null>(null);
   const [generating, setGenerating] = useState<string | null>(null);
   const [preview, setPreview] = useState<PromoResult | null>(null);
-  const [cutout, setCutout] = useState(false);
   const set = (p: Partial<Draft>) => setD((s) => ({ ...s, ...p }));
   const eligible = useMemo(() => products.filter((p) => p.pricingMode === 'unit' && p.available), [products]);
   const filtered = useMemo(() => { const n = q.trim().toLowerCase(); return n ? eligible.filter((p) => Object.values(p.name).some((x) => x?.toLowerCase().includes(n))) : eligible; }, [eligible, q]);
@@ -112,9 +111,8 @@ function ComboEditor({ initial, products, onClose }: { initial: { id?: string; d
     setPreview(null);
     try {
       const sources = await Promise.all(d.items.map(async (it) => { const p = products.find((x) => x.id === it.productId); const srcs = imageSources(p?.imagePath, 'display'); return { url: srcs?.src, fallbackUrl: srcs?.fallback ?? undefined, label: p ? L(p.name, business.defaultLocale) : '', quantity: it.quantity }; }));
-      const res = await composePromo(sources, { discountPercent: d.discountPercent, title: L(d.name, business.defaultLocale) || t('deals.combo'), badgeText: t('deals.save', { percent: d.discountPercent }), cutout, dir, onProgress: (stage, detail) => setGenerating(detail ?? stage) });
+      const res = await composePromo(sources, { title: L(d.name, business.defaultLocale) || t('deals.combo'), stickerText: money(price ?? 0, locale), badgeText: t('deals.save', { percent: d.discountPercent }), dir, onProgress: (stage) => setGenerating(stage) });
       setPreview(res);
-      if (cutout && !res.cutoutUsed) toast(t('deals.cutoutFailed'), 'danger');
       if (sources.every((s) => !s.url)) toast(t('deals.noPhotos'));
     } catch (e) { toast(t(errorKey(e)), 'danger'); } finally { setGenerating(null); }
   };
@@ -178,7 +176,6 @@ function ComboEditor({ initial, products, onClose }: { initial: { id?: string; d
           <p className="muted">{t('deals.generateHelp')}</p>
           {imagePath && !preview ? <StorageImage path={imagePath} size="display" alt="" wide fallbackLabel={t('discovery.imageFallback')} /> : null}
           {preview ? <img className="promo-canvas" src={preview.dataUrl} alt={t('deals.promoImage')} /> : null}
-          <Checkbox label={t('deals.cutout')} checked={cutout} onChange={(e) => setCutout(e.target.checked)} />
           <div className="row">
             <Button variant="secondary" icon="image" loading={!!generating} disabled={d.items.length < 2} onClick={generate}>{generating ? t('deals.generating') : t('deals.generateImage')}</Button>
             {preview ? <Button icon="check" loading={busy} onClick={usePhoto}>{t('deals.usePhoto')}</Button> : null}
