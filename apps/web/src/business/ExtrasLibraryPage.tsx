@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { useSearchParams } from 'react-router';
 import { hasAnyTranslation, type Product, type SharedModifierGroup } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
 import { useCollection, orderBy, limit } from '@/lib/queries';
-import { Button, Dialog, Badge, Alert, EmptyState, IconButton, toast } from '@/design/components';
+import { Button, Dialog, Badge, Alert, EmptyState, Skeleton, toast } from '@/design/components';
 import { money } from '@/lib/format';
 import { call } from '@/lib/api';
 import { errorKey } from '@/lib/errors';
 import { PageTitle, useDash } from './shell';
 import { LoadError, useDraftSafety } from './BusinessExperience';
 import { ModifierGroupFields, newGroupDraft, type GroupDraft } from './ModifierGroupFields';
+import { ActionSheet } from './CatalogControls';
+import './catalog.css';
 
 export function ExtrasLibraryPage() {
   const t = useT();
@@ -38,30 +40,47 @@ export function ExtrasLibraryPage() {
   if (!can('catalog')) return <EmptyState icon="shield" title={t('error.forbidden')} />;
   if (groups.error || prods.error) return <LoadError />;
   const visible = groups.data.filter((g) => showArchived || !g.archived);
+  const name = (g: SharedModifierGroup) => L(g.name, business.defaultLocale);
   return (
-    <div className="stack">
-      <PageTitle title={t('catalog.library')}>
-        <Link className="btn btn--secondary btn--sm" to="../catalog">{t('dash.catalog')}</Link>
-        <Button size="sm" variant="secondary" onClick={() => setShowArchived((v) => !v)}>{showArchived ? t('catalog.archived') + ' ✓' : t('catalog.archived')}</Button>
-        <Button size="sm" icon="plus" onClick={() => setEdit({ draft: newGroupDraft() })}>{t('catalog.newSharedGroup')}</Button>
+    <div className="stack catalog">
+      <PageTitle title={t('catalog.library')} back="../catalog">
+        <Button icon="plus" onClick={() => setEdit({ draft: newGroupDraft() })}>{t('catalog.newSharedGroup')}</Button>
       </PageTitle>
       <p className="muted">{t('catalog.libraryHint')}</p>
-      {visible.length === 0 && !groups.loading ? <EmptyState icon="tag" title={t('catalog.libraryEmpty')} /> : null}
-      <ul className="list">
-        {visible.map((g) => (
-          <li key={g.id} className="list__item">
-            <div className="list__grow">
-              <div className="row" style={{ gap: 6 }}><strong>{L(g.name, business.defaultLocale)}</strong>{g.archived ? <Badge tone="muted">{t('catalog.archived')}</Badge> : null}{g.placement ? <Badge tone="neutral">{t('catalog.groupPlacement')}</Badge> : null}</div>
-              <div className="muted">{g.options.map((o) => `${L(o.name, business.defaultLocale)}${o.priceDeltaAgorot ? ` (${money(o.priceDeltaAgorot, locale)})` : ''}`).join(' · ')}</div>
-              <div className="muted">{t('catalog.linkedProducts', { count: usage.get(g.id) ?? 0 })}</div>
-            </div>
-            <div className="actions actions--icons">
-              <IconButton icon="edit" label={t('catalog.editSharedGroup')} onClick={() => setEdit({ id: g.id, draft: draftOf(g) })} />
-              <Button size="sm" variant="ghost" onClick={() => call('setSharedModifierGroupArchived', { businessId: business.id, branchId: branch.id, groupId: g.id, archived: !g.archived }).catch((e) => toast(e?.details?.issues?.[0]?.message === 'shared_group_in_use' ? t('catalog.sharedGroupInUse') : t(errorKey(e)), 'danger'))}>{g.archived ? t('catalog.unarchive') : t('catalog.archive')}</Button>
-            </div>
-          </li>
-        ))}
-      </ul>
+      <div className="chips catalog-chips" role="group" aria-label={t('catalog.archived')}>
+        <button type="button" className="chip" aria-pressed={!showArchived} onClick={() => setShowArchived(false)}>{t('deals.allCategories')}</button>
+        <button type="button" className="chip" aria-pressed={showArchived} onClick={() => setShowArchived(true)}>{t('catalog.archived')}</button>
+      </div>
+      {groups.loading ? <Skeleton height={200} /> : visible.length === 0 ? <EmptyState icon="tag" title={t('catalog.libraryEmpty')} action={<Button icon="plus" onClick={() => setEdit({ draft: newGroupDraft() })}>{t('catalog.newSharedGroup')}</Button>} /> : (
+        <section className="card ccat" aria-label={t('catalog.library')}>
+          <ul className="ccat__list">
+            {visible.map((g) => (
+              <li key={g.id} className={`prow prow--noimg ${g.archived ? 'prow--archived' : ''}`}>
+                <div className="prow__body">
+                  <span className="prow__name">{name(g)}</span>
+                  {(g.archived || g.required || g.placement) ? (
+                    <div className="prow__badges">
+                      {g.archived ? <Badge tone="muted">{t('catalog.archived')}</Badge> : null}
+                      {g.required ? <Badge tone="neutral">{t('catalog.groupRequired')}</Badge> : null}
+                      {g.placement ? <Badge tone="accent">{t('catalog.groupPlacement')}</Badge> : null}
+                    </div>
+                  ) : null}
+                  <div className="prow__meta">
+                    <span className="prow__count">{t('catalog.linkedProducts', { count: usage.get(g.id) ?? 0 })}</span>
+                    <span className="prow__opts">{g.options.map((o) => `${L(o.name, business.defaultLocale)}${o.priceDeltaAgorot ? ` (${money(o.priceDeltaAgorot, locale)})` : ''}`).join(' · ')}</span>
+                  </div>
+                </div>
+                <div className="prow__ctl prow__ctl--end">
+                  <Button variant="secondary" size="sm" icon="edit" className="prow__edit" aria-label={`${t('catalog.editSharedGroup')}: ${name(g)}`} onClick={() => setEdit({ id: g.id, draft: draftOf(g) })}>{t('common.edit')}</Button>
+                </div>
+                <ActionSheet title={name(g)} className="prow__more" actions={[
+                  { label: g.archived ? t('catalog.unarchive') : t('catalog.archive'), icon: g.archived ? 'refresh' : 'trash', danger: !g.archived, hint: g.archived ? undefined : t('catalog.sharedGroupInUse'), onSelect: () => void call('setSharedModifierGroupArchived', { businessId: business.id, branchId: branch.id, groupId: g.id, archived: !g.archived }).catch((e) => toast(e?.details?.issues?.[0]?.message === 'shared_group_in_use' ? t('catalog.sharedGroupInUse') : t(errorKey(e)), 'danger')) },
+                ]} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {edit ? <SharedGroupDialog id={edit.id} initial={edit.draft} onClose={() => setEdit(null)} /> : null}
     </div>
   );
@@ -98,7 +117,7 @@ export function SharedGroupDialog({ id, initial, onClose, onSaved }: { id?: stri
     <Dialog open onClose={() => { if (!busy && safety.confirmDiscard()) onClose(); }} title={id ? t('catalog.editSharedGroup') : t('catalog.newSharedGroup')} footer={<><Button variant="secondary" disabled={busy} onClick={() => { if (safety.confirmDiscard()) onClose(); }}>{t('common.cancel')}</Button><Button loading={busy} onClick={() => void save()}>{t('common.save')}</Button></>}>
       <div className="stack">
         {error ? <Alert tone="danger">{error}</Alert> : null}
-        <div className="card stack--sm stack"><ModifierGroupFields value={d} onChange={setD} /></div>
+        <ModifierGroupFields value={d} onChange={setD} />
       </div>
     </Dialog>
   );
