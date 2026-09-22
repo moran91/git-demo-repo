@@ -27,11 +27,11 @@
 .ccat__empty { padding: var(--space-3) var(--space-4); border-top: 1px solid var(--color-border); }
 
 /* ---------- product row ----------
- * Phones (<640): two tiers so a long name owns the full text column:
- *   [img][name / badges / price · variants · stock]            [⋯]
- *        [Available to order  ◯]                       [✎ Edit]
- * Tablets and up: one line, [img][name + badges / price · variants · stock][Available ◯][✎ Edit][⋯]. */
-.prow { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; grid-template-areas: 'img body more' 'img ctl ctl'; column-gap: var(--space-3); row-gap: var(--space-2); align-items: start; padding: var(--space-3) 0; border-top: 1px solid var(--color-border); }
+ * Phones (<640): the name owns the whole text column; the controls sit on a strip underneath:
+ *   [img][name / badges / price · variants · stock]
+ *        [◯]                                  [✎][⋯]
+ * Tablets and up: one line, [img][name + badges / price · variants · stock][◯][✎][⋯]. */
+.prow { display: grid; grid-template-columns: 56px minmax(0, 1fr); grid-template-areas: 'img body' 'img ctl'; column-gap: var(--space-3); row-gap: var(--space-1); align-items: start; padding: var(--space-3) 0; border-top: 1px solid var(--color-border); }
 .business-app .prow.list__item--catalog { flex-wrap: nowrap; } /* business.css wraps the legacy list item on phones */
 .prow--archived { opacity: 0.7; }
 .prow__img { grid-area: img; width: 56px; height: 56px; }
@@ -46,38 +46,30 @@
 .prow__vcount, .prow__stock, .prow__count { flex: none; }
 .prow__count { font-weight: 500; }
 .prow__opts { flex: 1 1 100%; white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.prow--noimg { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'body more' 'ctl ctl'; }
-.prow__ctl--end { justify-content: flex-end; }
 .prow__vcount::before, .prow__stock::before { content: '·'; margin-inline-end: var(--space-2); opacity: 0.6; }
 .prow__meta:empty { display: none; }
-.prow__more { grid-area: more; align-self: start; margin-block-start: 4px; }
-.business-app .prow > .btn--icon.prow__more { width: 48px; min-width: 48px; height: 48px; border-radius: var(--radius-control); }
-.prow__ctl { grid-area: ctl; display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-width: 0; }
-.prow__avail { display: inline-flex; align-items: center; gap: var(--space-1); min-width: 0; padding-inline-start: var(--space-2); border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-bg); }
-.prow__avail-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-badge); font-weight: 500; color: var(--color-text-muted); }
-.prow__avail:has(.cswitch[aria-checked='true']) .prow__avail-text { color: var(--color-text); }
-.business-app .prow__ctl > .btn.prow__edit { flex: none; min-height: 48px; padding-inline: var(--space-3); white-space: nowrap; color: var(--color-primary); }
+.prow__ctl { grid-area: ctl; display: flex; align-items: center; justify-content: space-between; gap: var(--space-1); min-width: 0; margin-inline-start: calc(-1 * var(--space-1)); }
+.prow__ctl-end { display: inline-flex; align-items: center; gap: var(--space-1); }
+.prow__ctl .btn--icon { border-radius: var(--radius-control); }
+.business-app .prow__ctl .btn--icon, .prow__ctl .cswitch { flex: none; width: 48px; min-width: 48px; height: 48px; }
+.prow__ctl .cswitch { width: 52px; min-width: 52px; }
+.prow__edit { color: var(--color-primary); }
+.prow--noimg { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'body' 'ctl'; }
+.prow__ctl--end { justify-content: flex-end; }
 @media (max-width: 359px) {
-  .prow { column-gap: var(--space-2); grid-template-columns: 44px minmax(0, 1fr) auto; }
+  .prow { column-gap: var(--space-2); grid-template-columns: 44px minmax(0, 1fr); }
   .prow__img { width: 44px; height: 44px; }
-  .business-app .prow__ctl > .btn.prow__edit { padding-inline: var(--space-2); }
 }
 @media (min-width: 640px) {
-  .prow { grid-template-columns: 56px minmax(0, 1fr) auto auto; grid-template-areas: 'img body ctl more'; align-items: center; padding: var(--space-2) 0; min-height: 72px; }
+  .prow { grid-template-columns: 56px minmax(0, 1fr) auto; grid-template-areas: 'img body ctl'; align-items: center; padding: var(--space-2) 0; min-height: 72px; }
+  .prow--noimg { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'body ctl'; }
   .prow__body { gap: 2px; padding-block-start: 0; }
   .prow__meta { gap: 2px var(--space-3); }
   .prow__variants { display: block; }
-  .prow--noimg { grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: 'body ctl more'; }
-  .prow__opts { flex: 1 1 auto; -webkit-line-clamp: 1; }
   .prow__vcount { display: none; }
-  .prow__more { align-self: center; margin-block-start: 0; }
-  .prow__ctl { justify-content: flex-end; gap: var(--space-2); }
-  .prow__avail { border: 0; background: transparent; padding-inline-start: 0; }
-  .prow__avail-text { display: none; }
-}
-@media (min-width: 900px) {
-  .prow__avail-text { display: block; }
-  .prow__avail { padding-inline-start: var(--space-2); }
+  .prow__opts { flex: 1 1 auto; -webkit-line-clamp: 1; }
+  .prow__ctl { justify-content: flex-end; gap: var(--space-2); margin-inline-start: 0; }
+  .prow__ctl-end { gap: 0; }
 }
 
 /* ---------- switch (52×48 hit area, 44×26 track) ---------- */
@@ -88,13 +80,6 @@
 .cswitch[aria-checked='true'] .cswitch__knob { transform: translateX(18px); }
 [dir='rtl'] .cswitch[aria-checked='true'] .cswitch__knob { transform: translateX(-18px); }
 .cswitch:disabled { opacity: 0.55; cursor: not-allowed; }
-
-@media (max-width: 359px) {
-  .prow { gap: var(--space-2); }
-  .prow__img { width: 40px; height: 40px; }
-  .business-app .prow__ctl .btn--icon.prow__edit { width: 40px; min-width: 40px; }
-  .business-app .prow__ctl .btn--icon.prow__more { width: 36px; min-width: 36px; }
-}
 
 /* ---------- label/value rows (label start, value end). Named kvrow, not ledger: orders.css defines
  * its own .ledger for the order history and both files load in the same bundle. ---------- */

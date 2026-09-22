@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router';
 import { hasAnyTranslation, type Product, type SharedModifierGroup } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
 import { useCollection, orderBy, limit } from '@/lib/queries';
-import { Button, Dialog, Badge, Alert, EmptyState, Skeleton, toast } from '@/design/components';
+import { Button, Dialog, Badge, Alert, EmptyState, IconButton, Skeleton, toast } from '@/design/components';
 import { money } from '@/lib/format';
 import { call } from '@/lib/api';
 import { errorKey } from '@/lib/errors';
@@ -71,11 +71,11 @@ export function ExtrasLibraryPage() {
                   </div>
                 </div>
                 <div className="prow__ctl prow__ctl--end">
-                  <Button variant="secondary" size="sm" icon="edit" className="prow__edit" aria-label={`${t('catalog.editSharedGroup')}: ${name(g)}`} onClick={() => setEdit({ id: g.id, draft: draftOf(g) })}>{t('common.edit')}</Button>
+                  <IconButton icon="edit" size={22} label={`${t('catalog.editSharedGroup')}: ${name(g)}`} className="prow__edit" onClick={() => setEdit({ id: g.id, draft: draftOf(g) })} />
+                  <ActionSheet title={name(g)} className="prow__more" actions={[
+                    { label: g.archived ? t('catalog.unarchive') : t('catalog.archive'), icon: g.archived ? 'refresh' : 'trash', danger: !g.archived, hint: g.archived ? undefined : t('catalog.sharedGroupInUse'), onSelect: () => void call('setSharedModifierGroupArchived', { businessId: business.id, branchId: branch.id, groupId: g.id, archived: !g.archived }).catch((e) => toast(e?.details?.issues?.[0]?.message === 'shared_group_in_use' ? t('catalog.sharedGroupInUse') : t(errorKey(e)), 'danger')) },
+                  ]} />
                 </div>
-                <ActionSheet title={name(g)} className="prow__more" actions={[
-                  { label: g.archived ? t('catalog.unarchive') : t('catalog.archive'), icon: g.archived ? 'refresh' : 'trash', danger: !g.archived, hint: g.archived ? undefined : t('catalog.sharedGroupInUse'), onSelect: () => void call('setSharedModifierGroupArchived', { businessId: business.id, branchId: branch.id, groupId: g.id, archived: !g.archived }).catch((e) => toast(e?.details?.issues?.[0]?.message === 'shared_group_in_use' ? t('catalog.sharedGroupInUse') : t(errorKey(e)), 'danger')) },
-                ]} />
               </li>
             ))}
           </ul>

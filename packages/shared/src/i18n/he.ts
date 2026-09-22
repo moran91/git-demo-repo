@@ -1190,7 +1190,6 @@ export const he: Dictionary = {
   'dash.pausedPill': 'מושהה',
   'catalog.productCount.one': 'מוצר אחד',
   'catalog.productCount.other': '{count} מוצרים',
-  'catalog.availableShort': 'זמין',
   'catalog.variantCount.one': 'וריאציה אחת',
   'catalog.variantCount.other': '{count} וריאציות',
   'deals.comboCount.one': 'קומבו אחד · {promoted} פעילים',

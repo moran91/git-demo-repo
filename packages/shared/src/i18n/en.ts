@@ -1212,7 +1212,6 @@ export const en = {
   'dash.pausedPill': 'Paused',
   'catalog.productCount.one': '{count} product',
   'catalog.productCount.other': '{count} products',
-  'catalog.availableShort': 'Available',
   'catalog.variantCount.one': '{count} variant',
   'catalog.variantCount.other': '{count} variants',
   'deals.comboCount.one': '{n} combo · {promoted} active',

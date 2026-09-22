@@ -1190,7 +1190,6 @@ export const ar: Dictionary = {
   'dash.pausedPill': 'متوقف',
   'catalog.productCount.one': 'منتج واحد',
   'catalog.productCount.other': '{count} منتجات',
-  'catalog.availableShort': 'متاح',
   'catalog.variantCount.one': 'نوع واحد',
   'catalog.variantCount.other': '{count} أنواع',
   'deals.comboCount.one': 'كومبو واحد · {promoted} نشطة',

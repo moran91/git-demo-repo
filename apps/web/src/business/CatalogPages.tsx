@@ -146,11 +146,10 @@ export function CatalogPage() {
                     <StorageImage path={p.imagePath} alt="" square className="prow__img" fallbackLabel={t('discovery.imageFallback')} />
                     <div className="prow__body">
                       <span className="prow__name">{name(p.name)}</span>
-                      {(p.mostOrdered || p.archived || (!p.available && !p.archived) || p.pricingMode === 'weight') ? (
+                      {(p.mostOrdered || p.archived || p.pricingMode === 'weight') ? (
                         <div className="prow__badges">
                           {p.mostOrdered ? <Badge tone="accent" icon="star">{t('product.mostOrdered')}</Badge> : null}
                           {p.archived ? <Badge tone="muted">{t('catalog.archived')}</Badge> : null}
-                          {!p.available && !p.archived ? <Badge tone="danger">{t('common.unavailable')}</Badge> : null}
                           {p.pricingMode === 'weight' ? <Badge tone="neutral">{t('common.perKg')}</Badge> : null}
                         </div>
                       ) : null}
@@ -162,13 +161,12 @@ export function CatalogPage() {
                       </div>
                     </div>
                     <div className="prow__ctl">
-                      <span className="prow__avail">
-                        <span className="prow__avail-text" aria-hidden="true">{t('catalog.availableShort')}</span>
-                        <Switch checked={p.available} label={`${t('catalog.available')}: ${name(p.name)}`} busy={pending.has(p.id)} disabled={pending.has(p.id) || p.archived} onChange={(available) => void setAvailable(p, available)} />
+                      <Switch checked={p.available} label={`${t('catalog.available')}: ${name(p.name)}`} busy={pending.has(p.id)} disabled={pending.has(p.id) || p.archived} onChange={(available) => void setAvailable(p, available)} />
+                      <span className="prow__ctl-end">
+                        <IconButton icon="edit" size={22} label={`${t('common.edit')}: ${name(p.name)}`} className="prow__edit" onClick={() => setProdEdit({ product: p, categoryId: p.categoryId })} />
+                        <ActionSheet title={name(p.name)} actions={productActions(p, i, arr)} className="prow__more" />
                       </span>
-                      <Button variant="secondary" size="sm" icon="edit" className="prow__edit" aria-label={`${t('common.edit')}: ${name(p.name)}`} onClick={() => setProdEdit({ product: p, categoryId: p.categoryId })}>{t('common.edit')}</Button>
                     </div>
-                    <ActionSheet title={name(p.name)} actions={productActions(p, i, arr)} className="prow__more" />
                   </li>
                 ))}
               </ul>
