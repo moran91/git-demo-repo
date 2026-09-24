@@ -5,21 +5,22 @@ import { useI18n } from '@/lib/i18n';
 
 /** Coordinates remain in memory for this lookup only. Existing carts and saved addresses are untouched. */
 export function useDeviceCity(cities: City[]) {
-  const { t, L } = useI18n();
+  const { t } = useI18n();
   const prefs = discoveryStore.use();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<TranslationKey | null>(null);
-  const [selected, setSelected] = useState<City | null>(null);
+  /** True once the browser reports the permission as hard-denied: the native prompt will not show again until the user allows the site. */
+  const [blocked, setBlocked] = useState(false);
   const generation = useRef(0);
   const pending = useRef(false);
   const attemptedAutomatic = useRef(false);
-  const cancel = useCallback(() => { generation.current++; pending.current = false; setBusy(false); setError(null); setSelected(null); }, []);
+  const cancel = useCallback(() => { generation.current++; pending.current = false; setBusy(false); setError(null); setBlocked(false); }, []);
   useEffect(() => () => { generation.current++; }, []);
 
   const detect = useCallback(async (): Promise<boolean | null> => {
     if (pending.current || cities.length === 0) return false;
     attemptedAutomatic.current = true;
-    setError(null); setSelected(null);
+    setError(null); setBlocked(false);
     if (!navigator.geolocation || !window.isSecureContext) { setError('location.unsupported'); return false; }
     const request = ++generation.current;
     pending.current = true; setBusy(true);
@@ -30,14 +31,17 @@ export function useDeviceCity(cities: City[]) {
       const city = nearestSupportedCity(cities, position.coords.latitude, position.coords.longitude);
       if (!city) { setError('location.outside'); return false; }
       discoveryStore.set({ cityId: city.id, locationEnabled: true });
-      setSelected(city);
       return true;
     } catch (e) {
       if (request !== generation.current) return null;
       if (request === generation.current) {
         const code = (e as GeolocationPositionError).code;
         setError(code === 1 ? 'location.denied' : code === 3 ? 'location.timeout' : 'location.unavailable');
-        if (code === 1) discoveryStore.set({ locationEnabled: false });
+        if (code === 1) {
+          discoveryStore.set({ locationEnabled: false });
+          // Only a hard "Block" needs the in-app enable guide; a dismissed prompt can simply be asked again.
+          void navigator.permissions?.query({ name: 'geolocation' }).then((p) => { if (request === generation.current && p.state === 'denied') setBlocked(true); }).catch(() => undefined);
+        }
       }
       return false;
     } finally {
@@ -57,9 +61,7 @@ export function useDeviceCity(cities: City[]) {
   }, [prefs.locationEnabled, cities.length, detect]);
 
   return {
-    busy, error: error ? t(error) : null,
-    message: selected ? t('location.selected', { city: L(selected.name) }) : null,
-    enabled: prefs.locationEnabled === true, detect, cancel,
-    disable: () => { cancel(); discoveryStore.set({ locationEnabled: false }); },
+    busy, blocked, error: error ? t(error) : null,
+    detect, cancel,
   };
 }

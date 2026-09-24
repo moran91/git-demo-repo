@@ -150,3 +150,82 @@
 /* Title actions and the pricing segmented control meet the 48px control height on every screen. */
 .business-app .catalog .dash__title > .actions > .btn { min-height: 48px; }
 .business-app .pe-card .segmented__btn { min-height: 48px; }
+
+/* ---------- item sheet (photo hero, one-line sizes/options, extras as rows, "More") ---------- */
+.pe2 .dialog__header { gap: var(--space-2); padding-inline: var(--space-4) var(--space-2); }
+.pe2 .dialog__header h2 { flex: 1 1 auto; min-width: 0; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pe2 .lang-tabs__tab { min-height: 36px; padding: 0 8px; font-size: 13px; }
+.lang-tabs__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-accent-text); }
+.pe2 .dialog__body { padding: 0 var(--space-4); }
+.pe-back { color: var(--color-text); flex: none; }
+.pe-page { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; }
+.pe-readonly { border: 0; margin: 0; padding: 0; min-width: 0; }
+
+.pe-hero { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: var(--space-4); align-items: start; padding-block: var(--space-4); }
+.pe-hero__photo { position: relative; width: 104px; height: 104px; border-radius: 14px; overflow: hidden; background: var(--color-soft); }
+.pe-hero__photo > img, .pe-hero__photo > .img-frame { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 0; }
+.pe-hero__cam { position: absolute; inset-block-end: 6px; inset-inline-end: 6px; width: 40px; height: 40px; border-radius: 50%; background: rgba(255, 254, 250, 0.94); color: var(--color-primary); display: inline-flex; align-items: center; justify-content: center; box-shadow: var(--shadow-float); cursor: pointer; }
+.pe-hero__cam--empty { inset: 0; width: auto; height: auto; border-radius: 14px; background: transparent; box-shadow: none; border: 1.5px dashed var(--color-border-strong); }
+.pe-hero__cam:focus-within { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.business-app .pe-hero__remove { position: absolute; inset-block-start: 4px; inset-inline-start: 4px; width: 32px; min-width: 32px; height: 32px; min-height: 32px; background: rgba(255, 254, 250, 0.94); color: var(--color-text); box-shadow: var(--shadow-card); }
+.pe-hero__fields { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.pe-hero__error { margin-block-end: var(--space-3); }
+.pe-toggles .kvrow { min-height: 52px; }
+.pe-toggles > .kvrow:first-child { border-top: 0; }
+
+.pe-sec { padding-block: var(--space-4) var(--space-5); border-top: 1px solid var(--color-border); display: flex; flex-direction: column; gap: var(--space-3); }
+.pe-sec--first { border-top: 0; }
+.pe-sec__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: 40px; }
+.pe-sec__head h3 { font-size: 16px; font-weight: 600; }
+.pe-sec__head .btn { flex: none; min-height: 44px; padding-inline: var(--space-3); }
+
+/* name · ₪ price · switch · remove */
+.pe-lines { display: flex; flex-direction: column; gap: var(--space-2); }
+.pe-lines__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.pe-line { display: grid; grid-template-columns: minmax(0, 1fr) 92px 52px 44px; gap: var(--space-2); align-items: center; }
+.pe-line--head { font-size: 13px; color: var(--color-text-muted); font-weight: 500; }
+.pe-line .localized__control { min-width: 0; }
+.business-app .pe-line .btn--icon { width: 44px; min-width: 44px; height: 44px; min-height: 44px; color: var(--color-text-muted); border-radius: var(--radius-control); }
+.pe-money { position: relative; min-width: 0; }
+.pe-money .input { direction: ltr; text-align: start; padding-inline: 12px 26px; font-variant-numeric: tabular-nums; }
+.pe-money .input::-webkit-inner-spin-button, .pe-money .input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.pe-money .input { -moz-appearance: textfield; appearance: textfield; }
+.pe-money__sym { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--color-text-muted); pointer-events: none; }
+[dir='rtl'] .pe-money .input { text-align: end; padding-inline: 26px 12px; }
+[dir='rtl'] .pe-money .input::-webkit-inner-spin-button, .pe-money .input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.pe-money .input { -moz-appearance: textfield; appearance: textfield; }
+.pe-money__sym { right: auto; left: 12px; }
+@media (max-width: 359px) { .pe-line { grid-template-columns: minmax(0, 1fr) 80px 52px 40px; gap: var(--space-1); } }
+
+.pe-groups { list-style: none; margin: 0; padding: 0; }
+.pe-group { display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: 68px; padding: var(--space-2) 0; border: 0; border-top: 1px solid var(--color-border); background: transparent; color: var(--color-text); text-align: start; cursor: pointer; }
+.pe-groups > li:first-child > .pe-group { border-top: 0; }
+.pe-group:hover { background: var(--color-bg); }
+.pe-group__body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pe-group__head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+.pe-group__name { font-weight: 600; overflow-wrap: anywhere; }
+.pe-group__opts { color: var(--color-text-muted); font-size: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pe-group > .icon { flex: none; color: var(--color-text-muted); }
+
+.pe-rule { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.pe-rule .stepper { --stepper-size: 48px; width: 100%; justify-content: space-between; }
+
+.pe-more2 { border-top: 1px solid var(--color-border); }
+.pe-more2 > summary { display: flex; align-items: center; gap: var(--space-2); min-height: 60px; list-style: none; cursor: pointer; }
+.pe-more2 > summary::-webkit-details-marker { display: none; }
+.pe-more2 > summary > b { font-weight: 600; flex: none; }
+.pe-more2 > summary > span { flex: 1 1 auto; min-width: 0; color: var(--color-text-muted); font-size: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pe-more2 > summary > .icon { flex: none; color: var(--color-text-muted); transition: transform var(--duration) var(--ease); }
+.pe-more2[open] > summary > .icon { transform: rotate(180deg); }
+
+.pe2 .dialog__footer { align-items: center; padding-inline: var(--space-4); }
+.business-app .pe2 .dialog__footer .btn { flex: 1 1 0; min-width: 0; }
+.business-app .pe2 .dialog__footer .btn.pe-save { flex: 0 0 auto; min-width: 120px; }
+.business-app .pe2 .dialog__footer .pe-archive { width: 48px; min-width: 48px; height: 48px; }
+.business-app .pe2 .dialog__footer .pe-foot__more { flex: none; width: 48px; min-width: 48px; height: 48px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-control); }
+.pe-status { flex: 1 1 auto; min-width: 0; display: inline-flex; align-items: center; gap: 6px; color: var(--color-success-text); font-size: var(--text-secondary); font-weight: 500; }
+.business-app .pe2 .dialog__footer .pe-another, .business-app .pe2 .dialog__footer .pe-another ~ .btn.pe-save { flex: 1 1 0; min-width: 0; white-space: nowrap; }
+.pe-status:has(~ .pe-another):empty { display: none; }
+.pe-status--dirty { color: var(--color-accent-text); }
+.pe-actions { flex-direction: row; flex-wrap: wrap; gap: var(--space-2); }
+.pe-actions > .btn { flex: 1 1 160px; }

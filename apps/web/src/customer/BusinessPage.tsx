@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router';
-import { availableFulfillmentModes, formatPhoneDisplay, minutesToHHMM, type Category, type Product } from '@qareeb/shared';
+import { availableFulfillmentModes, formatPhoneDisplay, minutesToHHMM, type Category, type Product, toLocal } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
 import { useCollection, useDoc, orderBy, where, limit } from '@/lib/queries';
 import { Badge, Skeleton, EmptyState, Alert, IconButton, toast } from '@/design/components';
@@ -17,10 +17,10 @@ import { PhotoLightbox } from './PhotoLightbox';
 import { useHeightVar } from '@/lib/stickyVars';
 import { useScrollSpy } from '@/lib/scrollSpy';
 import { promotionExpired } from '@/lib/promotions';
-import { PromoCard } from './PromoCard';
 import { ComboSheet, comboPricing } from './ComboSheet';
-import { ComboMedia } from './ComboMedia';
-import type { Combo } from '@qareeb/shared';
+import { PromoSheet } from './PromoSheet';
+import { ComboSlide, DealCarousel, PromoSlide } from './DealSlide';
+import type { Combo, Promotion } from '@qareeb/shared';
 
 export type PublicProduct = Product & { inStock: boolean; stockLeft?: number };
 
@@ -35,15 +35,22 @@ export function BusinessPage() {
   const branches = useCollection<PublicBranch>('publicBranches', [where('businessId', '==', businessId ?? '_'), where('visible', '==', true), limit(30)], [businessId]);
   const branch = branches.data.find((b) => b.id === branchId) ?? null;
   useEffect(() => {
-    if (!branchId && branches.data.length > 0 && businessId) navigate(`/b/${businessId}/${branches.data[0]!.id}`, { replace: true });
-  }, [branchId, branches.data, businessId, navigate]);
-  const categories = useCollection<Category>(branch ? `publicBranches/${branch.id}/categories` : null, [orderBy('sortOrder'), limit(100)], [branch?.id]);
-  const products = useCollection<PublicProduct>(branch ? `publicBranches/${branch.id}/products` : null, [orderBy('sortOrder'), limit(500)], [branch?.id]);
+    // Also covers a branch that is no longer visible (hidden, unapproved, deleted): its publicBranches
+    // doc is gone, so an old link or a printed QR code used to render a blank page.
+    if (!businessId || branches.loading || branches.data.length === 0) return;
+    if (branchId && branches.data.some((b) => b.id === branchId)) return;
+    // No (or a stale) branch in the link: open the branch in the customer's town, else one delivering there, else the first.
+    const best = branches.data.find((b) => b.cityId === prefs.cityId) ?? branches.data.find((b) => b.deliveryEnabled && b.deliveryCityIds?.includes(prefs.cityId)) ?? branches.data[0]!;
+    navigate(`/b/${businessId}/${best.id}`, { replace: true });
+  }, [branchId, branches.data, branches.loading, businessId, navigate, prefs.cityId]);
+  const categories = useCollection<Category>(branch ? `publicBranches/${branch.id}/categories` : null, [orderBy('sortOrder'), limit(200)], [branch?.id]);
+  const products = useCollection<PublicProduct>(branch ? `publicBranches/${branch.id}/products` : null, [orderBy('sortOrder'), limit(1000)], [branch?.id]);
   const open = useOpenState(branch);
   const { ids, toggle, signedIn } = useFavorites();
   const [active, setActive] = useState<PublicProduct | null>(null);
   const [photo, setPhoto] = useState<{ path: string; alt: string } | null>(null);
   const [activeCombo, setActiveCombo] = useState<Combo | null>(null);
+  const [activePromo, setActivePromo] = useState<Promotion | null>(null);
   const combos = useCombos(branch?.id ?? null);
   const promotionsQ = usePromotions(branch?.id ?? null);
   const cart = cartStore.use();
@@ -94,20 +101,33 @@ export function BusinessPage() {
   const modeMismatch = modes.length === 0;
   const cartMode = cart.cart && cart.cart.branchId === branch.id && modes.includes(cart.cart.mode) ? cart.cart.mode : (modes[0] ?? 'pickup');
   const isFav = ids.has(biz.id);
-  const promotions = promotionsQ.data.filter((p) => !promotionExpired(p));
+  // Ending soonest first; combos follow in the owner's order.
+  const promotions = promotionsQ.data.filter((p) => !promotionExpired(p)).sort((a, b) => (a.endsAt ?? '9').localeCompare(b.endsAt ?? '9'));
+  const promotedCombos = combos.data.filter((c) => c.promoted);
+  const featuredOf = (p: Promotion) => (p.productIds ?? []).map((id) => products.data.find((x) => x.id === id)).filter((x): x is PublicProduct => !!x);
+  // A featured item opens the product sheet while the branch takes orders, otherwise its photo.
+  const promoAction = (fp: Product): 'add' | 'photo' | null => {
+    const full = products.data.find((x) => x.id === fp.id);
+    if (!full) return null;
+    if (full.available && full.inStock && orderable && !modeMismatch) return 'add';
+    return full.imagePath ? 'photo' : null;
+  };
 
   return (
     <div className="stack">
       <header className="biz-header">
-        <div className="biz-header__cover">
-          <StorageImage path={biz.coverPath} size="display" alt="" wide priority fallbackLabel={t('discovery.imageFallback')} />
-        </div>
+        {/* No cover photo: skip the banner instead of a large empty placeholder pushing the menu below the fold. */}
+        {biz.coverPath ? (
+          <div className="biz-header__cover">
+            <StorageImage path={biz.coverPath} size="display" alt="" wide priority fallbackLabel={t('discovery.imageFallback')} />
+          </div>
+        ) : null}
         <div className="row row--between row--nowrap" style={{ alignItems: 'flex-start' }}>
           <div className="stack--sm stack" style={{ minWidth: 0, flex: '1 1 0' }}>
             <h1 className="wrap-anywhere" lang={biz.defaultLocale}>{name}</h1>
             {biz.description ? <p className="muted wrap-anywhere">{L(biz.description, biz.defaultLocale)}</p> : null}
             <div className="row">
-              {branch.ordersPaused ? <Badge tone="accent" icon="clock">{t('common.paused')}</Badge> : open.open ? <Badge tone="success" icon="check">{t('business.openNow')}{open.closesInMin !== undefined ? ` · ${t('discovery.closesAt', { time: minutesToHHMM(new Date().getHours() * 60 + new Date().getMinutes() + open.closesInMin).replace(/^0/, "") })}` : ''}</Badge> : <Badge tone="muted" icon="clock">{t('business.closedNow')}{open.opensInMin !== undefined ? ` · ${t('discovery.opensAt', { time: minutesToHHMM(new Date().getHours() * 60 + new Date().getMinutes() + open.opensInMin).replace(/^0/, "") })}` : ''}</Badge>}
+              {branch.ordersPaused ? <Badge tone="accent" icon="clock">{t('common.paused')}</Badge> : open.open ? <Badge tone="success" icon="check">{t('business.openNow')}{open.closesInMin !== undefined && open.closesInMin < 1440 ? ` · ${t('discovery.closesAt', { time: minutesToHHMM(toLocal(new Date()).minutes + open.closesInMin).replace(/^0/, "") })}` : ''}</Badge> : <Badge tone="muted" icon="clock">{t('business.closedNow')}{open.opensInMin !== undefined ? ` · ${t('discovery.opensAt', { time: minutesToHHMM(toLocal(new Date()).minutes + open.opensInMin).replace(/^0/, "") })}` : ''}</Badge>}
               {L(branch.locationDescription, biz.defaultLocale) ? <span className="muted icon-text"><Icon name="pin" size={16} /> {L(branch.locationDescription, biz.defaultLocale)}</span> : null}
               <a className="biz-phone" href={telHref(branch.phone)} aria-label={`${t('business.callBusiness')} ${formatPhoneDisplay(branch.phone)}`}><span className="biz-phone__icon"><Icon name="phone" size={16} /></span><bdi className="num">{formatPhoneDisplay(branch.phone)}</bdi></a>
             </div>
@@ -128,38 +148,11 @@ export function BusinessPage() {
         {orderable && modeMismatch ? <Alert tone="info">{t('checkout.noModeAvailable', { city: city.data ? L(city.data.name) : prefs.cityId })} <Link className="btn btn--ghost btn--sm" to="/">{t('discovery.changeCity')}</Link></Alert> : null}
       </header>
 
-      {promotions.length > 0 ? (
-        <section className="promo-strip" aria-label={t('promotions.section')}>
-          {promotions.map((p) => {
-            const featured = (p.productIds ?? []).map((id) => products.data.find((x) => x.id === id)).filter((x): x is PublicProduct => !!x);
-            return <PromoCard key={p.id} promotion={p} products={featured} defaultLocale={biz.defaultLocale} onProduct={(fp) => { const full = products.data.find((x) => x.id === fp.id); if (!full) return; if (full.available && orderable && !modeMismatch) setActive(full); else if (full.imagePath) setPhoto({ path: full.imagePath, alt: t('product.photoAlt', { name: L(full.name, biz.defaultLocale) }) }); }} />;
-          })}
-        </section>
-      ) : null}
-
-      {combos.data.filter((c) => c.promoted).length > 0 ? (
-        <section aria-labelledby="deals-h" className="stack--sm stack">
-          <h2 id="deals-h">{t('deals.title')}</h2>
-          <div className="deals">
-            {combos.data.filter((c) => c.promoted).map((c) => {
-              const pricing = comboPricing(c, products.data);
-              const off = !orderable || modeMismatch || !pricing;
-              return (
-                <button key={c.id} type="button" className={`deal-card card--interactive ${off ? 'deal-card--off' : ''}`} onClick={() => setActiveCombo(c)} aria-label={`${t('deals.combo')}: ${L(c.name, biz.defaultLocale)}`}>
-                  <div className="deal-card__media">
-                    <ComboMedia combo={c} products={products.data} fallbackLabel={t('discovery.imageFallback')} />
-                    {c.imagePath ? null : <span className="deal-card__badge">{t('deals.combo')}</span>}
-                  </div>
-                  <div className="deal-card__body">
-                    <strong className="wrap-anywhere">{L(c.name, biz.defaultLocale)}</strong>
-                    <span className="muted wrap-anywhere">{c.items.map((it) => { const p = products.data.find((x) => x.id === it.productId); return p ? `${it.quantity} × ${L(p.name, biz.defaultLocale)}` : null; }).filter(Boolean).join(' + ')}</span>
-                    {pricing ? <span className="deal-card__prices"><bdi className="price price--lg">{money(pricing.price, locale)}</bdi></span> : <span className="badge badge--muted">{t('deals.unavailable')}</span>}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </section>
+      {promotions.length + promotedCombos.length > 0 ? (
+        <DealCarousel label={t('promotions.section')}>
+          {promotions.map((p) => <PromoSlide key={`p-${p.id}`} promotion={p} products={featuredOf(p)} defaultLocale={biz.defaultLocale} onClick={() => setActivePromo(p)} />)}
+          {promotedCombos.map((c) => <ComboSlide key={`c-${c.id}`} combo={c} products={products.data} defaultLocale={biz.defaultLocale} price={comboPricing(c, products.data)?.price ?? null} off={!orderable || modeMismatch} onClick={() => setActiveCombo(c)} />)}
+        </DealCarousel>
       ) : null}
 
       {shownCategories.length > 0 ? (
@@ -221,6 +214,13 @@ export function BusinessPage() {
       ))}
       {active ? <ProductSheet product={active} business={biz} branch={branch} mode={cartMode} cityId={prefs.cityId} onClose={() => setActive(null)} /> : null}
       {photo ? <PhotoLightbox path={photo.path} alt={photo.alt} onClose={() => setPhoto(null)} /> : null}
+      {activePromo ? <PromoSheet promotion={activePromo} products={featuredOf(activePromo)} defaultLocale={biz.defaultLocale} actionOf={promoAction} onClose={() => setActivePromo(null)} onProduct={(fp) => {
+        const full = products.data.find((x) => x.id === fp.id);
+        const action = promoAction(fp);
+        if (!full || !action) return;
+        setActivePromo(null);
+        if (action === 'add') setActive(full); else setPhoto({ path: full.imagePath!, alt: t('product.photoAlt', { name: L(full.name, biz.defaultLocale) }) });
+      }} /> : null}
       {activeCombo ? <ComboSheet combo={activeCombo} products={products.data} business={biz} branch={branch} mode={cartMode} cityId={prefs.cityId} onClose={() => setActiveCombo(null)} /> : null}
     </div>
   );

@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { ref as sref, uploadBytes } from 'firebase/storage';
-import { MAX_PROMOTIONS, hasAnyTranslation, makeId, toLocal, type Category, type Localized, type Product, type Promotion } from '@qareeb/shared';
+import { MAX_PROMOTIONS, MAX_PROMO_PRODUCTS, hasAnyTranslation, makeId, toLocal, type Category, type Localized, type Product, type Promotion } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
 import { storage } from '@/lib/firebase';
-import { useCollection, orderBy, limit } from '@/lib/queries';
+import type { QueryState } from '@/lib/queries';
 import { Alert, Badge, Button, Checkbox, ConfirmDialog, Dialog, IconButton, TextInput, toast } from '@/design/components';
 import { Icon } from '@/design/Icon';
 import { call } from '@/lib/api';
@@ -15,19 +15,18 @@ import { LocalizedInput } from './LocalizedInput';
 import { ItemPickerDialog } from './ItemPicker';
 import { formatDay, promotionExpired } from '@/lib/promotions';
 import { StorageImage } from '@/customer/StorageImage';
-import { PromoCard } from '@/customer/PromoCard';
+import { DealSlide, PromoSlide } from '@/customer/DealSlide';
+import './settings.css';
 
 interface Draft { title: Localized; body: Localized; productIds: string[]; endsAt: string; active: boolean }
 const emptyDraft = (): Draft => ({ title: {}, body: {}, productIds: [], endsAt: '', active: true });
 const draftOf = (p: Promotion): Draft => ({ title: p.title, body: p.body, productIds: p.productIds ?? [], endsAt: p.endsAt ?? '', active: p.active });
 
 /** Limited-time promotions of the current branch: a headline, featured items and an optional banner, always with an end date. */
-export function PromotionsSection({ products, categories }: { products: Product[]; categories: Category[] }) {
+export function PromotionsSection({ products, categories, promotions }: { products: Product[]; categories: Category[]; promotions: QueryState<Promotion> }) {
   const t = useT();
   const { L } = useI18n();
   const { business, branch, can } = useDash();
-  const base = `businesses/${business.id}/branches/${branch.id}`;
-  const promotions = useCollection<Promotion>(can('catalog') ? `${base}/promotions` : null, [orderBy('sortOrder'), limit(MAX_PROMOTIONS)], [branch.id]);
   const [edit, setEdit] = useState<{ id?: string; draft: Draft; imagePath?: string } | null>(null);
   const [remove, setRemove] = useState<Promotion | null>(null);
   const [busy, setBusy] = useState(false);
@@ -52,24 +51,17 @@ export function PromotionsSection({ products, categories }: { products: Product[
 
   const shownCount = list.filter((p) => p.active && !promotionExpired(p)).length;
   const openNew = () => setEdit({ draft: emptyDraft() });
+  const today = toLocal(new Date()).date;
+  const daysLeft = (endsAt: string) => Math.round((Date.parse(endsAt) - Date.parse(today)) / 86400000);
   return (
-    <section className="tool" aria-labelledby="promotions-h">
-      <div className="tool__head">
-        <span className="tool__icon tool__icon--promo"><Icon name="tag" size={22} /></span>
-        <div className="tool__text">
-          <h2 id="promotions-h">{t('promotions.title')}</h2>
-          <p className="tool__pitch">{t('promotions.pitch')}</p>
-          <div className="tool__chips">
-            <Badge tone="neutral" icon="clock">{t('promotions.autoExpire')}</Badge>
-            <Badge tone="neutral" icon="utensils">{t('promotions.withItems')}</Badge>
-            {list.length > 0 ? <Badge tone={shownCount > 0 ? 'success' : 'muted'} icon="eye">{t('promotions.summary', { shown: shownCount, max: MAX_PROMOTIONS })}</Badge> : <Badge tone="neutral">{t('promotions.maxChip', { max: MAX_PROMOTIONS })}</Badge>}
-          </div>
-        </div>
-        <div className="tool__cta"><Button size="sm" icon="plus" disabled={full} onClick={openNew}>{t('promotions.new')}</Button></div>
+    <>
+      <div className="sx-section__head">
+        <div><h2 id="promotions-h">{t('promotions.title')}</h2>{list.length > 0 ? <p className="sx-card__sub">{t('promotions.summary', { shown: shownCount, max: MAX_PROMOTIONS })}</p> : null}</div>
+        <Button variant="secondary" icon="plus" disabled={full} onClick={openNew}>{t('promotions.new')}</Button>
       </div>
-      <div className="tool__body">
-        {full ? <Alert tone="warn">{t('promotions.limit', { max: MAX_PROMOTIONS })}</Alert> : null}
-        {list.length === 0 && !promotions.loading ? (
+      {full ? <Alert tone="warn">{t('promotions.limit', { max: MAX_PROMOTIONS })}</Alert> : null}
+      {list.length === 0 && !promotions.loading ? (
+        <div className="sx-card">
           <div className="pitch">
             <div className="pitch__copy">
               <h3 className="pitch__title">{t('promotions.emptyTitle')}</h3>
@@ -80,46 +72,44 @@ export function PromotionsSection({ products, categories }: { products: Product[
             </div>
             <div className="pitch__preview" aria-hidden="true">
               <span className="pitch__label">{t('deals.exampleLabel')}</span>
-              <article className="promo promo--mock">
-                <div className="promo__head"><Icon name="clock" size={18} /><span className="promo__kicker">{t('promotions.limited')}</span><span className="promo__until">{t('promotions.mockUntil')}</span></div>
-                <h2 className="promo__title">{t('promotions.mockTitle')}</h2>
-                <p className="promo__body">{t('promotions.mockBody')}</p>
-              </article>
+              <DealSlide tone="promo" kind={<><Icon name="clock" size={13} />{t('promotions.limited')}</>} name={t('promotions.mockTitle')} sub={t('promotions.mockBody')} pill={t('promotions.mockUntil')} paths={[]} />
             </div>
           </div>
-        ) : list.length > 0 ? (
-          <ul className="list">
-            {list.map((p) => {
-              const expired = promotionExpired(p);
-              const shown = p.active && !expired;
-              const names = (p.productIds ?? []).map((id) => products.find((x) => x.id === id)).filter(Boolean).map((x) => L(x!.name, business.defaultLocale));
-              return (
-                <li key={p.id} className="list__item" style={shown ? undefined : { opacity: 0.7 }}>
-                  {p.imagePath ? <span className="promo-thumb"><StorageImage path={p.imagePath} alt="" size="thumb" fallbackLabel={t('discovery.imageFallback')} /></span> : <span className={`promo-icon ${shown ? '' : 'promo-icon--off'}`}><Icon name="tag" size={18} /></span>}
-                  <div className="list__grow">
-                    <div className="row" style={{ gap: 6 }}>
-                      <strong className="wrap-anywhere">{L(p.title, business.defaultLocale)}</strong>
-                      {expired ? <Badge tone="muted">{t('promotions.expired')}</Badge> : p.active ? <Badge tone="success">{t('promotions.shown')}</Badge> : <Badge tone="muted">{t('promotions.hidden')}</Badge>}
-                    </div>
-                    <div className="muted wrap-anywhere">
-                      <bdi>{t('promotions.until', { date: formatDay(p.endsAt) })}</bdi>
-                      {names.length ? ` · ${names.join(', ')}` : ''}
-                    </div>
+        </div>
+      ) : list.length > 0 ? (
+        <div className="sx-grid">
+          {list.map((p) => {
+            const expired = promotionExpired(p);
+            const shown = p.active && !expired;
+            const names = (p.productIds ?? []).map((id) => products.find((x) => x.id === id)).filter(Boolean).map((x) => L(x!.name, business.defaultLocale));
+            const left = p.endsAt ? daysLeft(p.endsAt) : 0;
+            const title = L(p.title, business.defaultLocale);
+            return (
+              <article key={p.id} className={`sx-deal ${shown ? '' : 'sx-deal--off'}`} aria-label={title}>
+                <div className={`sx-deal__ends ${expired ? 'sx-deal__ends--muted' : left <= 1 ? 'sx-deal__ends--danger' : ''}`}>
+                  <Icon name="clock" size={16} />
+                  <bdi>{!p.endsAt ? t('promotions.endsAtRequired') : expired ? t('promotions.ended', { date: formatDay(p.endsAt) }) : left <= 0 ? t('promotions.endsToday') : t('promotions.endsIn', { date: formatDay(p.endsAt), days: left })}</bdi>
+                </div>
+                <div className="sx-deal__top">
+                  {p.imagePath ? <span className="sx-deal__thumb"><StorageImage path={p.imagePath} alt="" size="thumb" square fallbackLabel={t('discovery.imageFallback')} /></span> : null}
+                  <div className="sx-deal__text">
+                    <div className="sx-deal__name"><strong className="wrap-anywhere">{title}</strong>{expired ? <Badge tone="muted">{t('promotions.expired')}</Badge> : p.active ? <Badge tone="success" icon="eye">{t('promotions.shown')}</Badge> : <Badge tone="muted">{t('promotions.hidden')}</Badge>}</div>
+                    <p className="sx-deal__items">{names.length ? `${names.join(', ')} · ${(names.length === 1 ? t('promotions.itemsCount.one') : t('promotions.itemsCount', { n: names.length }))}` : L(p.body, business.defaultLocale)}</p>
                   </div>
-                  <div className="actions actions--icons">
-                    <IconButton icon="edit" label={t('promotions.edit')} onClick={() => setEdit({ id: p.id, draft: draftOf(p), imagePath: p.imagePath })} />
-                    <IconButton icon="trash" label={t('common.remove')} onClick={() => setRemove(p)} style={{ color: 'var(--color-danger)' }} />
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        ) : null}
-      </div>
+                </div>
+                <div className="sx-deal__actions">
+                  <Button variant="secondary" icon="edit" onClick={() => setEdit({ id: p.id, draft: draftOf(p), imagePath: p.imagePath })}>{t('promotions.edit')}</Button>
+                  <IconButton icon="trash" label={`${t('common.remove')}: ${title}`} onClick={() => setRemove(p)} style={{ color: 'var(--color-danger)' }} />
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      ) : null}
 
       {edit ? <PromotionEditor initial={edit} products={products} categories={categories} onClose={() => setEdit(null)} /> : null}
       <ConfirmDialog open={!!remove} onClose={() => setRemove(null)} onConfirm={confirmRemove} title={t('promotions.removeConfirm')} body={remove ? L(remove.title, business.defaultLocale) : undefined} confirmLabel={t('common.remove')} danger loading={busy} />
-    </section>
+    </>
   );
 }
 
@@ -139,7 +129,11 @@ function PromotionEditor({ initial, products, categories, onClose }: { initial: 
   const today = toLocal(new Date()).date;
   const eligible = products.filter((p) => p.available);
   const featured = d.productIds.map((id) => products.find((p) => p.id === id)).filter((p): p is Product => !!p);
-  const toggleProduct = (p: Product) => set({ productIds: d.productIds.includes(p.id) ? d.productIds.filter((id) => id !== p.id) : d.productIds.length >= 10 ? d.productIds : [...d.productIds, p.id] });
+  const toggleProduct = (p: Product) => {
+    // The server caps productIds at 10 (promotionInputSchema); say so instead of ignoring the tap.
+    if (!d.productIds.includes(p.id) && d.productIds.length >= MAX_PROMO_PRODUCTS) { toast(t('catalog.maxItemsReached', { max: MAX_PROMO_PRODUCTS }), 'danger'); return; }
+    set({ productIds: d.productIds.includes(p.id) ? d.productIds.filter((id) => id !== p.id) : [...d.productIds, p.id] });
+  };
 
   const save = async (keepBusy = false): Promise<string | null> => {
     setError(null);
@@ -188,7 +182,7 @@ function PromotionEditor({ initial, products, categories, onClose }: { initial: 
         categories={categories}
         title={t('promotions.pickItems')}
         toggle
-        summary={<strong>{t('promotions.itemsCount', { n: d.productIds.length })}</strong>}
+        summary={<strong>{(d.productIds.length === 1 ? t('promotions.itemsCount.one') : t('promotions.itemsCount', { n: d.productIds.length }))}</strong>}
         count={(p) => (d.productIds.includes(p.id) ? 1 : 0)}
         onPick={(p) => toggleProduct(p)}
         onClose={() => setMode('edit')}
@@ -206,7 +200,7 @@ function PromotionEditor({ initial, products, categories, onClose }: { initial: 
             <span className="combo-preview__label">{t('deals.customerPreview')}</span>
             {d.active ? <Badge tone="success" icon="eye">{t('promotions.shown')}</Badge> : <Badge tone="muted">{t('promotions.hidden')}</Badge>}
           </div>
-          <PromoCard promotion={{ title: d.title, body: d.body, endsAt: d.endsAt, imagePath }} products={featured} defaultLocale={business.defaultLocale} />
+          <PromoSlide promotion={{ title: d.title, body: d.body, endsAt: d.endsAt, imagePath }} products={featured} defaultLocale={business.defaultLocale} />
         </div>
 
         <section className="combo-section">
@@ -224,9 +218,9 @@ function PromotionEditor({ initial, products, categories, onClose }: { initial: 
         <section className="combo-section">
           <div className="combo-section__head">
             <h3>{t('promotions.items')}</h3>
-            {featured.length > 0 ? <Badge tone="neutral">{t('promotions.itemsCount', { n: featured.length })}</Badge> : null}
+            {featured.length > 0 ? <Badge tone="neutral">{(featured.length === 1 ? t('promotions.itemsCount.one') : t('promotions.itemsCount', { n: featured.length }))}</Badge> : null}
           </div>
-          {featured.length === 0 ? <p className="muted">{t('promotions.itemsHint')}</p> : <div className="combo-list">
+          {featured.length === 0 ? null : <div className="combo-list">
             {featured.map((p) => (
               <div key={p.id} className="combo-line">
                 <StorageImage path={p.imagePath} alt="" square fallbackLabel={t('discovery.imageFallback')} />

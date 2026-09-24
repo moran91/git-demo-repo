@@ -6,6 +6,7 @@ import { useI18n, useT } from '@/lib/i18n';
 import { Alert, Button, EmptyState, Segmented, Skeleton, toast } from '@/design/components';
 import { Icon } from '@/design/Icon';
 import { PageTitle, useDash } from './shell';
+import './settings.css';
 
 type Scope = 'business' | 'branch';
 
@@ -79,32 +80,33 @@ export function QrPage() {
 
   if (!can('settings')) return <EmptyState icon="shield" title={t('error.forbidden')} />;
   return (
-    <div className="stack">
+    <div className="sx-page">
       <PageTitle title={t('qr.title')} />
-      <p className="muted" style={{ maxWidth: 640 }}>{t('qr.intro')}</p>
+      <p className="sx-card__sub">{t('qr.intro')}</p>
       {business.approval !== 'approved' ? <Alert tone="warn">{t('qr.notApproved')}</Alert> : scope === 'branch' && branch.approval !== 'approved' ? <Alert tone="warn">{t('qr.branchNotApproved')}</Alert> : null}
-      <div className="qr-page">
-        <div className="qr-page__code card" aria-busy={!svg && !failed ? true : undefined}>
+      <div className="sx-qr">
+        <div className="sx-qr__code" aria-busy={!svg && !failed ? true : undefined}>
           {svgDataUrl ? <img src={svgDataUrl} alt={t('qr.title')} width={512} height={512} /> : failed ? <EmptyState icon="alert" title={t('qr.generateError')} /> : <Skeleton height={280} radius={12} />}
         </div>
-        <div className="stack">
+        <div className="sx-page">
           {branches.length > 1 ? (
-            <div className="stack--sm stack">
-              <Segmented label={t('qr.scope')} value={scope} onChange={setScope} options={[{ value: 'branch', label: t('qr.scopeBranch'), icon: 'building' }, { value: 'business', label: t('qr.scopeBusiness'), icon: 'store' }]} />
-              <p className="muted">{scope === 'branch' ? t('qr.scopeBranchHint') : t('qr.scopeBusinessHint')}</p>
-            </div>
+            <section className="sx-card">
+              <h2 className="sx-card__title">{t('qr.scope')}</h2>
+              <Segmented stacked label={t('qr.scope')} value={scope} onChange={setScope} options={[{ value: 'branch', label: t('qr.scopeBranch'), icon: 'building' }, { value: 'business', label: t('qr.scopeBusiness'), icon: 'store' }]} />
+              <p className="sx-card__sub">{scope === 'branch' ? t('qr.scopeBranchHint') : t('qr.scopeBusinessHint')}</p>
+            </section>
           ) : null}
-          <div className="stack--sm stack">
-            <span className="field__label">{t('qr.link')}</span>
-            <code className="qr-page__url" dir="ltr"><bdi>{url}</bdi></code>
-          </div>
-          <div className="row">
-            <Button variant="secondary" icon="copy" onClick={() => void copy()}>{t('qr.copyLink')}</Button>
-            <Button variant="secondary" icon="download" disabled={!svg} onClick={() => void downloadPng()}>{t('qr.downloadPng')}</Button>
-            <Button variant="secondary" icon="download" disabled={!svg} onClick={downloadSvg}>{t('qr.downloadSvg')}</Button>
-            <Button icon="printer" disabled={!svg} onClick={() => setPrinting(true)}>{t('qr.print')}</Button>
-            <a className="btn btn--ghost" href={storefrontPath(target)} target="_blank" rel="noreferrer"><Icon name="external" size={18} /> {t('qr.open')}</a>
-          </div>
+          <section className="sx-card">
+            <h2 className="sx-card__title">{t('qr.link')}</h2>
+            <code className="sx-url" dir="ltr"><bdi>{url}</bdi></code>
+            <div className="sx-actions">
+              <Button icon="printer" disabled={!svg} onClick={() => setPrinting(true)}>{t('qr.print')}</Button>
+              <Button variant="secondary" icon="copy" onClick={() => void copy()}>{t('qr.copyLink')}</Button>
+              <Button variant="secondary" icon="download" disabled={!svg} onClick={() => void downloadPng()}>{t('qr.downloadPng')}</Button>
+              <Button variant="secondary" icon="download" disabled={!svg} onClick={downloadSvg}>{t('qr.downloadSvg')}</Button>
+              <a className="btn btn--ghost" href={storefrontPath(target)} target="_blank" rel="noreferrer"><Icon name="external" size={18} /> {t('qr.open')}</a>
+            </div>
+          </section>
         </div>
       </div>
       {printing && svgDataUrl ? <PosterPrint src={svgDataUrl} name={name} branchName={scope === 'branch' && branches.length > 1 ? branchName : null} url={url} onDone={() => setPrinting(false)} /> : null}

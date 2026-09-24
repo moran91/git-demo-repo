@@ -27,8 +27,12 @@ import { reprojectBusiness } from '../lib/projections.js';
 import { enqueueEvent } from '../lib/outbox.js';
 import { createInvitation } from './businesses.js';
 import { reverseCashInternal } from './orders.js';
+import { whatsappConfigured, whatsappOpts } from './whatsapp.js';
 
 const opts = { region: REGION } as const;
+// setPlatformConfig reports whether WhatsApp OTP is configured, which means reading the Twilio
+// secrets — a callable only gets the secrets it declares (see whatsapp.ts).
+const configOpts = whatsappOpts;
 
 export const decideApproval = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
   const c = await requireCaller(req);
@@ -110,7 +114,11 @@ export const saveCity = onCall(opts, handled(async (req: CallableRequest<unknown
   const id = input.id ?? (slug || col.cities().doc().id);
   const city: City = { id, name: cleanLocalized(input.name), aliases: Array.from(new Set(input.aliases.map((a) => a.trim().toLowerCase()).filter(Boolean))), active: input.active, lat: input.lat, lng: input.lng, sortOrder: input.sortOrder };
   await db.runTransaction(async (tx) => {
-    const before = (await tx.get(col.city(id))).data();
+    const snap = await tx.get(col.city(id));
+    const before = snap.data();
+    // The id is derived from the name, so two different cities can resolve to the same slug. A create
+    // that lands on an existing document would replace it (aliases, coordinates and all).
+    if (!input.id && snap.exists) fail('invalid_argument', { issues: [{ path: 'name', message: 'city_exists' }] });
     tx.set(col.city(id), city);
     writeAudit(tx, { actorUid: c.uid, action: 'city.save', targetType: 'city', targetId: id, before, after: city });
   });
@@ -170,7 +178,7 @@ export const moderateProduct = onCall(opts, handled(async (req: CallableRequest<
   return { ok: true };
 }));
 
-export const setPlatformConfig = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
+export const setPlatformConfig = onCall(configOpts, handled(async (req: CallableRequest<unknown>) => {
   const c = await requireCaller(req);
   requireAdmin(c);
   const input = parse(z.object({ defaultCityId: idSchema.optional(), brandTagline: z.object({ he: z.string().max(120).optional(), ar: z.string().max(120).optional(), en: z.string().max(120).optional() }).optional() }).strict(), req.data);
@@ -179,7 +187,7 @@ export const setPlatformConfig = onCall(opts, handled(async (req: CallableReques
     const after: PlatformConfig = {
       brand: { name: before?.brand.name ?? 'Qareeb', tagline: input.brandTagline ?? before?.brand.tagline ?? {} },
       monetization: { subscriptionEnabled: false, commissionPercent: 0, paidPromotionEnabled: false },
-      whatsappOtpEnabled: !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_VERIFY_SERVICE_SID),
+      whatsappOtpEnabled: whatsappConfigured(),
       defaultCityId: input.defaultCityId ?? before?.defaultCityId ?? 'beit-jann',
       updatedAt: nowIso(),
     };

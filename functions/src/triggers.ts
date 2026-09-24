@@ -1,7 +1,7 @@
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { onObjectFinalized } from 'firebase-functions/v2/storage';
-import sharp from 'sharp';
+import type Sharp from 'sharp';
 import { REGION, storage } from './lib/firebase.js';
 import { processOutboxEvent, sweepOutbox } from './lib/outbox.js';
 import { sweepPrintLeases } from './domain/printing.js';
@@ -39,7 +39,10 @@ export const onImageUploaded = onObjectFinalized({ region: REGION, memory: '1GiB
   }
   const [buf] = await file.download();
   // Content sniffing: sharp fails on non-image bytes regardless of the declared content type.
-  let meta: sharp.Metadata;
+  // Loaded lazily: `sharp` is a native module and a top-level import here made every callable in
+  // the codebase (quoteOrder included) pay for it on cold start.
+  const { default: sharp } = await import('sharp');
+  let meta: Sharp.Metadata;
   try {
     meta = await sharp(buf).metadata();
   } catch {

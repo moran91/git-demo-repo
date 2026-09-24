@@ -41,7 +41,8 @@ export function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<ApiError | null>(null);
   const [idem] = useState(() => newIdempotencyKey());
-  const { quote, error: quoteError, loading: quoting } = useQuote(cart, redeem);
+  const [quoteNonce, setQuoteNonce] = useState(0);
+  const { quote, error: quoteError, loading: quoting } = useQuote(cart, redeem, [quoteNonce]);
   // Persist in-progress form data so language switching / verification round-trips keep it.
   useEffect(() => {
     try {
@@ -79,12 +80,14 @@ export function CheckoutPage() {
     }
   }, [profile]);
   useEffect(() => {
-    if (!addressId && !newAddress && addresses.data.length > 0) {
-      const def = addresses.data.find((a) => a.isDefault) ?? addresses.data[0]!;
+    if (!newAddress && !addresses.loading && !addresses.data.some((a) => a.id === addressId && a.cityId === cart?.cityId)) {
       const eligible = addresses.data.filter((a) => a.cityId === cart?.cityId);
-      setAddressId((eligible.find((a) => a.isDefault) ?? eligible[0] ?? def).id);
+      // Only ever preselect an address in the cart's city; a wrong-city one renders as selected but
+      // disabled and blocks the order with no way to see why.
+      const pick = eligible.find((a) => a.isDefault) ?? eligible[0];
+      setAddressId(pick?.id ?? null);
     }
-  }, [addresses.data, addressId, newAddress, cart?.cityId]);
+  }, [addresses.data, addresses.loading, addressId, newAddress, cart?.cityId]);
 
   const selectedSaved = useMemo(() => addresses.data.find((a) => a.id === addressId) ?? null, [addresses.data, addressId]);
 
@@ -104,10 +107,10 @@ export function CheckoutPage() {
   const modeOk = branch.loading || modes.includes(cart.mode);
   const addressOk = cart.mode !== 'delivery' || (selectedSaved && selectedSaved.cityId === cart.cityId) || (newAddress && newAddress.cityId === cart.cityId);
   const phoneOk = !!normalizeIsraeliPhone(contactPhone);
-  const canPlace = online && !!quote && !quoteError && modeOk && !branch.loading && addressOk && phoneOk && contactName.trim().length > 0 && !submitting;
+  const canPlace = online && !!quote && !quoting && !quoteError && modeOk && !branch.loading && addressOk && phoneOk && contactName.trim().length > 0 && !submitting;
 
   const place = async () => {
-    if (!quote) return;
+    if (!canPlace || !quote) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -138,7 +141,11 @@ export function CheckoutPage() {
       }
       navigate(`/orders/${res.orderId}`, { replace: true, state: { placed: true } });
     } catch (e) {
-      setSubmitError(e as ApiError);
+      const err = e as ApiError;
+      setSubmitError(err);
+      // "Prices changed" is only actionable if the customer sees the new price: re-quote so the
+      // summary and the expectedCashDueAgorot sent on the next attempt are the current ones.
+      if (err.code === 'price_changed' || err.code === 'item_unavailable' || err.code === 'below_minimum') setQuoteNonce((n) => n + 1);
     } finally {
       setSubmitting(false);
     }
@@ -173,7 +180,7 @@ export function CheckoutPage() {
               </div>
             )}
             {cart.mode === 'dine_in' && modes.includes('dine_in') ? (
-              <TextInput label={t('checkout.tableNumber')} optional hint={t('checkout.tableNumberHint')} value={tableNumber} onChange={(e) => setTableNumber(e.target.value)} inputMode="numeric" ltr maxLength={20} autoComplete="off" style={{ maxWidth: 160 }} />
+              <TextInput label={t('checkout.tableNumber')} optional value={tableNumber} onChange={(e) => setTableNumber(e.target.value)} inputMode="numeric" ltr maxLength={20} autoComplete="off" style={{ maxWidth: 160 }} />
             ) : null}
           </section>
 
@@ -213,14 +220,14 @@ export function CheckoutPage() {
             <h2 id="contact-h">{t('checkout.contact')}</h2>
             <TextInput label={t('checkout.contactName')} required value={contactName} onChange={(e) => setContactName(e.target.value)} autoComplete="name" />
             <TextInput label={t('checkout.contactPhone')} required value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} inputMode="tel" ltr error={contactPhone && !phoneOk ? t('validation.phone') : undefined} hint={t('auth.phoneHint')} />
-            <TextArea label={t('checkout.orderNote')} optional hint={t('checkout.orderNoteHint')} value={note} onChange={(e) => setNote(e.target.value)} style={{ minHeight: 72 }} maxLength={500} />
+            <TextArea label={t('checkout.orderNote')} optional value={note} onChange={(e) => setNote(e.target.value)} style={{ minHeight: 72 }} maxLength={500} />
           </section>
 
           {rules?.enabled && loyalty ? (
             <section className="card stack" aria-labelledby="loy-h">
               <h2 id="loy-h">{t('checkout.loyalty')}</h2>
               <p>{t('checkout.loyaltyAvailable', { points: loyalty.available, business: L(state.meta.businessName, dl) })}</p>
-              {loyalty.debt > 0 ? <Alert tone="warn">{t('checkout.loyaltyDebt')}</Alert> : (
+              {loyalty.debt > 0 ? <Alert tone="warn">{t('checkout.loyaltyDebt')}</Alert> : maxPoints <= 0 && redeem === 0 ? null : (
                 <TextInput label={t('checkout.loyaltyRedeem')} type="number" inputMode="numeric" min={0} max={maxPoints} value={redeem} onChange={(e) => setRedeem(Math.max(0, Math.min(maxPoints, Number(e.target.value) || 0)))} hint={`${t('common.minimum')} 0 · ${t('common.maximum')} ${maxPoints}`} ltr />
               )}
               <p className="muted">{t('checkout.loyaltyRule', { percent: rules.maxDiscountPercent })}</p>
@@ -243,7 +250,7 @@ export function CheckoutPage() {
           {quoteError ? <Alert tone="danger">{quoteError.code === 'below_minimum' ? t('checkout.belowMinimum', { city: cityName, amount: money(Number(quoteError.details.minSubtotalAgorot ?? 0), locale) }) : quoteError.code === 'delivery_not_available' ? t('checkout.deliveryUnavailable', { city: cityName }) : quoteError.code === 'branch_closed' ? t('checkout.closed') : quoteError.code === 'orders_paused' ? t('checkout.paused') : t(errorKey(quoteError))} <Link to="/cart">{t('nav.cart')}</Link></Alert> : null}
           {!online ? <Alert tone="warn">{t('checkout.offlineBlock')}</Alert> : null}
           {submitError ? <Alert tone="danger">{submitError.code === 'price_changed' ? t('checkout.reviewPrices') : t(errorKey(submitError))}</Alert> : null}
-          {cart.mode === 'delivery' && !addressOk ? <Alert tone="warn">{t('validation.houseDescription')}</Alert> : null}
+          {cart.mode === 'delivery' && !addressOk ? <Alert tone="warn">{selectedSaved || newAddress ? t('checkout.deliveryUnavailable', { city: cityName }) : t('checkout.addressRequired')}</Alert> : null}
           <Button block loading={submitting} disabled={!canPlace} onClick={place}>{submitting ? t('checkout.placing') : t('checkout.placeOrder')}</Button>
         </aside>
       </div>

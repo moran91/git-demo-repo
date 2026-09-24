@@ -3,6 +3,8 @@ import type { BusinessType, FulfillmentMode } from './types.js';
 export interface FulfillmentBranchLike {
   cityId: string;
   pickupEnabled: boolean;
+  /** Restaurants only; absent (branches saved before the switch existed) means on. */
+  dineInEnabled?: boolean;
   /** Effective delivery rules (the public projection already expands "deliver to own city"). */
   deliveryCities: ReadonlyArray<{ cityId: string; feeAgorot: number; minSubtotalAgorot: number }>;
 }
@@ -10,13 +12,14 @@ export interface FulfillmentBranchLike {
 /**
  * Single source of truth for "which fulfillment modes can this branch serve for a customer in
  * cityId". Used by the server (quote/place) and the storefront + checkout so the two never drift.
- * Dine-in exists only for restaurants and only when the customer is at the branch's own city.
+ * Dine-in exists only for restaurants that have not switched it off, and only when the customer is at
+ * the branch's own city.
  */
 export function availableFulfillmentModes(businessType: BusinessType, branch: FulfillmentBranchLike, cityId: string): FulfillmentMode[] {
   const modes: FulfillmentMode[] = [];
   if (branch.deliveryCities.some((d) => d.cityId === cityId)) modes.push('delivery');
   if (branch.pickupEnabled && branch.cityId === cityId) modes.push('pickup');
-  if (businessType === 'restaurant' && branch.cityId === cityId) modes.push('dine_in');
+  if (offersDineIn(businessType, branch) && branch.cityId === cityId) modes.push('dine_in');
   return modes;
 }
 
@@ -25,6 +28,10 @@ export function offeredFulfillmentModes(businessType: BusinessType, branch: Fulf
   const modes: FulfillmentMode[] = [];
   if (branch.deliveryCities.length > 0) modes.push('delivery');
   if (branch.pickupEnabled) modes.push('pickup');
-  if (businessType === 'restaurant') modes.push('dine_in');
+  if (offersDineIn(businessType, branch)) modes.push('dine_in');
   return modes;
+}
+
+export function offersDineIn(businessType: BusinessType, branch: Pick<FulfillmentBranchLike, 'dineInEnabled'>): boolean {
+  return businessType === 'restaurant' && branch.dineInEnabled !== false;
 }

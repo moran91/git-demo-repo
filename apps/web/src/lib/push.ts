@@ -1,7 +1,8 @@
 import { deleteToken, getMessaging, getToken, isSupported, onMessage, type Messaging } from 'firebase/messaging';
 import { deleteDoc, doc, setDoc } from 'firebase/firestore';
 import type { Locale } from '@qareeb/shared';
-import { app, db, VAPID_KEY } from './firebase';
+import { app, auth, db, VAPID_KEY } from './firebase';
+import { readyRegistration } from './sw';
 
 export type PushState = 'unsupported' | 'default' | 'granted' | 'denied' | 'not_configured';
 
@@ -24,14 +25,32 @@ async function getMsg(): Promise<Messaging | null> {
  * user. Tokens are stored under users/{uid}/deviceTokens and invalidated server-side on send failure.
  */
 export async function enablePush(uid: string, locale: Locale, registration: ServiceWorkerRegistration | undefined): Promise<PushState> {
+  const generation = pushGeneration;
   const state = await pushState();
   if (state === 'unsupported' || state === 'not_configured') return state;
   const perm = await Notification.requestPermission();
   if (perm !== 'granted') return perm as PushState;
   const m = await getMsg();
   if (!m) return 'unsupported';
-  const token = await getToken(m, { vapidKey: VAPID_KEY, serviceWorkerRegistration: registration });
-  if (!token) return 'denied';
+  return await registerToken(m, uid, locale, registration, generation) ? 'granted' : 'default';
+}
+
+let pushGeneration = 0;
+const pendingRegistrations = new Set<Promise<boolean>>();
+async function registerToken(m: Messaging, uid: string, locale: Locale, registration: ServiceWorkerRegistration | undefined, generation: number): Promise<boolean> {
+  const pending = (async () => {
+    const worker = registration ?? await readyRegistration();
+    if (generation !== pushGeneration || auth.currentUser?.uid !== uid) return false;
+    const token = await getToken(m, { vapidKey: VAPID_KEY, serviceWorkerRegistration: worker });
+    if (!token || generation !== pushGeneration || auth.currentUser?.uid !== uid) return false;
+    await storeToken(uid, locale, token);
+    return true;
+  })();
+  pendingRegistrations.add(pending);
+  try { return await pending; } finally { pendingRegistrations.delete(pending); }
+}
+
+async function storeToken(uid: string, locale: Locale, token: string): Promise<void> {
   const now = new Date().toISOString();
   await setDoc(doc(db, `users/${uid}/deviceTokens/${token}`), { token, uid, platform: 'web', locale, createdAt: now, lastSeenAt: now, invalid: false }, { merge: true });
   try {
@@ -39,7 +58,24 @@ export async function enablePush(uid: string, locale: Locale, registration: Serv
   } catch {
     /* ignore */
   }
-  return 'granted';
+}
+
+/**
+ * Re-registers this device for the signed-in user when permission was already granted. Signing out
+ * deletes the token (see disablePush) while the browser permission stays `granted`, so without this
+ * the next session believes notifications are on and never receives one. Never prompts; silent no-op
+ * when push is unsupported, unconfigured or not granted.
+ */
+export async function syncPushToken(uid: string, locale: Locale, registration: ServiceWorkerRegistration | undefined): Promise<boolean> {
+  const generation = pushGeneration;
+  try {
+    if ((await pushState()) !== 'granted') return false;
+    const m = await getMsg();
+    if (!m) return false;
+    return await registerToken(m, uid, locale, registration, generation);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -48,6 +84,9 @@ export async function enablePush(uid: string, locale: Locale, registration: Serv
  * the next person to sign in on it would receive.
  */
 export async function disablePush(uid: string): Promise<void> {
+  // Stop pending sign-in registration from recreating a token after sign-out deleted it.
+  pushGeneration++;
+  await Promise.allSettled([...pendingRegistrations]);
   let token: string | null = null;
   try {
     token = localStorage.getItem('qareeb.push.token');

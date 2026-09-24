@@ -76,6 +76,10 @@ describe('customers', () => {
     await assertSucceeds(deleteDoc(doc(as('cust1'), 'users/cust1/favorites/biz2')));
     await assertSucceeds(setDoc(doc(as('cust1'), 'users/cust1/deviceTokens/tok'), { token: 'tok', uid: 'cust1', platform: 'web', locale: 'he', createdAt: 'n', lastSeenAt: 'n', invalid: false }));
     await assertFails(setDoc(doc(as('cust1'), 'users/cust1/deviceTokens/tok2'), { token: 'tok2', uid: 'cust2', platform: 'web', locale: 'he', createdAt: 'n', lastSeenAt: 'n', invalid: false }));
+    // The server adds `invalidatedAt` when a push fails; re-registering that same device must still work.
+    await env.withSecurityRulesDisabled(async (ctx) => setDoc(doc(ctx.firestore(), 'users/cust1/deviceTokens/tok'), { invalid: true, invalidatedAt: 'now' }, { merge: true }));
+    await assertSucceeds(setDoc(doc(as('cust1'), 'users/cust1/deviceTokens/tok'), { token: 'tok', uid: 'cust1', platform: 'web', locale: 'he', createdAt: 'n2', lastSeenAt: 'n2', invalid: false }, { merge: true }));
+    await assertFails(setDoc(doc(as('cust1'), 'users/cust1/deviceTokens/tok'), { token: 'tok', uid: 'cust1', platform: 'web', locale: 'he', createdAt: 'n2', lastSeenAt: 'n2', invalid: false, stolen: true }, { merge: true }));
     await assertSucceeds(updateDoc(doc(as('cust1'), 'users/cust1/notifications/n1'), { read: true }));
     await assertFails(updateDoc(doc(as('cust1'), 'users/cust1/notifications/n1'), { title: 'hacked' }));
   });

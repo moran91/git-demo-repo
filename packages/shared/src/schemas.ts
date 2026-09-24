@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { LOYALTY_BOUNDS } from './pricing.js';
 import { validateInterval } from './hours.js';
+import { MAX_COMBO_ITEMS, MAX_PROMO_PRODUCTS } from './types.js';
 
 export const localeSchema = z.enum(['he', 'ar', 'en']);
 export const localizedSchema = z
@@ -87,6 +88,15 @@ export const placeOrderSchema = quoteRequestSchema
   })
   .strict();
 export type PlaceOrderRequest = z.infer<typeof placeOrderSchema>;
+
+export const advanceOrderSchema = z
+  .object({
+    orderId: idSchema,
+    stage: z.enum(['preparing', 'ready', 'completed']),
+    expectedVersion: z.number().int().min(1),
+    idempotencyKey: idempotencySchema,
+  })
+  .strict();
 
 export const decideOrderSchema = z
   .object({
@@ -192,6 +202,7 @@ export const branchInputSchema = z
     hours: weeklyHoursSchema,
     hoursOverrides: z.array(hoursOverrideSchema).max(60),
     pickupEnabled: z.boolean(),
+    dineInEnabled: z.boolean().optional(),
     deliveryEnabled: z.boolean(),
     deliveryCities: z.array(deliveryCitySchema).max(50),
   })
@@ -267,7 +278,7 @@ export const comboInputSchema = z
   .object({
     name: requiredLocalizedSchema,
     description: localizedSchema,
-    items: z.array(comboItemSchema).min(2).max(10),
+    items: z.array(comboItemSchema).min(2).max(MAX_COMBO_ITEMS),
     priceAgorot: z.number().int().min(1).max(100_000_000),
     promoted: z.boolean(),
     active: z.boolean(),
@@ -355,7 +366,7 @@ export const promotionInputSchema = z
   .object({
     title: requiredLocalizedSchema,
     body: localizedSchema,
-    productIds: z.array(idSchema).max(10),
+    productIds: z.array(idSchema).max(MAX_PROMO_PRODUCTS),
     endsAt: isoDateSchema,
     active: z.boolean(),
   })

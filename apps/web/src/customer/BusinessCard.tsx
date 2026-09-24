@@ -3,7 +3,7 @@ import { useI18n, useT } from '@/lib/i18n';
 import { Badge, IconButton, toast } from '@/design/components';
 import { Icon } from '@/design/Icon';
 import { money } from '@/lib/format';
-import { minutesToHHMM } from '@qareeb/shared';
+import { minutesToHHMM, offersDineIn, toLocal } from '@qareeb/shared';
 import { useFavorites, useOpenState, type PublicBranch } from './hooks';
 import { StorageImage } from './StorageImage';
 import { useNavigate } from 'react-router';
@@ -19,7 +19,7 @@ export function BusinessCard({ branch, cityId }: { branch: PublicBranch; cityId:
   const branchName = L(branch.name, branch.businessDefaultLocale);
   const isFav = ids.has(branch.businessId);
   const closed = !open.open || branch.ordersPaused;
-  const closesAt = open.open && open.closesInMin !== undefined ? minutesToHHMM(new Date().getHours() * 60 + new Date().getMinutes() + open.closesInMin).replace(/^0/, "") : undefined;
+  const closesAt = open.open && open.closesInMin !== undefined && open.closesInMin < 1440 ? minutesToHHMM(toLocal(new Date()).minutes + open.closesInMin).replace(/^0/, "") : undefined;
   return (
     <article className={`biz-card card--interactive ${closed ? 'biz-card--closed' : ''}`}>
       <div className="biz-card__media">
@@ -58,8 +58,8 @@ export function BusinessCard({ branch, cityId }: { branch: PublicBranch; cityId:
             </>
           ) : null}
           {branch.pickupEnabled ? <span className="icon-text"><Icon name="bag" size={16} /> {t('discovery.pickupAvailable')}</span> : null}
-          {branch.type === 'restaurant' ? <span className="icon-text"><Icon name="chair" size={16} /> {t('discovery.dineInAvailable')}</span> : null}
-          {!open.open && open.opensInMin !== undefined ? <span>{t('discovery.opensAt', { time: minutesToHHMM(new Date().getHours() * 60 + new Date().getMinutes() + open.opensInMin) })}</span> : null}
+          {offersDineIn(branch.type, branch) ? <span className="icon-text"><Icon name="chair" size={16} /> {t('discovery.dineInAvailable')}</span> : null}
+          {!open.open && open.opensInMin !== undefined ? <span>{t('discovery.opensAt', { time: minutesToHHMM(toLocal(new Date()).minutes + open.opensInMin) })}</span> : null}
           {closesAt ? <span>{t('discovery.closesAt', { time: closesAt })}</span> : null}
         </div>
       </div>

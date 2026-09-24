@@ -4,6 +4,7 @@ let registration: ServiceWorkerRegistration | undefined;
 let updateFn: ((reload?: boolean) => Promise<void>) | undefined;
 const listeners = new Set<() => void>();
 let needRefresh = false;
+let registering = false;
 
 /** Registers the single app service worker (precache + FCM). Updates are user-prompted. */
 export function setupServiceWorker() {
@@ -20,6 +21,8 @@ export function setupServiceWorker() {
   else window.addEventListener('load', register, { once: true });
 }
 function doRegister() {
+  if (registering) return;
+  registering = true;
   updateFn = registerSW({
     immediate: true,
     onRegisteredSW(_url, reg) {
@@ -30,6 +33,20 @@ function doRegister() {
       for (const l of listeners) l();
     },
   });
+}
+/** Push needs the app worker immediately, even before the idle registration callback runs. */
+export async function readyRegistration(): Promise<ServiceWorkerRegistration> {
+  if (!('serviceWorker' in navigator) || import.meta.env.DEV) throw new Error('Service worker unavailable');
+  doRegister();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(new Error('Service worker unavailable')), 15000); }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 export function getRegistration() {
   return registration;

@@ -126,7 +126,9 @@ export const registerStation = onCall(opts, handled(async (req: CallableRequest<
     const ref = input.stationId ? col.printStation(input.stationId) : col.printStations().doc();
     const existing = input.stationId ? ((await tx.get(ref)).data() as PrintStation | undefined) : undefined;
     if (input.stationId && (!existing || existing.uid !== c.uid || existing.printerId !== input.printerId)) fail('not_found');
-    for (const d of others.docs) if (d.id !== input.stationId) tx.update(d.ref, { online: false });
+    // `online: false` alone does not stop a station: its own heartbeat sets it back to true and it
+    // keeps claiming jobs. Revoking makes heartbeat/claim fail so the superseded client tears down.
+    for (const d of others.docs) if (d.id !== input.stationId) tx.update(d.ref, { online: false, revoked: true });
     const station: PrintStation = {
       id: ref.id,
       businessId: printer.businessId,
@@ -298,11 +300,13 @@ export const reportPrintAttempt = onCall(opts, handled(async (req: CallableReque
         // Safe to retry: no bytes reached the printer. Cap automatic retries.
         state = job.attempts >= MAX_AUTO_ATTEMPTS ? 'needs_review' : 'queued';
     }
-    const patch: Partial<PrintJob> = { state, updatedAt: now, lastError: input.error, progress: input.stripsTotal !== undefined ? { stripsTotal: input.stripsTotal, stripsSent: input.stripsSent ?? 0 } : job.progress };
+    const patch: Partial<PrintJob> = { state, updatedAt: now, progress: input.stripsTotal !== undefined ? { stripsTotal: input.stripsTotal, stripsSent: input.stripsSent ?? 0 } : job.progress };
     // The client is configured with ignoreUndefinedProperties, so assigning `undefined` here left the
     // lease in place instead of clearing it: a superseded station whose fence still matched could
     // then report on a job staff had already resolved and push it back into the queue for reprint.
-    tx.set(jRef, { ...patch, leaseStationId: FieldValue.delete(), leaseExpiresAt: FieldValue.delete() }, { merge: true });
+    // `lastError: undefined` was dropped by ignoreUndefinedProperties, so a successful retry kept
+    // showing the failure that preceded it on the Printers page.
+    tx.set(jRef, { ...patch, lastError: input.error ?? FieldValue.delete(), leaseStationId: FieldValue.delete(), leaseExpiresAt: FieldValue.delete() }, { merge: true });
     const attemptRef = input.attemptId ? col.printAttempts(job.id).doc(input.attemptId) : col.printAttempts(job.id).doc();
     tx.set(attemptRef, { id: attemptRef.id, jobId: job.id, stationId: station.id, fence: input.fence, startedAt: now, finishedAt: now, outcome: input.outcome, error: input.error, stripsSent: input.stripsSent, stripsTotal: input.stripsTotal, pending: false } satisfies PrintAttempt & { pending: boolean }, { merge: true });
     if (state === 'needs_review') {
@@ -342,7 +346,9 @@ export async function sweepPrintLeases(): Promise<{ expired: number; offline: nu
     await db.runTransaction(async (tx) => {
       const j = (await tx.get(d.ref)).data() as PrintJob;
       if (j.state !== 'sending' || !j.leaseExpiresAt || j.leaseExpiresAt >= nowIsoStr) return;
-      tx.set(d.ref, { state: 'needs_review', lastError: 'lease_expired', updatedAt: nowIsoStr, leaseStationId: undefined, leaseExpiresAt: undefined }, { merge: true });
+      // FieldValue.delete(), not undefined — see reportPrintAttempt: ignoreUndefinedProperties would
+      // drop these keys and leave the expired lease on the job, letting the stale station report on it.
+      tx.set(d.ref, { state: 'needs_review', lastError: 'lease_expired', updatedAt: nowIsoStr, leaseStationId: FieldValue.delete(), leaseExpiresAt: FieldValue.delete() }, { merge: true });
       enqueueEvent(tx, { kind: 'print_needs_review', audience: { businessId: j.businessId, branchId: j.branchId }, params: {}, link: `/business/${j.businessId}/${j.branchId}/printers`, businessId: j.businessId, branchId: j.branchId, key: `print_review:${j.id}:lease:${j.leaseFence}` });
       expired++;
     });

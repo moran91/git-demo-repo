@@ -16,7 +16,7 @@ export function NotificationPrompt() {
   }, []);
   if (!user || state === null || state === 'granted' || state === 'dismissed' || state === 'unsupported' || state === 'not_configured' || state === 'denied') return null;
   return (
-    <Alert tone="info" action={<div className="row" style={{ gap: 4 }}><Button size="sm" variant="ghost" onClick={() => setState('dismissed')}>{t('notif.permissionLater')}</Button><Button size="sm" onClick={async () => setState(await enablePush(user.uid, locale, getRegistration()))}>{t('account.pushEnable')}</Button></div>}>
+    <Alert tone="info" action={<div className="row" style={{ gap: 4 }}><Button size="sm" variant="ghost" onClick={() => setState('dismissed')}>{t('notif.permissionLater')}</Button><Button size="sm" onClick={async () => { try { setState(await enablePush(user.uid, locale, getRegistration())); } catch { setState('dismissed'); } }}>{t('account.pushEnable')}</Button></div>}>
       {t('notif.permissionPrompt')}
     </Alert>
   );

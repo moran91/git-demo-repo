@@ -53,6 +53,7 @@ describe('quote + place order', () => {
     expect(await expectCode(customer1.call('quoteOrder', { businessId: IDS.market, branchId: IDS.marketBranch, mode: 'dine_in', cityId: 'beit-jann', lines: [{ lineId: 'l', productId: 'p-labneh', modifiers: [], quantity: 1, expectedUnitPriceAgorot: 1490 }] }))).toBe('dine_in_not_available');
   });
 
+  let lastReference = '';
   it('places a delivery order with only city + house description + recipient + phone, idempotently, and notifies branch staff', async () => {
     const k = key();
     const payload = { ...deliveryBase, addressId: undefined, address: { houseDescription: 'ליד בית הספר, השער הירוק', cityId: 'beit-jann', recipientName: 'סמיר', recipientPhone: '0501111111' }, lines: [shawarmaLine()], idempotencyKey: k, expectedCashDueAgorot: 9600, customerNote: 'בלי בצל' };
@@ -60,7 +61,8 @@ describe('quote + place order', () => {
     const b = await customer1.call<{ orderId: string; reference: string; replay: boolean }>('placeOrder', payload);
     expect(a.orderId).toBe(b.orderId);
     expect(b.replay).toBe(true);
-    expect(a.reference).toMatch(/^Q-[A-Z2-9]{5}$/);
+    expect(a.reference).toMatch(/^\d{4,}$/);
+    lastReference = a.reference;
     const order = (await admin.db.collection('orders').doc(a.orderId).get()).data()!;
     expect(order.status).toBe('placed');
     expect(order.address.houseDescription).toBe('ליד בית הספר, השער הירוק');
@@ -82,6 +84,8 @@ describe('quote + place order', () => {
     await customer1.call('saveAddress', { id: 'addr-home', address: { houseDescription: 'תיאור חדש לגמרי', cityId: 'beit-jann', recipientName: 'סמיר ח׳טיב', recipientPhone: '0501111111', label: 'בית' } });
     const order = (await admin.db.collection('orders').doc(res.orderId).get()).data()!;
     expect(order.address.houseDescription).toContain('השער הכחול');
+    // Per-business sequential numbers: the next placement for this business gets the next integer.
+    expect(order.reference).toBe(String(Number(lastReference) + 1));
     const addr = (await admin.db.collection('users').doc('seed-customer1').collection('addresses').doc('addr-home').get()).data()!;
     expect(addr.houseDescription).toBe('תיאור חדש לגמרי');
   });
@@ -104,6 +108,39 @@ describe('decisions', () => {
     expect(events.docs.map((d) => d.data().type).sort()).toEqual(['accepted', 'placed']);
     const notif = await waitFor(async () => (await admin.db.collection('users').doc('seed-customer1').collection('notifications').where('orderId', '==', orderId).where('kind', '==', 'order_accepted').get()).docs[0]);
     expect(notif).toBeTruthy();
+  });
+  it('accepting starts preparation; advanceOrder walks preparing → ready → completed with undo, version checks and customer notifications', async () => {
+    const { orderId } = await place(customer1);
+    await manager.call('decideOrder', { orderId, decision: 'accepted', expectedVersion: 1, idempotencyKey: key() });
+    let order = (await admin.db.collection('orders').doc(orderId).get()).data()!;
+    expect(order.stage).toBe('preparing');
+    // Not yet ready → cannot complete; staff outside the branch cannot touch it; wrong version is caught.
+    expect(await expectCode(manager.call('advanceOrder', { orderId, stage: 'completed', expectedVersion: 2, idempotencyKey: key() }))).toBe('invalid_status_transition');
+    expect(await expectCode(staff.call('advanceOrder', { orderId, stage: 'ready', expectedVersion: 2, idempotencyKey: key() }))).toBe('forbidden');
+    expect(await expectCode(manager.call('advanceOrder', { orderId, stage: 'ready', expectedVersion: 1, idempotencyKey: key() }))).toBe('version_conflict');
+    const k = key();
+    const r1 = await manager.call<{ stage: string; version: number; replay: boolean }>('advanceOrder', { orderId, stage: 'ready', expectedVersion: 2, idempotencyKey: k });
+    const r2 = await manager.call<{ stage: string; version: number; replay: boolean }>('advanceOrder', { orderId, stage: 'ready', expectedVersion: 2, idempotencyKey: k });
+    expect(r1.stage).toBe('ready');
+    expect(r2.replay).toBe(true);
+    order = (await admin.db.collection('orders').doc(orderId).get()).data()!;
+    expect(order.readyAt).toBeTruthy();
+    expect(order.version).toBe(3);
+    const readyNotif = await waitFor(async () => (await admin.db.collection('users').doc('seed-customer1').collection('notifications').where('orderId', '==', orderId).where('kind', '==', 'order_ready').get()).docs[0]);
+    expect(readyNotif).toBeTruthy();
+    // Undo back to preparing, then forward again and complete.
+    await manager.call('advanceOrder', { orderId, stage: 'preparing', expectedVersion: 3, idempotencyKey: key() });
+    await manager.call('advanceOrder', { orderId, stage: 'ready', expectedVersion: 4, idempotencyKey: key() });
+    await manager.call('advanceOrder', { orderId, stage: 'completed', expectedVersion: 5, idempotencyKey: key() });
+    order = (await admin.db.collection('orders').doc(orderId).get()).data()!;
+    expect(order.status).toBe('accepted');
+    expect(order.stage).toBe('completed');
+    expect(order.completedAt).toBeTruthy();
+    expect(await expectCode(manager.call('advanceOrder', { orderId, stage: 'ready', expectedVersion: 6, idempotencyKey: key() }))).toBe('invalid_status_transition');
+    const events = await admin.db.collection('orders').doc(orderId).collection('events').get();
+    expect(events.docs.map((d) => d.data().type).sort()).toEqual(['accepted', 'completed', 'placed', 'ready', 'ready']);
+    // Settlement stays independent of the stage: recordCash is still allowed (a wrong amount proves the check ran, without earning points that later loyalty tests count).
+    expect(await expectCode(owner1.call('recordCash', { orderId, amountAgorot: 1, expectedVersion: 6, idempotencyKey: key() }))).toBe('invalid_argument');
   });
   it('rejection requires a reason and releases tracked stock exactly once', async () => {
     const before = (await admin.db.doc(`businesses/${IDS.restaurant}/branches/${IDS.branchA}/products/p-cola`).get()).data()!.stockQty;

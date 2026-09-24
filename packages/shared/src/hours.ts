@@ -44,11 +44,51 @@ export function toLocal(instant: Date): LocalDateTime {
   };
 }
 
+/** Midnight in Jerusalem, using the offset at midnight rather than the offset later that day. */
+export function startOfLocalDay(instant: Date): Date {
+  const local = toLocal(instant);
+  const midnight = Date.UTC(local.year, local.month - 1, local.day);
+  let candidate = midnight;
+  for (let i = 0; i < 3; i++) {
+    const parts = toLocal(new Date(candidate));
+    const wallTime = Date.UTC(parts.year, parts.month - 1, parts.day) + parts.minutes * 60000;
+    const difference = wallTime - midnight;
+    if (difference === 0) break;
+    candidate -= difference;
+  }
+  return new Date(candidate);
+}
+
 function previousDate(d: LocalDateTime): { date: string; weekday: number } {
   const utc = Date.UTC(d.year, d.month - 1, d.day) - 86400000;
   const p = new Date(utc);
   const date = `${p.getUTCFullYear()}-${String(p.getUTCMonth() + 1).padStart(2, '0')}-${String(p.getUTCDate()).padStart(2, '0')}`;
   return { date, weekday: (d.weekday + 6) % 7 };
+}
+
+function nextDate(date: string, weekday: number, days: number): { date: string; weekday: number } {
+  const [y, m, d] = date.split('-').map(Number) as [number, number, number];
+  const p = new Date(Date.UTC(y, m - 1, d) + days * 86400000);
+  const next = `${p.getUTCFullYear()}-${String(p.getUTCMonth() + 1).padStart(2, '0')}-${String(p.getUTCDate()).padStart(2, '0')}`;
+  return { date: next, weekday: (weekday + days) % 7 };
+}
+
+/** Follows back-to-back intervals (same day, or one ending at/after midnight and the next day's starting at 00:00) so
+ *  "closes at" is the real closing time. `end` is in minutes from today's local midnight; stops after a week. */
+function extendClose(end: number, date: string, weekday: number, hours: WeeklyHours, overrides: HoursOverride[]): number {
+  for (let guard = 0; guard < 32; guard++) {
+    let extended = false;
+    for (let k = 0; k <= 7 && !extended; k++) {
+      const day = k === 0 ? { date, weekday } : nextDate(date, weekday, k);
+      for (const iv of intervalsFor(day.date, day.weekday, hours, overrides)) {
+        const s = iv.startMin + 1440 * k;
+        const e = iv.endMin + 1440 * k;
+        if (s <= end && e > end) { end = e; extended = true; break; }
+      }
+    }
+    if (!extended || end >= 1440 * 8) break;
+  }
+  return end;
 }
 
 function intervalsFor(date: string, weekday: number, hours: WeeklyHours, overrides: HoursOverride[]): OpeningInterval[] {
@@ -59,7 +99,8 @@ function intervalsFor(date: string, weekday: number, hours: WeeklyHours, overrid
 
 export interface OpenState {
   open: boolean;
-  /** Minutes until the current interval closes (if open) or next opening today (if closed and known). */
+  /** Minutes until the branch actually closes (back-to-back intervals merged; 1440+ means open around the clock), or
+   *  until the next opening today (if closed and known). */
   closesInMin?: number;
   opensInMin?: number;
 }
@@ -73,7 +114,7 @@ export function evaluateOpen(instant: Date, hours: WeeklyHours, overrides: Hours
   const today = intervalsFor(now.date, now.weekday, hours, overrides);
   for (const iv of today) {
     if (now.minutes >= iv.startMin && now.minutes < iv.endMin) {
-      return { open: true, closesInMin: iv.endMin - now.minutes };
+      return { open: true, closesInMin: extendClose(iv.endMin, now.date, now.weekday, hours, overrides) - now.minutes };
     }
   }
   // Overnight spill from yesterday
@@ -81,7 +122,7 @@ export function evaluateOpen(instant: Date, hours: WeeklyHours, overrides: Hours
   const yesterday = intervalsFor(prev.date, prev.weekday, hours, overrides);
   for (const iv of yesterday) {
     if (iv.endMin > 1440 && now.minutes + 1440 < iv.endMin && now.minutes + 1440 >= iv.startMin) {
-      return { open: true, closesInMin: iv.endMin - 1440 - now.minutes };
+      return { open: true, closesInMin: extendClose(iv.endMin - 1440, now.date, now.weekday, hours, overrides) - now.minutes };
     }
   }
   const upcoming = today.filter((iv) => iv.startMin > now.minutes).sort((a, b) => a.startMin - b.startMin)[0];

@@ -19,25 +19,31 @@ test.describe('owner usability regressions', () => {
     await signInEmail(page, 'owner.restaurant@qareeb.test');
   });
 
-  test('a new product saves once, allows a photo, and updates the same product', async ({ page }) => {
+  test('a new product takes a photo before its first save, and updates the same product', async ({ page }) => {
     await page.goto(`${base}/catalog`);
     await page.getByRole('button', { name: 'New product', exact: true }).first().click();
     const editor = page.getByRole('dialog');
     const name = `Owner regression ${Date.now()}`;
     await editor.getByRole('textbox', { name: 'Name English', exact: true }).fill(name);
     await editor.getByRole('spinbutton', { name: 'Base price' }).fill('12.50');
-    await editor.getByRole('button', { name: 'Save', exact: true }).click();
-    await expect(editor.getByText('Product saved. You can now add a photo or finish.')).toBeVisible();
+    // The photo is held until the first save, then uploaded to the new product.
     await expect(editor.locator('input[type="file"]')).toBeEnabled();
     await editor.locator('input[type="file"]').setInputFiles('../apps/web/public/icons/icon-192.png');
+    await expect(editor.getByRole('button', { name: 'Remove photo', exact: true })).toBeVisible();
+    await editor.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(editor).toHaveCount(0);
+    await page.getByRole('button', { name: 'Search', exact: true }).click();
+    await page.getByLabel('Find a product or category').fill(name);
+    await expect(page.locator('.list__item--catalog')).toHaveCount(1);
+    await page.getByRole('button', { name: `Edit: ${name}`, exact: true }).click();
     await expect(editor.getByRole('button', { name: 'Remove photo', exact: true })).toBeVisible();
     await editor.getByRole('spinbutton', { name: 'Base price' }).fill('14.50');
     await editor.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(editor).toHaveCount(0);
-    await page.getByLabel('Find a product or category').fill(name);
     await expect(page.locator('.list__item--catalog')).toHaveCount(1);
     await expect(page.locator('.list__item--catalog')).toContainText('14.50');
     await page.reload();
+    await page.getByRole('button', { name: 'Search', exact: true }).click();
     await page.getByLabel('Find a product or category').fill(name);
     await expect(page.locator('.list__item--catalog')).toHaveCount(1);
     await page.goto('/b/biz-abu-salim/br-abu-salim-main');
@@ -59,11 +65,11 @@ test.describe('owner usability regressions', () => {
     const name = page.getByRole('textbox', { name: 'Branch name English', exact: true });
     const original = await name.inputValue();
     await name.fill(`${original} draft`);
-    await page.getByRole('button', { name: 'Pause new orders', exact: true }).click();
+    await page.getByRole('button', { name: /· Pause new orders$/ }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Pause new orders', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Resume orders', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: /· Resume orders$/ })).toBeVisible();
     await expect(name).toHaveValue(`${original} draft`);
-    await page.getByRole('button', { name: 'Resume orders', exact: true }).click();
+    await page.getByRole('button', { name: /· Resume orders$/ }).click();
     await name.fill(original);
     await page.getByRole('button', { name: /^(Choose on map|Change location on map)$/ }).click();
     const map = page.getByRole('dialog', { name: 'Choose a location' });
@@ -101,7 +107,7 @@ test.describe('owner usability regressions', () => {
 
   test('overnight hours normalize when opening time changes and reject overlapping ranges', async ({ page }) => {
     await page.goto(`${base}/branch`);
-    const sunday = page.locator('.hours-row').first();
+    const sunday = page.locator('.hours-day').first();
     await sunday.getByLabel('From', { exact: true }).fill('18:00');
     await sunday.getByLabel('To', { exact: true }).fill('01:00');
     await expect(sunday.getByText('Ends the next day')).toBeVisible();

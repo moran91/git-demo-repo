@@ -10,6 +10,20 @@
 @media (min-width: 900px) { .topbar__nav { display: flex; } }
 .topbar__nav a { display: inline-flex; align-items: center; gap: var(--space-1); padding: var(--space-2) var(--space-3); border-radius: var(--radius-control); color: var(--color-text); text-decoration: none; font-weight: 500; min-height: var(--touch-min); }
 .topbar__nav a.active { background: var(--color-soft); color: var(--color-primary); }
+/* Town chip (home + business pages): shrinks before the brand or language control does. */
+.city-chip { flex: 0 1 auto; min-width: 0; display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 10px 0 12px; border-radius: 20px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
+.city-chip:hover { border-color: var(--color-border-strong); }
+.city-chip:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
+.city-chip > .icon:first-child, .city-chip > .spinner { flex: none; color: var(--color-primary); }
+.city-chip__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.city-chip__chev { flex: none; color: var(--color-text-muted); }
+/* Desktop: the chip sits beside the brand; the auto margin pushes nav + language to the far end. */
+@media (min-width: 900px) { .topbar__nav { margin-inline-start: auto; } .city-chip { margin-inline-start: var(--space-3); } }
+/* Phone: language collapses to its globe so the town gets the room. */
+@media (max-width: 599px) {
+  .topbar .lang-menu__btn { width: 40px; padding: 0; justify-content: center; }
+  .topbar .lang-menu__name, .topbar .lang-menu__chev { display: none; }
+}
 /* Language controls (2026-09-15 nav redesign). Segmented control for settings/sidebar; globe pill + menu for the topbar. */
 .lang-seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: var(--radius-control); background: var(--color-bg); border: 1px solid var(--color-border); }
 .lang-seg__opt { height: 36px; border-radius: 9px; border: 1px solid transparent; background: transparent; color: var(--color-text-muted); font-weight: 500; font-size: var(--text-secondary); cursor: pointer; font-family: inherit; transition: background-color var(--duration) var(--ease), color var(--duration) var(--ease); }
@@ -23,8 +37,20 @@
 .lang-menu__item { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: var(--touch-min); padding: 0 var(--space-3); border-radius: var(--radius-control); border: 0; background: transparent; color: var(--color-text); font-weight: 500; font-size: 15px; cursor: pointer; font-family: inherit; text-align: start; }
 .lang-menu__item:hover { background: var(--color-bg); }
 .lang-menu__item.is-active { background: var(--color-soft); color: var(--color-primary); font-weight: 600; }
-.city-pill { display: inline-flex; align-items: center; gap: var(--space-1); background: transparent; border: 0; color: var(--color-primary); font-weight: 500; min-height: var(--touch-min); padding: 0 var(--space-1); cursor: pointer; border-radius: var(--radius-control); }
-.city-pill:hover { background: var(--color-soft); }
+/* Picker's "Use my location" row (icon + name + label). */
+.locbar__icon { flex: none; width: 44px; height: 44px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--color-soft); color: var(--color-primary); }
+.locbar__text { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.locbar__label { font-size: var(--text-badge); font-weight: 500; color: var(--color-text-muted); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.locbar__name { display: inline-flex; align-items: center; gap: 2px; min-width: 0; font-size: 15px; font-weight: 600; color: var(--color-text); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.link-btn { background: none; border: 0; padding: 0; min-height: var(--touch-min); color: var(--color-primary); font: inherit; font-weight: 500; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.locrow { display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: 64px; padding: var(--space-2) var(--space-3); background: var(--color-soft); border: 1px solid transparent; border-radius: var(--radius-card); color: var(--color-text); cursor: pointer; text-align: start; font: inherit; }
+.locrow .locbar__icon { background: var(--color-primary); color: var(--color-on-primary); }
+.locrow .locbar__label { white-space: normal; }
+.locrow:hover { border-color: var(--color-primary); }
+.locrow:disabled { opacity: 0.6; cursor: default; }
+.loctrouble { display: flex; gap: var(--space-3); align-items: flex-start; padding: var(--space-3) var(--space-4); border-radius: var(--radius-control); background: var(--color-accent-bg); color: var(--color-accent-text); font-size: var(--text-secondary); }
+.loctrouble .icon { flex: none; margin-top: 2px; }
+.loctrouble__steps { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-2) var(--space-3); border-radius: var(--radius-control); background: var(--color-surface); color: var(--color-text); }
 .bottom-nav { position: fixed; inset-inline: 0; bottom: 0; z-index: 40; background: var(--color-surface); border-top: 1px solid var(--color-border); display: flex; padding-bottom: var(--safe-bottom); height: calc(var(--bottom-nav-height) + var(--safe-bottom)); }
 @media (min-width: 900px) { .bottom-nav { display: none; } }
 .bottom-nav a { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-decoration: none; color: var(--color-text-muted); font-size: var(--text-badge); font-weight: 500; min-height: var(--bottom-nav-height); position: relative; }
@@ -68,32 +94,6 @@ section[id^='cat-'] { scroll-margin-top: calc(var(--topbar-height, 56px) + var(-
 .cat-nav a.active { background: var(--color-soft); border-color: var(--color-primary); color: var(--color-primary); }
 /* Promotions: owner-managed cards above the menu. Accent tokens (peach / rust) so they read as an offer,
  * not a warning. A horizontal swipe strip on phones; a grid once there is room for whole cards. */
-.promo-strip { display: flex; gap: var(--space-3); overflow-x: auto; margin-inline: calc(-1 * var(--gutter)); padding-inline: var(--gutter); padding-bottom: var(--space-1); scroll-snap-type: x mandatory; scrollbar-width: none; }
-.promo-strip::-webkit-scrollbar { display: none; }
-.promo { flex: 0 0 min(300px, 80vw); scroll-snap-align: start; display: flex; flex-direction: column; gap: 6px; padding: 14px var(--space-4); border-radius: var(--radius-card); background: var(--color-accent-bg); color: var(--color-accent-text); }
-.promo:only-child { flex-basis: 100%; }
-.promo__head { display: flex; align-items: center; gap: var(--space-2); }
-.promo__kicker { font-size: var(--text-badge); font-weight: 500; letter-spacing: 0.02em; }
-.promo__until { margin-inline-start: auto; font-size: var(--text-badge); opacity: 0.85; }
-.promo__title { font-size: var(--text-heading); line-height: 1.3; font-weight: 600; color: inherit; }
-.promo__body { font-size: var(--text-secondary); }
-@media (min-width: 640px) { .promo-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; margin-inline: 0; padding-inline: 0; } .promo { flex-basis: auto; } }
-@media (min-width: 1100px) { .promo-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-.promo-icon { width: 40px; height: 40px; border-radius: var(--radius-control); background: var(--color-accent-bg); color: var(--color-accent-text); display: inline-flex; align-items: center; justify-content: center; flex: none; }
-.promo-icon--off { background: var(--color-bg); border: 1px solid var(--color-border); color: var(--color-text-muted); }
-/* Promotion banner (16:9, bleeds to the card edges) and featured-item chips. */
-.promo--media { padding-top: 0; }
-.promo__media { margin-inline: calc(-1 * var(--space-4)); margin-bottom: var(--space-2); aspect-ratio: 16 / 9; overflow: hidden; border-radius: var(--radius-card) var(--radius-card) 0 0; background: var(--color-soft); }
-.promo__media > .img-frame { width: 100%; height: 100%; border-radius: 0; }
-.promo__items { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-1); }
-.promo__item { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; min-height: 36px; padding: 3px 12px 3px 3px; border: 0; border-radius: 999px; background: var(--color-surface); color: var(--color-text); font: inherit; font-size: var(--text-secondary); font-weight: 500; text-align: start; }
-[dir='rtl'] .promo__item { padding: 3px 3px 3px 12px; }
-button.promo__item { cursor: pointer; }
-button.promo__item:hover { background: var(--color-bg); }
-.promo__item > .img-frame { width: 30px; height: 30px; border-radius: 50%; flex: none; }
-.promo__item > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.promo-thumb { width: 64px; height: 36px; border-radius: 8px; overflow: hidden; flex: none; }
-.promo-thumb > .img-frame { width: 100%; height: 100%; border-radius: 0; }
 /* Owner-only figures (the members' sum a combo is worth) carry a shield so they are never mistaken for customer copy. */
 .owner-only { display: inline-flex; align-items: center; gap: 4px; }
 .btn--add--on { background: var(--color-success-text); }
@@ -110,8 +110,11 @@ button.promo__item:hover { background: var(--color-bg); }
 .cart-line__head > strong { flex: 1; min-width: 0; line-height: 1.35; padding-top: 6px; }
 .cart-line__head > .btn--icon { width: 36px; min-width: 36px; height: 36px; min-height: 36px; color: var(--color-text-muted); }
 .cart-line__head > .btn--icon:hover { color: var(--color-text); }
-.cart-line__foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: nowrap; margin-top: var(--space-1); }
-.cart-line__foot .price { white-space: nowrap; }
+.cart-line__foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-1); }
+/* The stepper cannot shrink, so a long price (a weight line adds "(estimated)") used to push itself
+ * off the card. Wrapping keeps it inside on a 360px phone; the amount itself never breaks. */
+.cart-line__foot .price { min-width: 0; margin-inline-start: auto; text-align: end; }
+.cart-line__foot .price > bdi { white-space: nowrap; }
 .field--inline { flex-direction: row; align-items: center; justify-content: space-between; gap: var(--space-3); padding-block: var(--space-2); }
 .product__body { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
 .product__footer { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-top: auto; flex-wrap: wrap; }
@@ -184,32 +187,61 @@ button.promo__item:hover { background: var(--color-bg); }
 
 /* ---------- dashboard shell ---------- */
 /* `minmax(0, 1fr)` and `min-width: 0` on purpose: a bare `1fr` track is `minmax(auto, 1fr)`, so the
- * history table's min-content width grew the column past the phone's viewport. The document then
- * scrolled sideways, RTL opened at the far (left) edge, and the fixed drawer landed on the wrong side
- * once mobile Chrome zoomed out to fit the overflow. Wide content scrolls inside `.table-wrap`. */
+ * history table's min-content width grew the column past the phone's viewport. Wide content scrolls
+ * inside `.table-wrap`. Phone (<900px): sticky 64px top bar + fixed bottom tab bar; desktop: sidebar. */
 .dash { display: grid; min-height: 100dvh; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
-@media (min-width: 900px) { .dash { grid-template-columns: 260px minmax(0, 1fr); grid-template-rows: auto 1fr; } .dash__sidebar { grid-row: 1 / span 2; } .dash__header { grid-column: 2; } .dash__main { grid-column: 2; } }
+@media (min-width: 900px) { .dash { grid-template-columns: 260px minmax(0, 1fr); } .dash__sidebar { grid-row: 1 / span 2; } .dash__header, .dash__main { grid-column: 2; } .dash .no-desktop { display: none !important; } }
 .dash__sidebar { background: var(--color-surface); border-inline-end: 1px solid var(--color-border); padding: 0; display: none; flex-direction: column; }
 @media (min-width: 900px) { .dash__sidebar { display: flex; position: sticky; top: 0; height: 100dvh; overflow: hidden; } }
+/* Desktop density: the whole nav (4 groups, 12 rows) plus the footer must fit an 800px-tall window
+ * without the footer covering rows, so rows are 40px, labels tighter, the identity block 56px and the
+ * footer a single row. Below 700px the sidebar itself scrolls, footer included, so nothing is overlaid. */
+@media (min-width: 900px) {
+  .dash__sidebar-head { padding: var(--space-1) var(--space-3) 0 var(--space-4); }
+  .dash__sidebar-head .brand { min-height: 40px; }
+  .dash__sidebar .dash__identity { min-height: 56px; padding: 6px var(--space-3); margin-block: var(--space-1) var(--space-2); }
+  .dash__sidebar .dash__identity-mark { width: 36px; height: 36px; font-size: 16px; }
+  .dash__sidebar .dash__nav { gap: var(--space-1); padding-bottom: var(--space-1); }
+  .dash__sidebar .dash__nav-label { padding: 0 var(--space-3) 2px; }
+  .dash__sidebar .dash__nav a { min-height: 36px; }
+  .dash__sidebar .dash__sidebar-foot { padding: var(--space-2) var(--space-3); padding-bottom: calc(var(--space-2) + var(--safe-bottom)); }
+  .dash__sidebar .dash__sidebar-foot--row { flex-direction: row; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-1); }
+  .dash__sidebar-foot--row .lang-menu { flex: none; }
+  .dash__sidebar-foot--row .dash__signout { flex: 1 1 auto; min-width: 0; min-height: 40px; padding: 0 var(--space-2); font-size: 15px; justify-content: flex-end; }
+  .dash__sidebar-foot--row .select { flex: 1 1 100%; height: 40px; min-height: 40px; padding-block: 0; }
+}
+@media (min-width: 900px) and (max-height: 699px) { .dash__sidebar { overflow-y: auto; } .dash__sidebar .dash__nav { flex: none; overflow: visible; } }
 /* Physical offsets on purpose: the drawer is a fixed box, and its side is decided by the document
- * direction, not by the logical-property support of whichever mobile engine renders it. A phone
- * showed the RTL drawer sliding in from the left with the logical form. */
-.dash__sidebar--drawer { display: flex; position: fixed; top: 0; bottom: 0; left: 0; right: auto; height: 100dvh; width: 320px; max-width: 85vw; z-index: 50; box-shadow: var(--shadow-float); overflow: hidden; overscroll-behavior: contain; border-start-end-radius: var(--radius-sheet); border-end-end-radius: var(--radius-sheet); padding-top: var(--safe-top); animation: drawer-in var(--duration) var(--ease); }
-[dir='rtl'] .dash__sidebar--drawer { left: auto; right: 0; }
+ * direction, not by the logical-property support of whichever mobile engine renders it. */
+.dash__sidebar--drawer { display: flex; position: fixed; top: 0; bottom: 0; left: 0; right: auto; height: 100dvh; width: 320px; max-width: 85vw; z-index: 50; box-shadow: var(--shadow-float); overflow: hidden; overscroll-behavior: contain; border-start-end-radius: var(--radius-sheet); border-end-end-radius: var(--radius-sheet); max-height: none; padding-top: var(--safe-top); animation: drawer-in var(--duration) var(--ease); }
+[dir='rtl'] .dash__sidebar--drawer { left: auto; right: 0; --drawer-dir: -1; }
 @keyframes drawer-in { from { transform: translateX(calc(-100% * var(--drawer-dir, 1))); } to { transform: none; } }
-[dir='rtl'] .dash__sidebar--drawer { --drawer-dir: -1; }
-.dash__sidebar-head { display: flex; align-items: center; justify-content: space-between; padding: var(--space-3) var(--space-3) var(--space-1) var(--space-4); }
+.dash__sidebar-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-3) var(--space-3) var(--space-1) var(--space-4); }
 .dash__sidebar-head .brand { min-height: var(--touch-min); }
-.dash__identity { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-1) var(--space-3) var(--space-2); padding: 10px var(--space-3); border-radius: var(--radius-control); background: var(--color-bg); border: 1px solid var(--color-border); }
-.dash__identity-mark { width: 36px; height: 36px; flex: none; border-radius: 10px; background: var(--color-primary); color: var(--color-on-primary); display: inline-flex; align-items: center; justify-content: center; font-weight: 600; font-size: 16px; }
+/* Identity block and header chip: the visible text sits under an invisible native <select> that
+ * covers the whole box, so a tap anywhere opens the platform's branch picker. */
+/* `flex: none`: inside the column sidebar an explicit min-height replaces the automatic minimum, so the
+ * block used to shrink below its text and the lines spilled over its border. */
+.dash__identity { position: relative; flex: none; display: flex; align-items: center; gap: var(--space-3); margin: var(--space-1) var(--space-3) var(--space-2); padding: 10px var(--space-3); min-height: 64px; box-sizing: border-box; border-radius: var(--radius-control); background: var(--color-bg); border: 1px solid var(--color-border); }
+.dash__identity--switch { cursor: pointer; }
+.dash__identity-mark { width: 40px; height: 40px; flex: none; border-radius: 12px; background: var(--color-primary); color: var(--color-on-primary); display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 18px; }
 .dash__identity-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; line-height: 1.3; }
 .dash__identity-text strong { font-size: 15px; }
 .dash__identity-text .muted { font-size: 13px; }
+.dash__chip { position: relative; flex: 1 1 0; min-width: 0; height: 48px; display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-3); border-radius: var(--radius-control); border: 1px solid var(--color-border); background: var(--color-bg); cursor: pointer; }
+.dash__chip > .icon { flex: none; color: var(--color-primary); }
+.dash__chip:not(:has(.dash__chip-select)) { cursor: default; }
+.dash__chip-text { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+.dash__chip-text strong { font-size: 16px; font-weight: 600; white-space: nowrap; }
+.dash__chip-text span { font-size: 12px; font-weight: 500; color: var(--color-text-muted); }
+.dash__chip-chev { flex: none; color: var(--color-text-muted); }
+.dash__chip-select { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; opacity: 0; cursor: pointer; appearance: none; font-size: 16px; }
+.dash__chip:has(.dash__chip-select:focus-visible), .dash__identity:has(.dash__chip-select:focus-visible) { outline: 3px solid var(--color-focus); outline-offset: 2px; }
 .dash__nav { flex: 1; min-height: 0; overflow-y: auto; padding: 0 var(--space-3) var(--space-2); display: flex; flex-direction: column; gap: var(--space-2); overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--color-border-strong) transparent; }
 .dash__nav-group { display: flex; flex-direction: column; gap: 2px; }
 .dash__nav-label { font-size: var(--text-badge); font-weight: 600; color: var(--color-text-muted); letter-spacing: 0.02em; padding: var(--space-2) var(--space-3) 6px; }
 .dash__nav-text { flex: 1; min-width: 0; }
-.dash__count { min-width: 24px; height: 24px; padding: 0 8px; border-radius: 12px; background: var(--color-primary); color: var(--color-on-primary); font-size: var(--text-badge); font-weight: 600; display: inline-flex; align-items: center; justify-content: center; }
+.dash__count { min-width: 24px; height: 24px; padding: 0 8px; border-radius: 12px; background: var(--color-primary); color: var(--color-on-primary); font-size: var(--text-badge); font-weight: 600; display: inline-flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; }
 .dash__sidebar-foot { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); padding-bottom: calc(var(--space-3) + var(--safe-bottom)); border-top: 1px solid var(--color-border); background: var(--color-surface); }
 .dash__signout { display: flex; align-items: center; gap: var(--space-3); min-height: var(--touch-min); padding: 0 var(--space-3); border-radius: var(--radius-control); border: 0; background: transparent; color: var(--color-text-muted); font-weight: 500; font-size: 15px; cursor: pointer; font-family: inherit; text-align: start; }
 .dash__signout:hover { background: var(--color-bg); color: var(--color-text); }
@@ -220,36 +252,59 @@ button.promo__item:hover { background: var(--color-bg); }
 .dash__nav a.active { background: var(--color-soft); color: var(--color-primary); font-weight: 600; }
 .dash__nav a.active .icon { color: var(--color-primary); }
 .dash__nav a .badge { margin-inline-start: auto; }
-/* The header's items used to wrap wherever they happened to run out of room, so on a phone the branch
- * select and the pause button broke apart mid-row and left a ragged gap. `.dash__header-break` is a
- * zero-height flex item that forces the wrap at a chosen point (and disappears once one row fits). */
-.dash__header { min-width: 0; position: sticky; top: 0; z-index: 30; background: var(--color-surface); border-bottom: 1px solid var(--color-border); padding: var(--space-2) var(--gutter); display: flex; align-items: center; gap: var(--space-2) var(--space-3); flex-wrap: wrap; min-height: 64px; }
-.dash__header-break { flex-basis: 100%; height: 0; margin: 0; }
-@media (min-width: 900px) { .dash__header-break { display: none; } .dash__header .dash__header-end { order: 1; } }
-/* An explicit flex-basis so where the row breaks does not depend on how long the branch name is:
- * with `flex-basis: auto` a wide select pushed the pause button onto a line of its own at one
- * branch name and not at another. Below 360px neither fits beside the other, so each takes a
- * full-width row instead of leaving a short stub. */
-.dash__header .select { min-height: var(--touch-min); flex: 1 1 96px; width: auto; min-width: 0; max-width: 260px; }
-/* The branch select and the pause button share a row, so they must share a height: `.select` adds
- * 12px of vertical padding to its 44px minimum (50px), while the pause button was `btn--sm` (40px).
- * Both are pinned to the 44px touch height; the select spends its padding only on the inline axis. */
-.dash__header .select, .dash__header > .btn { height: var(--touch-min); min-height: var(--touch-min); padding-block: 0; box-sizing: border-box; }
-.dash__header > .btn { flex: none; }
-/* On a phone the pair gets its own row (see `.dash__header-break`): the select takes whatever the
- * pause button leaves, and below 360px neither fits beside the other, so each takes the full row. */
-@media (max-width: 899px) { .dash__header .dash__branch { flex: 1 1 0; max-width: none; } }
-@media (max-width: 359px) { .dash__header .dash__branch, .dash__header > .btn { flex: 1 1 100%; max-width: none; } }
-.dash__header .dash__header-end { margin-inline-start: auto; flex: none; }
+/* Top bar: one 64px row — menu (phone), branch chip (phone), status/pause control. Every control is a
+ * 48px bordered box so the row reads as one set. */
+.dash__header { position: sticky; top: 0; z-index: 30; min-width: 0; box-sizing: border-box; height: 64px; padding: 0 var(--gutter); background: var(--color-surface); border-bottom: 1px solid var(--color-border); display: flex; align-items: center; gap: var(--space-2); }
+.dash__menu-btn { flex: none; border-radius: var(--radius-control); border: 1px solid var(--color-border-strong); width: 48px; height: 48px; min-width: 48px; min-height: 48px; }
+/* Status + pause/resume in one box. `flex: none`: it never shrinks ('Open' once rendered as 'O..'); the
+ * branch chip absorbs the squeeze instead. */
+.dash__status { box-sizing: border-box; display: inline-flex; align-items: center; gap: var(--space-2); height: 48px; min-height: 48px; margin: 0; padding: 0 var(--space-3); border-radius: var(--radius-control); border: 1px solid transparent; font: inherit; font-size: 15px; font-weight: 600; line-height: 1; white-space: nowrap; flex: none; }
+.dash__status::before { content: ''; width: 10px; height: 10px; border-radius: 50%; background: currentColor; flex: none; }
+.dash__status--success { background: var(--color-success-bg); color: var(--color-success-text); border-color: color-mix(in srgb, currentColor 35%, transparent); }
+.dash__status--accent { background: var(--color-accent-bg); color: var(--color-accent-text); border-color: color-mix(in srgb, currentColor 35%, transparent); }
+.dash__status--danger { background: var(--color-danger-bg); color: var(--color-danger-text); border-color: color-mix(in srgb, currentColor 35%, transparent); }
+.dash__status--muted { background: var(--color-bg); color: var(--color-text-muted); border-color: var(--color-border-strong); }
+.dash__status--action { cursor: pointer; }
+.dash__status--action:hover:not(:disabled) { filter: brightness(0.96); }
+.dash__status--action:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
+.dash__status--action:disabled { cursor: progress; }
+/* The action icon sits behind a hairline so it reads as "tap to pause/resume", not decoration. */
+.dash__status-icon { flex: none; padding-inline-start: var(--space-2); border-inline-start: 1px solid color-mix(in srgb, currentColor 30%, transparent); box-sizing: content-box; }
+@media (min-width: 900px) { .dash__chip { display: none; } .dash__status { margin-inline-start: auto; } }
+/* Phone: dot + one short word ('Open'/'Paused'/'Closed') + action icon; the branch chip (flex: 1 1 0)
+ * absorbs the squeeze instead. */
+@media (max-width: 599px) {
+  .dash__header { gap: 6px; }
+  .dash__status { padding: 0 10px; gap: 6px; font-size: 14px; }
+  .dash__status::before { width: 8px; height: 8px; }
+  .dash__status-icon { padding-inline-start: 6px; }
+  /* Every pixel goes to the branch name: no building icon, tighter padding, smaller chevron. */
+  .dash__chip { padding: 0 8px; gap: 4px; }
+  .dash__chip > .icon:not(.dash__chip-chev) { display: none; }
+  .dash__chip-chev { width: 16px; height: 16px; }
+  .dash__chip-text strong { font-size: 14px; }
+}
 .dash__main { padding: var(--space-5) var(--gutter) var(--space-10); max-width: 1400px; width: 100%; min-width: 0; }
+/* The fixed tab bar must never cover the page's last row or a sticky save bar. */
+@media (max-width: 899px) { .dash__main { padding-bottom: calc(var(--bottom-nav-height) + var(--safe-bottom) + var(--space-6)); } }
+.dash__paused { margin-bottom: var(--space-4); }
 /* A form gets a readable measure. Stretched across the full 1400px dashboard its fields sat in a
- * narrow band at the inline start with half the row empty, and its submit button ran the whole
- * width — the page read as unfinished rather than as a form. Tables keep the full width. */
+ * narrow band at the inline start with half the row empty. Tables keep the full width. */
 @media (min-width: 900px) { .dash__main form { max-width: 860px; } }
 .dash__title { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-5); }
 .dash__title > h1 { flex: 1 1 auto; min-width: 0; }
+.dash__title > .dash__back { flex: none; margin-inline-start: calc(-1 * var(--space-2)); color: var(--color-primary); }
 .dash__title > .actions { flex: 0 1 auto; justify-content: flex-end; }
 .dash__title > .actions:empty { display: none; }
+/* Bottom tab bar (phone only): icons above 12px labels, the active tab in the primary colour on a
+ * soft pill. Fewer permitted tabs simply stretch. */
+.dash__tabs { position: fixed; inset-inline: 0; bottom: 0; z-index: 40; box-sizing: border-box; height: calc(var(--bottom-nav-height) + var(--safe-bottom)); padding: 0 var(--space-2) var(--safe-bottom); background: var(--color-surface); border-top: 1px solid var(--color-border); display: flex; align-items: flex-start; }
+.dash__tabs a { flex: 1 1 0; min-width: 0; height: var(--bottom-nav-height); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; color: var(--color-text-muted); font-size: 12px; font-weight: 500; line-height: 1.2; }
+.dash__tabs a.active { color: var(--color-primary); font-weight: 700; }
+.dash__tab-icon { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 30px; border-radius: 15px; transition: background-color var(--duration) var(--ease); }
+.dash__tabs a.active .dash__tab-icon { background: var(--color-soft); }
+.dash__tab-count { position: absolute; top: -4px; inset-inline-end: -6px; min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; border-radius: 10px; background: var(--color-accent-text); color: var(--color-on-primary); font-size: 12px; font-weight: 700; line-height: 20px; text-align: center; font-variant-numeric: tabular-nums; }
+.dash__tab-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* ---------- action toolbars ----------
  * A group of buttons after a heading or at the end of a list row. `.row` (12px gaps, whatever height
  * each control brought along) was used for these with per-site inline gaps, so a checkbox (44px band),
@@ -455,24 +510,12 @@ button.img-frame--zoomable:focus-visible { outline: 2px solid var(--color-primar
 .btn--add__count { position: absolute; top: -4px; inset-inline-end: -4px; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--color-accent-bg); color: var(--color-accent-text); font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; border: 2px solid var(--color-surface); }
 .most-ordered { color: #0f8a3c; font-weight: 600; font-size: var(--text-secondary); line-height: 1.3; }
 :root[data-theme='dark'] .most-ordered { color: #6fd39a; }
-.deals { display: flex; gap: var(--space-3); overflow-x: auto; scroll-snap-type: x mandatory; margin-inline: calc(-1 * var(--gutter)); padding-inline: var(--gutter); padding-block: var(--space-1) var(--space-2); scrollbar-width: none; }
-.deal-card { flex: 0 0 min(300px, 82vw); scroll-snap-align: start; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-card); overflow: hidden; display: flex; flex-direction: column; text-align: start; padding: 0; cursor: pointer; color: inherit; }
-.deal-card__media { position: relative; }
 .deal-card__badge { position: absolute; top: var(--space-2); inset-inline-start: var(--space-2); background: var(--color-accent-text); color: #fff; font-weight: 600; font-size: 14px; padding: 4px 10px; border-radius: 999px; }
-.deal-card__body { padding: var(--space-3) var(--space-4) var(--space-4); display: flex; flex-direction: column; gap: var(--space-1); }
-.deal-card__prices { display: flex; align-items: baseline; gap: var(--space-2); }
-.deal-card__was { color: var(--color-text-muted); text-decoration: line-through; font-size: var(--text-secondary); }
-.deal-card--off { opacity: 0.6; }
 .combo-editor { display: flex; flex-direction: column; gap: var(--space-6); }
 .combo-section { display: flex; flex-direction: column; gap: var(--space-3); }
 .combo-section__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .combo-preview { display: flex; flex-direction: column; gap: var(--space-2); }
 .combo-preview__label { font-size: var(--text-badge); color: var(--color-text-muted); letter-spacing: 0.04em; }
-.combo-preview .deal-card { flex-basis: auto; width: 100%; cursor: default; }
-.combo-preview .promo { flex-basis: auto; width: 100%; }
-.combo-preview .deal-card__media { aspect-ratio: 16 / 9; overflow: hidden; }
-.combo-preview .deal-card__media > .img-frame { width: 100%; height: 100%; }
-.combo-preview .deal-card__media .promo-canvas { width: 100%; height: 100%; object-fit: cover; max-width: none; border: 0; border-radius: 0; display: block; }
 .combo-list { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-card); padding: 4px var(--space-3); display: flex; flex-direction: column; }
 .combo-line { display: flex; align-items: center; gap: var(--space-3); padding: 10px 0; min-height: 64px; border-bottom: 1px solid var(--color-border); min-width: 0; }
 .combo-line:last-child { border-bottom: 0; }
@@ -489,10 +532,6 @@ button.img-frame--zoomable:focus-visible { outline: 2px solid var(--color-primar
 .choice__text strong { font-weight: 500; }
 .choice__hint { color: var(--color-text-muted); font-size: var(--text-secondary); }
 .choice__trail { color: var(--color-primary); flex: none; }
-.combo-promo { border-radius: var(--radius-card); overflow: hidden; border: 1px solid var(--color-border); background: var(--color-soft); }
-.combo-promo > .img-frame { border-radius: 0; }
-.combo-promo .promo-canvas { width: 100%; max-width: none; border: 0; border-radius: 0; display: block; }
-.combo-promo--empty { aspect-ratio: 16 / 9; display: flex; align-items: center; justify-content: center; gap: var(--space-2); color: var(--color-text-muted); font-size: var(--text-secondary); }
 .chips { display: flex; gap: var(--space-2); overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; margin-inline: calc(-1 * var(--space-5)); padding-inline: var(--space-5); }
 .chips::-webkit-scrollbar { display: none; }
 .chip { flex: none; min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--color-border-strong); background: var(--color-surface); color: var(--color-text); font-size: var(--text-secondary); font-weight: 500; cursor: pointer; white-space: nowrap; transition: background-color var(--duration) var(--ease), color var(--duration) var(--ease); }
@@ -506,7 +545,6 @@ button.img-frame--zoomable:focus-visible { outline: 2px solid var(--color-primar
 .picker-row__variant { width: 100%; max-width: 200px; min-height: 40px; padding-block: 0; font-size: 14px; }
 .picker-footer { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .dialog__footer .btn.picker-done { flex: none; padding-inline: var(--space-8); }
-.promo-canvas { width: 100%; max-width: 480px; border-radius: var(--radius-card); border: 1px solid var(--color-border); background: var(--color-soft); }
 .order-line__combo { color: var(--color-text-muted); font-size: var(--text-secondary); padding-inline-start: var(--space-4); }
 /* Combo without a generated promo image: collage of the member products' photos. */
 .combo-collage { aspect-ratio: 16 / 9; display: grid; gap: 2px; background: var(--color-border); overflow: hidden; }
@@ -536,9 +574,99 @@ button.img-frame--zoomable:focus-visible { outline: 2px solid var(--color-primar
 .pitch__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
 .pitch__item { display: flex; align-items: flex-start; gap: var(--space-2); font-size: var(--text-secondary); line-height: 1.5; }
 .pitch__item > svg { flex: none; margin-top: 3px; color: var(--color-primary); }
-.pitch__tip { font-size: var(--text-secondary); color: var(--color-text-muted); }
 .pitch__preview { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
 .pitch__label { font-size: var(--text-badge); color: var(--color-text-muted); letter-spacing: 0.04em; }
-.promo--mock { flex-basis: auto; box-shadow: var(--shadow-float); }
-.mock-deal { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-card); overflow: hidden; box-shadow: var(--shadow-float); max-width: 320px; }
-.mock-deal__media { position: relative; aspect-ratio: 16 / 9; background: linear-gradient(135deg, var(--color-soft), var(--color-primary)); }
+
+/* Customer order progress: placed → preparing → ready → done. Stage tones reuse the status-banner colours. */
+.status-banner--preparing { background: var(--color-soft); color: var(--color-primary); border-color: transparent; }
+.status-banner--ready { background: var(--color-success-bg); color: var(--color-success-text); border-color: transparent; }
+.status-banner--completed { background: var(--color-bg); color: var(--color-text); }
+.status-banner__text { min-width: 0; }
+.status-banner__text > div { font-size: var(--text-secondary); margin-top: 2px; }
+.otrack { list-style: none; margin: 0; padding: var(--space-3) var(--space-2); display: flex; align-items: flex-start; position: relative; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-card); }
+.otrack::before { content: ''; position: absolute; inset-inline: 12.5%; top: calc(var(--space-3) + 13px); height: 2px; background: var(--color-border); }
+.otrack__step { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: var(--space-2); font-size: 12px; line-height: 1.2; text-align: center; color: var(--color-text-muted); font-weight: 500; position: relative; }
+.otrack__dot { width: 28px; height: 28px; box-sizing: border-box; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--color-surface); border: 2px solid var(--color-border-strong); color: var(--color-border-strong); }
+.otrack__step--done { color: var(--color-text); font-weight: 600; }
+.otrack__step--done .otrack__dot { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-on-primary); }
+.otrack__step--current { color: var(--color-primary); font-weight: 700; }
+.otrack__step--current .otrack__dot { border-color: var(--color-primary); color: var(--color-primary); }
+.otrack__step--current .otrack__dot::after { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--color-primary); animation: otrack-pulse 1.6s ease-in-out infinite; }
+@keyframes otrack-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(.6); opacity: .5; } }
+@media (prefers-reduced-motion: reduce) { .otrack__step--current .otrack__dot::after { animation: none; } }
+
+/* Customer loyalty history: one row per ledger entry (label + business/date, signed points at the inline end). */
+.ledger-list, .ledger-list.card { list-style: none; margin: 0; padding: 0; }
+.ledger-row { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); }
+.ledger-row + .ledger-row { border-top: 1px solid var(--color-border); }
+.ledger-row__pts { font-weight: 600; white-space: nowrap; }
+
+/* Deals carousel (2026-09-24): promotions and combos share one swipeable row of slides. Photos are
+ * cropped round and overlapped like dishes ("plates"); a promotion with its own banner shows that instead. */
+.dcarousel { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; margin-inline: calc(-1 * var(--gutter)); padding-inline: var(--gutter); scroll-padding-inline: var(--gutter); scrollbar-width: none; }
+.dcarousel::-webkit-scrollbar { display: none; }
+.dcarousel__dots { display: flex; justify-content: center; gap: 6px; margin-top: var(--space-2); }
+.dcarousel__dots i { width: 6px; height: 6px; border-radius: 3px; background: var(--color-border-strong); transition: width var(--duration) var(--ease), background-color var(--duration) var(--ease); }
+.dcarousel__dots i.on { width: 18px; background: var(--color-primary); }
+@media (min-width: 640px) { .dcarousel__dots { display: none; } }
+.dslide { --ring: var(--color-on-primary); --h: 164px; flex: 0 0 86%; scroll-snap-align: start; position: relative; display: block; width: 100%; height: 164px; padding: 0; border: 0; border-radius: 18px; overflow: hidden; background: var(--color-primary); color: var(--color-on-primary); font: inherit; text-align: start; }
+.dslide:only-child { flex-basis: 100%; }
+@media (min-width: 640px) { .dslide { flex-basis: calc((100% - 10px) / 2); } }
+@media (min-width: 1100px) { .dslide { flex-basis: calc((100% - 20px) / 3); } }
+button.dslide { cursor: pointer; }
+button.dslide:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.dslide--promo { --ring: var(--color-surface); background: var(--color-accent-text); color: var(--color-surface); }
+.dslide--off { opacity: 0.6; }
+.dslide__text { position: absolute; inset-block: 16px; inset-inline-start: 18px; width: 50%; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; z-index: 2; }
+.dslide--bare .dslide__text { width: auto; inset-inline-end: 18px; }
+.dslide__kind { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 999px; background: color-mix(in srgb, currentColor 16%, transparent); font-size: var(--text-badge); font-weight: 500; }
+.dslide__name { font-size: 22px; font-weight: 600; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.dslide__sub { font-size: 13px; line-height: 1.35; opacity: 0.85; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.dslide__pill { margin-top: auto; padding: 2px 14px; border-radius: 999px; background: var(--color-on-primary); color: var(--color-primary); font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dslide--promo .dslide__pill { background: var(--color-surface); color: var(--color-accent-text); font-size: 15px; padding: 4px 12px; }
+.dslide--off .dslide__pill { font-size: 15px; padding: 4px 12px; }
+.dslide > .plates { position: absolute; inset-block: 0; inset-inline-end: 0; width: 50%; }
+.plate { position: absolute; top: calc(var(--y) * var(--h)); inset-inline-end: calc(var(--x) * var(--h)); width: calc(var(--s) * var(--h)); height: calc(var(--s) * var(--h)); border-radius: 50%; overflow: hidden; background: var(--color-soft); box-shadow: 0 0 0 4px var(--ring), 0 10px 22px rgba(0, 0, 0, 0.28); }
+.plates--many .plate { box-shadow: 0 0 0 3px var(--ring), 0 6px 14px rgba(0, 0, 0, 0.25); }
+.plate > .img-frame { width: 100%; height: 100%; border-radius: 0; }
+.plate > .img-frame img { transform: scale(1.2); }
+.deal-art__banner { position: absolute; inset-block: 0; inset-inline-end: 0; width: 55%; -webkit-mask-image: linear-gradient(to right, transparent, #000 40%); mask-image: linear-gradient(to right, transparent, #000 40%); }
+[dir='rtl'] .deal-art__banner { -webkit-mask-image: linear-gradient(to left, transparent, #000 40%); mask-image: linear-gradient(to left, transparent, #000 40%); }
+.deal-art__banner > .img-frame { position: absolute; inset: 0; width: 100%; height: 100%; aspect-ratio: auto; border-radius: 0; }
+/* Owner previews show a single slide at full width. */
+.combo-preview .dslide, .pitch__preview .dslide { flex: none; }
+
+/* Deal sheets: the slide grows into a header band and the dialog's own header floats over it. */
+.dialog--deal .dialog__header { position: absolute; top: 0; inset-inline: 0; z-index: 3; justify-content: flex-end; padding: 14px; border: 0; background: transparent; pointer-events: none; }
+.dialog--deal .dialog__header h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.dialog--deal .dialog__header .btn--icon { pointer-events: auto; border-radius: 50%; background: rgba(255, 254, 250, 0.2); color: #fffefa; }
+@media (max-width: 639px) { .dialog--deal .dialog__grabber { position: absolute; top: 8px; inset-inline: 0; z-index: 4; margin: 0 auto; background: rgba(255, 254, 250, 0.5); } }
+.dialog--deal .dialog__body { padding-top: 0; }
+.deal-band { margin-inline: calc(-1 * var(--space-5)); }
+.dslide--band { --h: 212px; height: 212px; border-radius: 0; }
+.dslide--band .dslide__text { inset-block: 26px 18px; inset-inline-start: 20px; }
+.dslide--band .dslide__name { font-size: 26px; }
+.deal-lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.deal-lines > li { border-bottom: 1px solid var(--color-border); }
+.deal-lines > li:last-child { border-bottom: 0; }
+.deal-line { display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: 64px; padding: 8px 0; }
+.deal-line--tap { border: 0; background: none; color: inherit; font: inherit; text-align: start; cursor: pointer; border-radius: var(--radius-control); }
+.deal-line--tap:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.deal-line__img { width: 48px; height: 48px; flex: none; border-radius: 50%; overflow: hidden; }
+.deal-line__img > .img-frame { width: 100%; height: 100%; border-radius: 0; }
+.deal-line__qty { min-width: 28px; font-weight: 600; color: var(--color-primary); }
+.deal-line__text { flex: 1; min-width: 0; display: flex; flex-direction: column; font-weight: 500; }
+.deal-line__text small { color: var(--color-text-muted); font-size: var(--text-secondary); font-weight: 400; }
+.deal-line__add { width: 40px; height: 40px; flex: none; border-radius: 50%; background: var(--color-primary); color: var(--color-on-primary); display: inline-flex; align-items: center; justify-content: center; }
+.deal-qty { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.btn.btn--split { justify-content: space-between; padding-inline: var(--space-5); }
+/* A band with no photos shrinks to its text instead of leaving an empty coloured block. */
+.dslide--band.dslide--bare { height: auto; }
+.dslide--band.dslide--bare .dslide__text { position: static; padding: 26px 20px 20px; }
+.dslide--band.dslide--bare .dslide__pill { margin-top: var(--space-3); }
+/* In the sheet band the plates start below the floating close button and grabber. */
+.dslide--band > .plates { --h: 164px; inset-block: 48px 0; }
+/* Promotion banner upload frame (owner). */
+.combo-promo { border-radius: var(--radius-card); overflow: hidden; border: 1px solid var(--color-border); background: var(--color-soft); }
+.combo-promo > .img-frame { border-radius: 0; }
+.combo-promo--empty { aspect-ratio: 16 / 9; display: flex; align-items: center; justify-content: center; gap: var(--space-2); color: var(--color-text-muted); font-size: var(--text-secondary); }

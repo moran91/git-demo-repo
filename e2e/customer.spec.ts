@@ -80,7 +80,7 @@ test.describe('customer storefront', () => {
     await page.getByLabel('Contact phone').fill('0502222222');
     await page.getByRole('button', { name: 'Place order' }).click();
     await expect(page.getByText('Order placed')).toBeVisible({ timeout: 20000 });
-    await expect(page.locator('.order-ref')).toHaveText(/^Q-[A-Z2-9]{5}$/);
+    await expect(page.locator('.order-ref')).toHaveText(/^\d{4,}$/);
     await expect(page.getByText('Placed — awaiting acceptance')).toBeVisible();
     await expect(page.getByRole('link', { name: /Call business/ })).toHaveAttribute('href', 'tel:+972501234567');
     const ref = await page.locator('.order-ref').textContent();

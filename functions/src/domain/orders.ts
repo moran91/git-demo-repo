@@ -2,12 +2,14 @@ import { onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { z } from 'zod';
 import {
   addressInputSchema,
+  advanceOrderSchema,
   availableFulfillmentModes,
+  offersDineIn,
   clampRedemption,
   computeTotals,
   decideOrderSchema,
   evaluateOpen,
-  makeOrderReference,
+  FIRST_ORDER_NUMBER,
   normalizeIsraeliPhone,
   placeOrderSchema,
   pointsEarned,
@@ -33,6 +35,7 @@ import {
   type Order,
   type OrderEvent,
   type OrderLine,
+  type OrderStage,
   type PrinterConfig,
   type Product,
   type SavedAddress,
@@ -49,6 +52,11 @@ import { enqueueAutoPrintJobs } from '../lib/printjobs.js';
 import { rateLimit } from '../lib/ratelimit.js';
 
 const opts = { region: REGION } as const;
+/**
+ * Customer-facing hot path. Without a warm instance the first cart open after a quiet spell hit a
+ * gen2 cold start (several seconds before the total and the checkout button appeared).
+ */
+const hot = { region: REGION, minInstances: 1 } as const;
 
 /** ---------- Shared validation used by quote and place ---------- */
 
@@ -70,13 +78,13 @@ async function loadEligibility(tx: Tx | null, businessId: string, branchId: stri
   if (branch.ordersPaused) fail('orders_paused');
   if (!evaluateOpen(new Date(), branch.hours, branch.hoursOverrides).open) fail('branch_closed');
   const deliveryCities = branch.deliveryEnabled ? effectiveDeliveryCities(branch) : [];
-  const modes = availableFulfillmentModes(business.type, { cityId: branch.cityId, pickupEnabled: branch.pickupEnabled, deliveryCities }, cityId);
+  const modes = availableFulfillmentModes(business.type, { cityId: branch.cityId, pickupEnabled: branch.pickupEnabled, dineInEnabled: branch.dineInEnabled, deliveryCities }, cityId);
   if (mode === 'pickup') {
     if (!modes.includes('pickup')) fail('pickup_not_available', branch.pickupEnabled ? { reason: 'city' } : undefined);
     return { business, branch };
   }
   if (mode === 'dine_in') {
-    if (!modes.includes('dine_in')) fail('dine_in_not_available', business.type === 'restaurant' ? { reason: 'city' } : undefined);
+    if (!modes.includes('dine_in')) fail('dine_in_not_available', offersDineIn(business.type, branch) ? { reason: 'city' } : undefined);
     return { business, branch };
   }
   const rule = deliveryCities.find((d) => d.cityId === cityId);
@@ -197,7 +205,7 @@ function stockUnitsOf(line: OrderLine): Array<{ productId: string; variantId?: s
 
 /** ---------- Quote (read-only; guests allowed, loyalty only when signed in) ---------- */
 
-export const quoteOrder = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
+export const quoteOrder = onCall(hot, handled(async (req: CallableRequest<unknown>) => {
   const input = parse(quoteRequestSchema, req.data);
   const elig = await loadEligibility(null, input.businessId, input.branchId, input.mode, input.cityId);
   const { lines } = await priceCart(null, input.businessId, input.branchId, input.lines);
@@ -260,11 +268,15 @@ async function resolveAddress(tx: Tx, c: Caller, input: z.infer<typeof placeOrde
   return { snapshot };
 }
 
-async function uniqueReference(tx: Tx, businessId: string): Promise<string> {
-  for (let i = 0; i < 6; i++) {
-    const ref = makeOrderReference();
-    const snap = await tx.get(col.orderRefs().doc(`${businessId}_${ref}`));
-    if (!snap.exists) return ref;
+/** Next per-business order number. The counter sits beside the uniqueness markers in the server-only orderRefs
+ *  collection; reading it inside the placement transaction serialises concurrent placements for one business, so two
+ *  orders never get the same number. Taken numbers are skipped so a hand-edited counter can never reuse a reference. */
+async function allocateReference(tx: Tx, businessId: string): Promise<{ reference: string; next: number }> {
+  const counter = (await tx.get(col.orderRefs().doc(`${businessId}_seq`))).data() as { next?: number } | undefined;
+  let n = counter?.next ?? FIRST_ORDER_NUMBER;
+  for (let i = 0; i < 6; i++, n++) {
+    const snap = await tx.get(col.orderRefs().doc(`${businessId}_${n}`));
+    if (!snap.exists) return { reference: String(n), next: n + 1 };
   }
   fail('internal', undefined, 'could not allocate reference');
 }
@@ -281,7 +293,7 @@ function bumpMetrics(tx: Tx, fields: Record<string, number>): void {
   tx.set(col.metricsDaily(date), inc, { merge: true });
 }
 
-export const placeOrder = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
+export const placeOrder = onCall(hot, handled(async (req: CallableRequest<unknown>) => {
   const c = await requireCaller(req);
   requireVerifiedPhone(c);
   const input = parse(placeOrderSchema, req.data);
@@ -334,7 +346,7 @@ export const placeOrder = onCall(opts, handled(async (req: CallableRequest<unkno
     let addr: Awaited<ReturnType<typeof resolveAddress>> | undefined;
     if (input.mode === 'delivery') addr = await resolveAddress(tx, c, input, input.cityId);
 
-    const reference = await uniqueReference(tx, input.businessId);
+    const { reference, next: nextOrderNumber } = await allocateReference(tx, input.businessId);
     const printersSnap = await tx.get(col.printers().where('branchId', '==', input.branchId).where('active', '==', true));
     const printers = printersSnap.docs.map((d) => d.data() as PrinterConfig);
 
@@ -375,6 +387,7 @@ export const placeOrder = onCall(opts, handled(async (req: CallableRequest<unkno
     };
     tx.set(orderRef, order);
     tx.set(col.orderRefs().doc(`${input.businessId}_${reference}`), { orderId: orderRef.id, createdAt: now });
+    tx.set(col.orderRefs().doc(`${input.businessId}_seq`), { next: nextOrderNumber, updatedAt: now });
     const ev: OrderEvent = { id: col.orderEvents(orderRef.id).doc().id, orderId: orderRef.id, type: 'placed', actorUid: c.uid, actorRole: 'customer', at: now, version: 1 };
     tx.set(col.orderEvents(orderRef.id).doc(ev.id), ev);
 
@@ -431,6 +444,7 @@ export const decideOrder = onCall(opts, handled(async (req: CallableRequest<unkn
     const business = bSnap.data() as Business;
     const branch = brSnap.data() as Branch;
     const next: Order = { ...order, status: input.decision, decisionReason: input.reason?.trim() || undefined, decidedAt: now, decidedBy: c.uid, version: order.version + 1, updatedAt: now };
+    if (input.decision === 'accepted') { next.stage = 'preparing'; next.stageUpdatedAt = now; }
 
     if (input.decision === 'rejected') {
       // Release inventory exactly once and release reserved points.
@@ -460,6 +474,37 @@ export const decideOrder = onCall(opts, handled(async (req: CallableRequest<unkn
     enqueueEvent(tx, { kind: input.decision === 'accepted' ? 'order_accepted' : 'order_rejected', recipients: [order.customer.uid], params: { reference: order.reference }, link: `/orders/${order.id}`, orderId: order.id, businessId: order.businessId, branchId: order.branchId, key: `order_${input.decision}:${order.id}` });
     const res = { status: next.status, version: next.version };
     writeIdempotent(tx, c.uid, input.idempotencyKey, res, 'decideOrder');
+    return { ...res, replay: false };
+  });
+}));
+
+/** ---------- Fulfillment stages: preparing → ready → completed (ready → preparing is an undo) ---------- */
+
+const STAGE_TRANSITIONS: Record<OrderStage, readonly OrderStage[]> = { preparing: ['ready'], ready: ['completed', 'preparing'], completed: [] };
+
+export const advanceOrder = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
+  const c = await requireCaller(req);
+  const input = parse(advanceOrderSchema, req.data);
+  return db.runTransaction(async (tx) => {
+    const cached = await readIdempotent<{ stage: string; version: number }>(tx, c.uid, input.idempotencyKey);
+    if (cached) return { ...cached, replay: true };
+    const { order, role } = await loadOrderForStaff(tx, c, input.orderId, ['owner', 'manager', 'staff']);
+    // Orders accepted before stages existed have none: treat them as 'preparing' so they can still be moved.
+    const from = order.status === 'accepted' ? order.stage ?? 'preparing' : undefined;
+    if (!from || !STAGE_TRANSITIONS[from].includes(input.stage)) fail('invalid_status_transition', { status: order.status, stage: order.stage });
+    if (order.version !== input.expectedVersion) fail('version_conflict', { version: order.version });
+    const now = nowIso();
+    const next: Order = { ...order, stage: input.stage, stageUpdatedAt: now, version: order.version + 1, updatedAt: now };
+    if (input.stage === 'ready') next.readyAt = now;
+    if (input.stage === 'completed') next.completedAt = now;
+    tx.set(col.order(order.id), next);
+    if (input.stage !== 'preparing') {
+      const ev: OrderEvent = { id: col.orderEvents(order.id).doc().id, orderId: order.id, type: input.stage, actorUid: c.uid, actorRole: role as OrderEvent['actorRole'], at: now, before: { stage: from }, after: { stage: input.stage }, version: next.version };
+      tx.set(col.orderEvents(order.id).doc(ev.id), ev);
+      enqueueEvent(tx, { kind: input.stage === 'ready' ? 'order_ready' : 'order_completed', recipients: [order.customer.uid], params: { reference: order.reference }, link: `/orders/${order.id}`, orderId: order.id, businessId: order.businessId, branchId: order.branchId, key: `order_${input.stage}:${order.id}:${next.version}` });
+    }
+    const res = { stage: next.stage, version: next.version };
+    writeIdempotent(tx, c.uid, input.idempotencyKey, res, 'advanceOrder');
     return { ...res, replay: false };
   });
 }));
@@ -648,7 +693,7 @@ export const recordCash = onCall(opts, handled(async (req: CallableRequest<unkno
     const accC = order.loyalty ? ((await tx.get(accRefC)).data() as LoyaltyAccount | undefined) : undefined;
     const now = nowIso();
     const cashRef = col.cashRecords().doc();
-    const record: CashRecord = { id: cashRef.id, orderId: order.id, businessId: order.businessId, branchId: order.branchId, amountAgorot: input.amountAgorot, recordedBy: c.uid, recordedAt: now, reversed: false };
+    const record: CashRecord = { id: cashRef.id, orderId: order.id, reference: order.reference, businessId: order.businessId, branchId: order.branchId, amountAgorot: input.amountAgorot, recordedBy: c.uid, recordedAt: now, reversed: false };
     tx.set(cashRef, record);
     const next: Order = { ...order, cashRecordId: cashRef.id, cashSettledAt: now, locked: true, version: order.version + 1, updatedAt: now };
     tx.set(col.order(order.id), next);

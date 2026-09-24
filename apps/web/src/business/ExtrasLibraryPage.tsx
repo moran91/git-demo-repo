@@ -11,6 +11,7 @@ import { PageTitle, useDash } from './shell';
 import { LoadError, useDraftSafety } from './BusinessExperience';
 import { ModifierGroupFields, newGroupDraft, type GroupDraft } from './ModifierGroupFields';
 import { ActionSheet } from './CatalogControls';
+import { LangSwitch, initialLang, missingLangs, type Loc } from './LocalizedInput';
 import './catalog.css';
 
 export function ExtrasLibraryPage() {
@@ -92,8 +93,10 @@ function draftOf(g: SharedModifierGroup): GroupDraft {
 
 export function SharedGroupDialog({ id, initial, onClose, onSaved }: { id?: string; initial: GroupDraft; onClose: () => void; onSaved?: (g: SharedModifierGroup) => void }) {
   const t = useT();
+  const { locale } = useI18n();
   const { business, branch } = useDash();
   const [d, setD] = useState<GroupDraft>(initial);
+  const [lang, setLang] = useState<Loc>(() => initialLang(locale, initial.name, ...initial.options.map((o) => o.name)));
   const safety = useDraftSafety(d);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,11 +117,9 @@ export function SharedGroupDialog({ id, initial, onClose, onSaved }: { id?: stri
     }
   };
   return (
-    <Dialog open onClose={() => { if (!busy && safety.confirmDiscard()) onClose(); }} title={id ? t('catalog.editSharedGroup') : t('catalog.newSharedGroup')} footer={<><Button variant="secondary" disabled={busy} onClick={() => { if (safety.confirmDiscard()) onClose(); }}>{t('common.cancel')}</Button><Button loading={busy} onClick={() => void save()}>{t('common.save')}</Button></>}>
-      <div className="stack">
-        {error ? <Alert tone="danger">{error}</Alert> : null}
-        <ModifierGroupFields value={d} onChange={setD} />
-      </div>
+    <Dialog open onClose={() => { if (!busy && safety.confirmDiscard()) onClose(); }} title={id ? t('catalog.editSharedGroup') : t('catalog.newSharedGroup')} className="pe2" headerEnd={<LangSwitch value={lang} onChange={setLang} missing={missingLangs([d.name, ...d.options.map((o) => o.name)])} />} footer={<><Button variant="secondary" disabled={busy} onClick={() => { if (safety.confirmDiscard()) onClose(); }}>{t('common.cancel')}</Button><Button loading={busy} onClick={() => void save()}>{t('common.save')}</Button></>}>
+      {error ? <Alert tone="danger">{error}</Alert> : null}
+      <ModifierGroupFields value={d} onChange={setD} lang={lang} />
     </Dialog>
   );
 }

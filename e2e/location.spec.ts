@@ -7,9 +7,10 @@ test('location detection updates discovery, remembers opt-in and respects a late
   await context.grantPermissions(['geolocation']);
   await context.setGeolocation({ latitude: 33.0167, longitude: 35.35 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Use my location', exact: true }).click();
+  await page.locator('.city-pill').click();
+  await page.getByRole('dialog').getByRole('button', { name: /^Use my location/ }).click();
   await expect(page.locator('.city-pill')).toContainText('Hurfeish');
-  await expect(page.getByText('Location detection is on', { exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('qareeb.discovery.v1')!));
   expect(stored.cityId).toBe('hurfeish');
   expect(stored.locationEnabled).toBe(true);
@@ -23,7 +24,7 @@ test('location detection updates discovery, remembers opt-in and respects a late
   await page.getByRole('option', { name: 'Hurfeish', exact: true }).click();
   await page.reload();
   await expect(page.locator('.city-pill')).toContainText('Hurfeish');
-  await expect(page.getByText('Location detection is on', { exact: true })).toHaveCount(0);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('qareeb.discovery.v1')!).locationEnabled)).toBe(false);
 });
 
 for (const failure of [{ code: 1, text: 'Location permission is off.' }, { code: 2, text: 'We could not find your location.' }, { code: 3, text: 'Finding your location took too long.' }]) {
@@ -32,7 +33,8 @@ for (const failure of [{ code: 1, text: 'Location permission is off.' }, { code:
       navigator.geolocation.getCurrentPosition = (_success, error) => error?.({ code, message: 'test', PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 });
     }, failure.code);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Use my location', exact: true }).click();
+    await page.locator('.city-pill').click();
+    await page.getByRole('dialog').getByRole('button', { name: /^Use my location/ }).click();
     await expect(page.getByRole('dialog')).toContainText(failure.text);
     await page.getByRole('option', { name: 'Hurfeish', exact: true }).click();
     await expect(page.locator('.city-pill')).toContainText('Hurfeish');
@@ -43,21 +45,23 @@ test('a position outside the service area does not silently change the town', as
   await context.grantPermissions(['geolocation']);
   await context.setGeolocation({ latitude: 51.5074, longitude: -0.1278 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Use my location', exact: true }).click();
+  await page.locator('.city-pill').click();
+  await page.getByRole('dialog').getByRole('button', { name: /^Use my location/ }).click();
   await expect(page.getByRole('dialog')).toContainText('We could not find a supported town near you.');
   await expect(page.locator('.city-pill')).toContainText('Beit Jann');
 });
 
-test('a returning user sees a failed automatic location lookup and can choose a town', async ({ page, context }) => {
+test('a failed silent location refresh keeps the town and explains itself only inside the picker', async ({ page, context }) => {
   await context.grantPermissions(['geolocation']);
   await page.addInitScript(() => {
     localStorage.setItem('qareeb.discovery.v1', JSON.stringify({ cityId: 'beit-jann', kind: 'restaurant', locationEnabled: true }));
     navigator.geolocation.getCurrentPosition = (_success, error) => error?.({ code: 2, message: 'test', PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 });
   });
   await page.goto('/');
-  const alert = page.getByRole('status').filter({ hasText: 'We could not find your location.' });
-  await expect(alert).toContainText('We could not find your location.');
-  await alert.getByRole('button', { name: 'Change city', exact: true }).click();
+  await expect(page.locator('.city-pill')).toContainText('Beit Jann');
+  await expect(page.getByText('We could not find your location.')).toHaveCount(0);
+  await page.locator('.city-pill').click();
+  await expect(page.getByRole('dialog')).toContainText('We could not find your location.');
   await page.getByRole('option', { name: 'Hurfeish', exact: true }).click();
   await expect(page.locator('.city-pill')).toContainText('Hurfeish');
 });
@@ -69,8 +73,8 @@ test('a delayed location request cannot override a manual selection', async ({ p
     };
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Use my location', exact: true }).click();
   await page.locator('.city-pill').click();
+  await page.getByRole('dialog').getByRole('button', { name: /^Use my location/ }).click();
   await page.getByRole('option', { name: 'Hurfeish', exact: true }).click();
   await page.evaluate(() => (window as unknown as { finishLocation: () => void }).finishLocation());
   await expect(page.locator('.city-pill')).toContainText('Hurfeish');

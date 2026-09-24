@@ -1,4 +1,5 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import type { ReceiptModel } from '@qareeb/shared';
 
 /**
@@ -8,7 +9,7 @@ import type { ReceiptModel } from '@qareeb/shared';
  */
 export function ReceiptHtml({ model }: { model: ReceiptModel }) {
   return (
-    <div className="receipt-print" dir={model.dir} lang={model.locale}>
+    <div className="receipt-print" dir={model.dir} lang={model.locale} style={{ width: `${model.printableDots / 8}mm`, maxWidth: '100%' }}>
       {model.blocks.map((b, i) => {
         switch (b.kind) {
           case 'text':
@@ -29,14 +30,20 @@ export function ReceiptHtml({ model }: { model: ReceiptModel }) {
 
 /** Opens the OS print dialog for the given model (mounted into the page for the duration). */
 export function OsPrintTrigger({ model, onDone }: { model: ReceiptModel; onDone: () => void }) {
+  const done = useRef(onDone);
+  useEffect(() => { done.current = onDone; }, [onDone]);
   useEffect(() => {
-    const after = () => onDone();
+    const after = () => done.current();
     window.addEventListener('afterprint', after, { once: true });
     const id = setTimeout(() => window.print(), 50);
     return () => {
       clearTimeout(id);
       window.removeEventListener('afterprint', after);
     };
-  }, [model, onDone]);
-  return <ReceiptHtml model={model} />;
+  }, [model]);
+  // The print stylesheet hides every direct child of #root except .receipt-print/.qr-print, and the
+  // dashboard wraps its routes in .business-app — rendering here inline printed a blank page.
+  const root = document.getElementById('root');
+  if (!root) return null;
+  return createPortal(<ReceiptHtml model={model} />, root);
 }

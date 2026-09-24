@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { getAuth, connectAuthEmulator, browserLocalPersistence, setPersistence } from 'firebase/auth';
+import { initializeAuth, connectAuthEmulator, browserLocalPersistence, browserSessionPersistence, inMemoryPersistence } from 'firebase/auth';
 import { getFirestore, connectFirestoreEmulator, initializeFirestore, persistentLocalCache, persistentSingleTabManager } from 'firebase/firestore';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 import { getStorage, connectStorageEmulator } from 'firebase/storage';
@@ -34,8 +34,12 @@ if (import.meta.env.VITE_APPCHECK_SITE_KEY) {
   );
 }
 
-export const auth = getAuth(app);
-void setPersistence(auth, browserLocalPersistence);
+// Phone/password sign-in does not use OAuth popups. getAuth() eagerly starts their cross-origin
+// iframe on iOS and initializes IndexedDB before setPersistence can switch away from it. Select
+// persistence up front, with fallbacks for Safari sessions where browser storage is unavailable.
+export const auth = initializeAuth(app, {
+  persistence: [browserLocalPersistence, browserSessionPersistence, inMemoryPersistence],
+});
 // Single-tab persistence, not multi-tab. With the multi-tab manager every query from a new tab is
 // served by whichever tab holds the primary lease, and a backgrounded (frozen or discarded) tab —
 // routine on phones — keeps that lease for up to ~5 s without answering, so a fresh open of the site

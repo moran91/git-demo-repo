@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { doc, deleteDoc, setDoc } from 'firebase/firestore';
-import { evaluateOpen, type City, type Combo, type Favorite, type HoursOverride, type Promotion, type WeeklyHours } from '@qareeb/shared';
+import { evaluateOpen, offersDineIn, type City, type Combo, type Favorite, type HoursOverride, type Promotion, type WeeklyHours } from '@qareeb/shared';
 import { db } from '@/lib/firebase';
 import { useCollection, useDoc, orderBy, where, limit } from '@/lib/queries';
 import { useAuth } from '@/lib/auth';
@@ -20,6 +20,8 @@ export interface PublicBranch {
   hours: WeeklyHours;
   hoursOverrides: HoursOverride[];
   pickupEnabled: boolean;
+  /** Absent on projections written before the switch existed: means on. */
+  dineInEnabled?: boolean;
   deliveryEnabled: boolean;
   deliveryCities: Array<{ cityId: string; feeAgorot: number; minSubtotalAgorot: number }>;
   deliveryCityIds: string[];
@@ -76,8 +78,8 @@ export function useDiscovery(cityId: string, kind: 'restaurant' | 'supermarket')
     const data: PublicBranch[] = [];
     for (const b of [...local.data, ...delivering.data]) {
       if (seen.has(b.id)) continue;
-      // A local branch with neither pickup nor delivery nor dine-in (supermarket) cannot be ordered from.
-      if (b.cityId === cityId && !b.pickupEnabled && b.type !== 'restaurant' && !b.deliveryCityIds.includes(cityId)) continue;
+      // A local branch with neither pickup nor delivery nor dine-in cannot be ordered from.
+      if (b.cityId === cityId && !b.pickupEnabled && !offersDineIn(b.type, b) && !b.deliveryCityIds.includes(cityId)) continue;
       seen.add(b.id);
       data.push(b);
     }

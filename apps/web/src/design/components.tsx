@@ -146,13 +146,16 @@ export function Alert({ tone = 'info', children, action }: { tone?: 'info' | 'wa
 }
 
 /* ---------- Dialog / Sheet (native <dialog> for focus trapping + restoration) ---------- */
-export function Dialog({ open, onClose, title, children, footer, sheet = true, closeLabel }: { open: boolean; onClose: () => void; title: string; children: ReactNode; footer?: ReactNode; sheet?: boolean; closeLabel?: string }) {
+/** `headerStart` renders before the title (e.g. a Back button, which then replaces Close when `hideClose`);
+ *  `headerEnd` renders between the title and Close (e.g. a language switch). */
+export interface DialogChrome { headerStart?: ReactNode; headerEnd?: ReactNode; hideClose?: boolean; className?: string }
+export function Dialog({ open, onClose, title, children, footer, sheet = true, expanded = false, closeLabel, ...chrome }: { open: boolean; onClose: () => void; title: string; children: ReactNode; footer?: ReactNode; sheet?: boolean; expanded?: boolean; closeLabel?: string } & DialogChrome) {
   if (!open) return null;
-  return <DialogInner onClose={onClose} title={title} footer={footer} sheet={sheet} closeLabel={closeLabel}>{children}</DialogInner>;
+  return <DialogInner onClose={onClose} title={title} footer={footer} sheet={sheet} expanded={expanded} closeLabel={closeLabel} {...chrome}>{children}</DialogInner>;
 }
 
 /** Native <dialog> (focus trap + Escape) mounted only while open; focus is restored to the opener on unmount. */
-function DialogInner({ onClose, title, children, footer, sheet, closeLabel }: { onClose: () => void; title: string; children: ReactNode; footer?: ReactNode; sheet: boolean; closeLabel?: string }) {
+function DialogInner({ onClose, title, children, footer, sheet, expanded, closeLabel, headerStart, headerEnd, hideClose, className = '' }: { onClose: () => void; title: string; children: ReactNode; footer?: ReactNode; sheet: boolean; expanded: boolean; closeLabel?: string } & DialogChrome) {
   const t = useT();
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -239,11 +242,13 @@ function DialogInner({ onClose, title, children, footer, sheet, closeLabel }: { 
     };
   }, [sheet]);
   return (
-    <dialog ref={ref} className={`dialog ${sheet ? 'dialog--sheet' : ''}`} aria-labelledby={titleId}>
+    <dialog ref={ref} className={`dialog ${sheet ? 'dialog--sheet' : ''} ${sheet && expanded ? 'dialog--expanded' : ''} ${className}`} aria-labelledby={titleId}>
       {sheet ? <div className="dialog__grabber" aria-hidden="true" /> : null}
       <div className="dialog__header">
+        {headerStart}
         <h2 id={titleId}>{title}</h2>
-        <IconButton icon="x" label={closeLabel ?? t('common.close')} onClick={onClose} />
+        {headerEnd}
+        {hideClose ? null : <IconButton icon="x" label={closeLabel ?? t('common.close')} onClick={onClose} />}
       </div>
       <div className="dialog__body">{children}</div>
       {footer ? <div className="dialog__footer">{footer}</div> : null}

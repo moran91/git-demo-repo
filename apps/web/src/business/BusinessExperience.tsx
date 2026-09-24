@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useBlocker } from 'react-router';
 import { useT } from '@/lib/i18n';
 import { Alert, Button } from '@/design/components';
@@ -29,11 +29,13 @@ export function useConfirmNavigation() {
 }
 
 /** Track the last successful save, not incoming realtime updates. */
-export function useDraftSafety(value: unknown) {
+export function useDraftSafety<T>(value: T) {
   const drafts = useContext(Drafts);
   const t = useT();
   const serialized = JSON.stringify(value);
   const [saved, setSaved] = useState(serialized);
+  /** The draft as it was last saved (or first shown): what Discard restores. */
+  const lastSaved = useMemo(() => JSON.parse(saved) as T, [saved]);
   const [savedOnce, setSavedOnce] = useState(false);
   const token = useRef(Symbol('draft'));
   const dirty = saved !== serialized;
@@ -42,18 +44,33 @@ export function useDraftSafety(value: unknown) {
     if (dirty) drafts?.add(id);
     return () => { drafts?.delete(id); };
   }, [dirty, drafts]);
-  const markSaved = useCallback((next: unknown = value) => {
+  const markSaved = useCallback((next: T = value) => {
     drafts?.delete(token.current);
     setSaved(JSON.stringify(next));
     setSavedOnce(true);
   }, [drafts, value]);
   const confirmDiscard = () => !dirty || window.confirm(t('owner.discard'));
-  return { dirty, savedOnce, markSaved, confirmDiscard };
+  return { dirty, savedOnce, markSaved, confirmDiscard, lastSaved };
 }
 
 export function SaveStatus({ dirty, savedOnce }: { dirty: boolean; savedOnce: boolean }) {
   const t = useT();
   return dirty || savedOnce ? <p className={`save-status ${dirty ? '' : 'save-status--saved'}`} role="status">{t(dirty ? 'owner.unsaved' : 'owner.saved')}</p> : null;
+}
+
+/** Sticky bottom save bar (Design A): status line, then Discard + one big Save. Sits above the phone
+ *  tab bar (`.sx-savebar` in settings.css). `onDiscard` restores the last saved draft. */
+export function SaveBar({ dirty, savedOnce, saving, disabled, onDiscard, saveLabel }: { dirty: boolean; savedOnce: boolean; saving?: boolean; disabled?: boolean; onDiscard?: () => void; saveLabel?: string }) {
+  const t = useT();
+  return (
+    <div className="sx-savebar">
+      <div className="sx-savebar__status"><SaveStatus dirty={dirty} savedOnce={savedOnce} /></div>
+      <div className="sx-savebar__actions">
+        {onDiscard ? <Button type="button" variant="secondary" disabled={!dirty || saving} onClick={onDiscard}>{t('owner.discardChanges')}</Button> : null}
+        <Button type="submit" loading={saving} disabled={disabled}>{saveLabel ?? t('common.save')}</Button>
+      </div>
+    </div>
+  );
 }
 
 export function FormError({ message }: { message: string | null }) {

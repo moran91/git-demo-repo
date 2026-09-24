@@ -11,6 +11,7 @@ import { useCollection, where, limit } from '@/lib/queries';
 import { onForegroundMessage } from '@/lib/push';
 import { useHeightVar } from '@/lib/stickyVars';
 import { toast } from '@/design/components';
+import { CityControl } from './CityControl';
 
 export function CustomerLayout() {
   const t = useT();
@@ -53,6 +54,8 @@ export function CustomerLayout() {
   // to the toast offset. --topbar-height does the same at the top edge for the sticky category nav.
   const barRef = useHeightVar<HTMLDivElement>('--cart-bar-space', 'var(--space-3)');
   const topbarRef = useHeightVar<HTMLElement>('--topbar-height');
+  // The town only matters where it changes what is listed or orderable: home and a business page.
+  const showCity = location.pathname === '/' || location.pathname.startsWith('/b/');
   return (
     <>
       <a className="skip-link" href="#main">{t('common.skipToContent')}</a>
@@ -63,6 +66,7 @@ export function CustomerLayout() {
             <BrandMark size={32} label={t('brand.logoLabel')} />
             <span className="brand__word">{BRAND.wordmark}</span>
           </Link>
+          {showCity ? <CityControl /> : null}
           <nav className="topbar__nav" aria-label={t('nav.mainNavigation')}>
             <NavLink to="/" end><Icon name="compass" size={18} /> {t('nav.explore')}</NavLink>
             <NavLink to="/favorites"><Icon name="heart" size={18} /> {t('nav.favorites')}</NavLink>

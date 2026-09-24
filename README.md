@@ -16,7 +16,7 @@ receipt printing with a web BLE station and an Android RFCOMM companion.
 | `docs/TESTING.md` | Reproducible commands and test coverage |
 | `docs/PRINTING.md` | Printing design, compatibility table, physical test checklist |
 | `docs/OPERATIONS.md` | User-facing operating instructions |
-| `docs/DESIGN_VERIFICATION.md`, `docs/screenshots/` | Design review notes and captures |
+| `docs/DESIGN_VERIFICATION.md` | Design review notes (captures: `e2e/screenshots.spec.ts` → `docs/screenshots/`, not committed) |
 
 Quick start (local, emulator-backed):
 ```

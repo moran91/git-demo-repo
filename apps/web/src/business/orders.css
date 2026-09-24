@@ -1,0 +1,202 @@
+/* Orders (incoming cards, order detail, history ledger) — Design A.
+ * Spacing on an 8/12/16/24 grid, controls >= 48px, card radius 16, logical properties so RTL mirrors. */
+
+/* ---------- elapsed-time chip (shared by cards, tiles and detail) ---------- */
+.elapsed { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding-inline: 10px; border-radius: 14px; background: var(--color-soft); color: var(--color-text-muted); font-size: 14px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; flex: none; }
+.elapsed--warn { background: var(--color-accent-bg); color: var(--color-accent-text); }
+.elapsed--late { background: var(--color-danger-bg); color: var(--color-danger-text); }
+
+/* ---------- square 48px icon control (call / print / detail) ---------- */
+.oc-iconbtn, .business-app .oc-iconbtn { flex: 0 0 48px; width: 48px; min-width: 48px; height: 48px; min-height: 48px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-control); border: 1px solid var(--color-border-strong); background: var(--color-surface); color: var(--color-text); text-decoration: none; cursor: pointer; font-family: inherit; }
+.oc-iconbtn:hover { background: var(--color-soft); }
+/* Back arrow: the stock arrow points forward; flip it in LTR and leave it as-is in RTL (forward there is left). */
+.oc-iconbtn--back .icon { transform: scaleX(-1); }
+[dir='rtl'] .oc-iconbtn--back .icon { transform: none; }
+.oc-iconbtn--soft { background: var(--color-soft); border-color: transparent; color: var(--color-primary); }
+
+/* Paused banner (shell.tsx): business.css wraps every .alert, which dropped the clock icon onto its own line. */
+.business-app .alert.dash__paused { flex-wrap: nowrap; align-items: center; gap: var(--space-2); }
+.business-app .alert.dash__paused > .icon { flex: none; }
+
+/* ---------- order detail ---------- */
+.order-card__tel { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; min-height: 32px; color: var(--color-text-muted); font-size: var(--text-secondary); text-decoration: none; }
+.order-card__tel:hover { color: var(--color-primary); text-decoration: underline; }
+.odetail { padding-bottom: 0; }
+.odetail__nav { display: flex; align-items: center; gap: var(--space-2); }
+.odetail__nav .dash__title { flex: 1 1 auto; margin-bottom: 0; min-width: 0; }
+.odetail__nav .dash__title > h1 { font-size: 22px; }
+.odetail__cols { display: grid; gap: var(--space-4); align-items: start; }
+@media (min-width: 900px) { .odetail__cols { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); } }
+.steps { list-style: none; margin: 0; padding: var(--space-3) var(--space-2); display: flex; align-items: flex-start; position: relative; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-card); }
+.steps::before { content: ''; position: absolute; inset-inline: 13%; top: 26px; height: 2px; background: var(--color-border); }
+.steps__step { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: var(--space-2); font-size: 12px; line-height: 1.2; text-align: center; color: var(--color-text-muted); font-weight: 500; position: relative; }
+.steps__dot { width: 28px; height: 28px; box-sizing: border-box; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--color-surface); border: 2px solid var(--color-border-strong); color: var(--color-border-strong); }
+.steps__step--done { color: var(--color-text); font-weight: 600; }
+.steps__step--done .steps__dot { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-on-primary); }
+.steps__step--current { color: var(--color-primary); font-weight: 700; }
+.steps__step--current .steps__dot { border-color: var(--color-primary); color: var(--color-primary); }
+.steps__step--current .steps__dot::after { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--color-primary); }
+.steps__step--danger { color: var(--color-danger-text); font-weight: 700; }
+.steps__step--danger .steps__dot { background: var(--color-danger-bg); border-color: var(--color-danger-text); color: var(--color-danger-text); }
+.odetail__customer { display: flex; align-items: center; gap: var(--space-3); }
+.odetail__customer-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.odetail__customer-head { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.odetail__customer-head strong { font-size: 20px; font-weight: 700; }
+.odetail__meta { color: var(--color-text-muted); font-size: var(--text-secondary); display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.odetail__block { display: flex; gap: var(--space-3); align-items: flex-start; padding: var(--space-3); border-radius: var(--radius-control); background: var(--color-bg); font-size: 16px; line-height: 1.35; min-width: 0; overflow-wrap: anywhere; }
+.odetail__block > .icon { flex: none; color: var(--color-primary); margin-top: 2px; }
+.odetail__block > div { min-width: 0; flex: 1 1 auto; }
+.odetail__h2 { margin: 0; font-size: 16px; font-weight: 700; color: var(--color-text-muted); }
+.odetail .order-lines { gap: 0; }
+.odetail .order-line { padding-block: 10px; border-top: 1px solid var(--color-border); align-items: flex-start; }
+.odetail .order-line > .num { font-weight: 600; flex: none; }
+.odetail__actions { display: flex; flex-direction: column; gap: var(--space-2); }
+.odetail__actions > .btn, .business-app .odetail__actions > .btn { width: 100%; min-height: 48px; }
+.odetail__bar { position: sticky; bottom: 0; z-index: 10; margin-inline: calc(-1 * var(--gutter)); padding: var(--space-3) var(--gutter) calc(var(--space-3) + var(--safe-bottom)); background: var(--color-surface); border-top: 1px solid var(--color-border); display: flex; flex-direction: column; gap: var(--space-2); }
+.odetail__bar-primary, .business-app .odetail__bar-primary { width: 100%; min-height: 52px; height: 52px; font-size: 18px; }
+.odetail__bar-row { display: flex; gap: var(--space-2); align-items: center; }
+.odetail__bar-row > .btn:not(.oc-iconbtn), .business-app .odetail__bar-row > .btn:not(.oc-iconbtn) { flex: 1 1 0; min-width: 0; min-height: 48px; height: 48px; padding-block: 0; padding-inline: var(--space-3); font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Phone: the fixed .dash__tabs bar (64px + safe area) owns the viewport bottom, so stick above it. */
+@media (max-width: 899px) { .odetail__bar { bottom: calc(var(--bottom-nav-height) + var(--safe-bottom)); padding-bottom: var(--space-3); } }
+@media (min-width: 900px) { .odetail__bar { margin-inline: 0; border: 1px solid var(--color-border); border-radius: var(--radius-card); } }
+.odetail__nav > .oc-iconbtn:last-child { margin-inline-start: auto; }
+
+/* ---------- ledger rows (label start / value end, tabular numerals, 1px rules, 8px grid) ---------- */
+.ledger { list-style: none; margin: 0; padding: 0; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-card); overflow: hidden; }
+.ledger__row { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); min-height: 72px; box-sizing: border-box; text-decoration: none; color: var(--color-text); border-top: 1px solid var(--color-border); }
+.ledger > li:first-child > .ledger__row { border-top: 0; }
+.ledger__row:hover { background: var(--color-bg); }
+.ledger__main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.ledger__line { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.ledger__ref { font-weight: 700; flex: none; font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate; }
+.ledger__name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ledger__sub { color: var(--color-text-muted); font-size: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ledger__end { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-2); text-align: end; }
+.ledger__amount { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ledger__time { color: var(--color-text-muted); font-size: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ledger__status { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.ledger__dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
+.ledger__status--placed { color: var(--color-accent-text); }
+.ledger__status--accepted { color: var(--color-success-text); }
+.ledger__status--rejected { color: var(--color-danger-text); }
+.ledger__chev { flex: none; color: var(--color-text-muted); display: inline-flex; }
+.summary-ledger .summary { border: 0; padding: 0; background: transparent; }
+.summary-ledger .summary__row { border-top: 1px solid var(--color-border); padding-block: var(--space-2); margin: 0; }
+.summary-ledger .summary__row > :last-child { font-variant-numeric: tabular-nums; }
+.summary-ledger .summary__row--total { padding-top: var(--space-3); }
+
+/* ---------- history filters ---------- */
+.hist-filters { display: flex; flex-direction: column; gap: var(--space-3); }
+.hist-filters__row { display: flex; gap: var(--space-2); align-items: flex-end; }
+.hist-filters__row > .field { flex: 1 1 auto; min-width: 0; }
+.hist-filters__row > .field:last-child { flex: 0 1 180px; }
+.hist-chips { display: flex; gap: var(--space-2); overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.hist-chips::-webkit-scrollbar { display: none; }
+.hist-chips .chip, .business-app .hist-chips .chip { min-height: 48px; height: 48px; flex: none; }
+.hist-count { margin: 0; color: var(--color-text-muted); font-size: var(--text-secondary); }
+.business-app .history-cards { gap: 0; }
+@media (max-width: 639px) { .business-app .history-cards { display: block; } }
+.history-table td.num-cell { text-align: end; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.business-app .pagination > .btn { flex: 1 1 auto; max-width: 480px; }
+@media (max-width: 639px) { .business-app .hist-filters__row { flex-wrap: wrap; } .business-app .hist-filters__row > .field:last-child { flex: 1 1 100%; } }
+
+/* ---------- incoming page header ---------- */
+/* Title row: "Incoming orders · N" inline, sound button at inline-end on the SAME row (phone too). */
+.incoming-head, .business-app .incoming-head { display: flex; flex-wrap: nowrap; align-items: center; gap: var(--space-2); min-height: 48px; margin-bottom: 0; }
+.incoming-head > h1, .business-app .incoming-head > h1 { flex: 0 1 auto; min-width: 0; margin: 0; }
+.incoming-head > .actions, .business-app .incoming-head > .actions { flex: 0 0 auto; margin-inline-start: auto; justify-content: flex-end; }
+.incoming-count { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; padding-inline: 8px; border-radius: 14px; background: var(--color-accent-bg); color: var(--color-accent-text); font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; flex: none; }
+.incoming-title .actions > .oc-iconbtn[aria-pressed='true'] { background: var(--color-soft); color: var(--color-primary); }
+
+/* ---------- order board (New → Preparing → Ready) ----------
+ * One column per kitchen stage, all three always side by side (phones included). Column identity = one hue
+ * each: New uses the accent (attention), Preparing the primary, Ready the success tone. Each column is an
+ * inline-size container: under 260px its cards switch to the compact form (`.oc-wide` hidden, `.oc-compact` shown). */
+.board-page { --board-new: var(--color-accent-text); --board-new-bg: var(--color-accent-bg); --board-preparing: var(--color-primary); --board-preparing-bg: color-mix(in srgb, var(--color-primary) 14%, var(--color-surface)); --board-ready: var(--color-success-text); --board-ready-bg: var(--color-success-bg); }
+.board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; align-items: start; }
+/* Phone: let the board reach 8px from the screen edges so each column gets ~120px instead of ~110px. */
+@media (max-width: 899px) { .board { margin-inline: calc(8px - var(--gutter)); } }
+.board__col { container: boardcol / inline-size; display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 4px; border-radius: 14px; background: var(--color-bg); border: 1px solid var(--color-border); min-height: 240px; }
+.board__col--new { --col-color: var(--board-new); --col-bg: var(--board-new-bg); }
+.board__col--preparing { --col-color: var(--board-preparing); --col-bg: var(--board-preparing-bg); }
+.board__col--ready { --col-color: var(--board-ready); --col-bg: var(--board-ready-bg); }
+/* Column head stays under the 64px dashboard header while a long column scrolls. */
+.board__head { position: sticky; top: 64px; z-index: 2; display: flex; align-items: center; gap: 6px; min-width: 0; padding: 8px 6px; border-radius: 10px; background: var(--col-bg); color: var(--col-color); }
+.board__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--col-color); flex: none; }
+.board__h2 { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 14px; font-weight: 700; color: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board__count { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; padding-inline: 7px; border-radius: 12px; background: var(--color-surface); color: var(--col-color); font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.board__list { display: flex; flex-direction: column; gap: 6px; }
+.board__empty { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); padding: var(--space-5) var(--space-2); border: 1px dashed var(--color-border-strong); border-radius: 12px; background: var(--color-surface); color: var(--color-text-muted); text-align: center; font-size: 13px; line-height: 1.3; overflow-wrap: anywhere; }
+.board__empty .icon { opacity: .5; }
+/* Stage stripe along the top edge of a card: the inset shadow follows the rounded corners. */
+.order-card--new { box-shadow: inset 0 3px 0 0 var(--board-new); }
+.order-card--preparing { box-shadow: inset 0 3px 0 0 var(--board-preparing); }
+.order-card--ready { box-shadow: inset 0 3px 0 0 var(--board-ready); }
+@media (min-width: 900px) {
+  .board { gap: var(--space-4); }
+  .board__col { gap: var(--space-3); padding: var(--space-3); border-radius: 20px; min-height: 360px; }
+  .board__list { gap: var(--space-3); }
+  .board__h2 { font-size: 16px; }
+  .board__empty { font-size: var(--text-secondary); }
+}
+@container boardcol (min-width: 260px) {
+  .board__head { flex-wrap: wrap; padding: 10px 12px; }
+}
+
+/* ---------- board card (.ocard): a tap target, not a receipt ----------
+ * Number + live minutes, fulfillment (+ table), customer + amount, notes flag, one primary action. Contents live on
+ * the detail page. `.oc-wide` / `.oc-compact` switch with the column width (container `boardcol`). */
+.oc-compact { display: none; }
+.business-app .order-card.ocard, .order-card.ocard { gap: var(--space-3); padding: 14px; min-width: 0; }
+.ocard__tap { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; cursor: pointer; margin: -4px; padding: 4px; border-radius: 10px; -webkit-tap-highlight-color: transparent; }
+@media (hover: hover) { .ocard__tap:hover { background: var(--color-bg); } }
+.ocard__tap:active { background: var(--color-soft); }
+.ocard__top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; min-width: 0; }
+.ocard__ref, .business-app .ocard__ref { display: inline-flex; align-items: center; min-height: 32px; font-size: 22px; font-weight: 800; line-height: 1.1; color: var(--color-text); text-decoration: none; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ocard__ref:hover { text-decoration: underline; }
+.ocard__ref:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; border-radius: 4px; }
+.ocard__mode { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--color-text-muted); font-size: 14px; font-weight: 600; }
+.ocard__mode > .icon { flex: none; }
+.ocard__mode-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ocard__table { flex: none; padding: 1px 8px; border-radius: 999px; background: var(--color-primary); color: var(--color-on-primary); font-size: 13px; font-weight: 700; white-space: nowrap; }
+.ocard__who { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); min-width: 0; }
+.ocard__name { min-width: 0; font-size: 16px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ocard__total { flex: none; font-size: 17px; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.order-card--ready .ocard__total { color: var(--color-success-text); }
+.ocard__flag { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 2px 8px; border-radius: 999px; background: var(--color-accent-bg); color: var(--color-accent-text); font-size: 12px; font-weight: 700; white-space: nowrap; }
+/* Actions stay quiet so the order number is what the eye lands on: the column's action is a solid primary button sized
+ * to its label (32px), and Reject/Undo, call and print are 32px icons pushed to inline-end of the same row. */
+.oc-slot { display: contents; }
+.ocard__actions { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.ocard .ocard__primary, .business-app .ocard .ocard__primary { flex: 0 1 auto; min-width: 0; width: auto; height: 32px; min-height: 32px; padding: 0 12px; gap: 6px; border-radius: 8px; font-size: 14px; font-weight: 600; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ocard .ocard__primary .icon { flex: none; width: 16px; height: 16px; }
+.ocard__actions > .ocard__primary + * { margin-inline-start: auto; }
+.ocard__actions .ocard__icon, .business-app .ocard__actions .ocard__icon, .ocard__actions .oc-iconbtn, .business-app .ocard__actions .oc-iconbtn { flex: 0 0 32px; width: 32px; min-width: 32px; height: 32px; min-height: 32px; padding: 0; gap: 0; border-radius: 8px; }
+.ocard__actions .ocard__icon .icon, .ocard__actions .oc-iconbtn .icon { width: 16px; height: 16px; }
+/* "Back to preparing": Preparing sits at inline-start of Ready, so the arrow must point there in RTL too. */
+[dir='rtl'] .oc-backbtn > .icon { transform: scaleX(-1); }
+
+@container boardcol (max-width: 259px) {
+  .oc-wide { display: none !important; }
+  .oc-compact { display: inline; }
+  .board__dot { display: none; }
+  .board__head { gap: 4px; padding-inline: 6px 4px; }
+  .business-app .order-card.ocard, .order-card.ocard { padding: 8px; gap: 8px; border-radius: 12px; }
+  .ocard__tap { gap: 6px; }
+  .ocard__top { gap: 4px; }
+  .ocard__ref, .business-app .ocard__ref { min-height: 24px; font-size: 18px; }
+  .ocard__top .elapsed { height: 24px; padding-inline: 7px; gap: 4px; font-size: 13px; }
+  .ocard__mode { gap: 4px; font-size: 12px; }
+  /* With a table number the chair icon already says "dine in"; the label would only push the table off the card. */
+  .ocard__mode--table .ocard__mode-text { display: none; }
+  .ocard__table { padding-inline: 6px; font-size: 12px; }
+  .ocard__who { flex-direction: column; align-items: flex-start; gap: 0; }
+  .ocard__name { max-width: 100%; font-size: 13px; }
+  .ocard__total { font-size: 15px; }
+  .ocard__flag { padding-inline: 6px; font-size: 11px; }
+  .ocard .ocard__primary, .business-app .ocard .ocard__primary { max-width: 100%; height: auto; min-height: 30px; padding: 3px 8px; gap: 4px; font-size: 12px; line-height: 1.15; white-space: normal; text-align: start; }
+  .ocard .ocard__primary .icon { width: 14px; height: 14px; }
+}
+.ledger__status--preparing { color: var(--color-primary); }
+.ledger__status--ready { color: var(--color-success-text); }
+.ledger__status--completed { color: var(--color-text-muted); }

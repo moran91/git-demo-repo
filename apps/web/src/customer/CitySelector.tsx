@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
 import type { City } from '@qareeb/shared';
 import { normalizeDigits } from '@qareeb/shared';
-import { Dialog, TextInput, Button, Alert } from '@/design/components';
+import { Dialog, TextInput } from '@/design/components';
+import { Icon } from '@/design/Icon';
 import { useI18n, useT } from '@/lib/i18n';
 import { useCities } from './hooks';
+import { LocationTrouble, type DeviceLocation } from './LocationBar';
 
-export function CitySelector({ open, onClose, value, onSelect, location }: { location?: { busy: boolean; error: string | null; detect: () => Promise<boolean | null> }; open: boolean; onClose: () => void; value: string; onSelect: (c: City) => void }) {
+export function CitySelector({ open, onClose, value, onSelect, location }: { location?: DeviceLocation; open: boolean; onClose: () => void; value: string; onSelect: (c: City) => void }) {
   const t = useT();
   const { L } = useI18n();
   const { cities, loading, error } = useCities();
@@ -18,7 +20,18 @@ export function CitySelector({ open, onClose, value, onSelect, location }: { loc
   return (
     <Dialog open={open} onClose={onClose} title={t('discovery.citySelectorTitle')}>
       <div className="stack">
-        {location ? <><Button variant="secondary" icon="pin" loading={location.busy} disabled={loading || !!error} onClick={() => { void location.detect().then((ok) => { if (ok) onClose(); }); }}>{t(location.busy ? 'location.finding' : 'location.use')}</Button><p className="muted">{t('location.hint')}</p>{location.error ? <Alert tone="warn">{location.error}</Alert> : null}</> : null}
+        {location ? (
+          <div className="stack stack--sm">
+            <button type="button" className="locrow" disabled={loading || !!error || location.busy} aria-busy={location.busy || undefined} onClick={() => { void location.detect().then((ok) => { if (ok) onClose(); }); }}>
+              <span className="locbar__icon"><Icon name="locate" size={20} /></span>
+              <span className="locbar__text">
+                <span className="locbar__name">{t(location.busy ? 'location.finding' : 'location.use')}</span>
+                <span className="locbar__label">{t('location.hint')}</span>
+              </span>
+            </button>
+            <LocationTrouble location={location} onRetry={() => { void location.detect().then((ok) => { if (ok) onClose(); }); }} />
+          </div>
+        ) : null}
         <TextInput label={t('discovery.citySearch')} value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
         {loading ? <div className="skeleton" style={{ height: 48 }} /> : null}
         {error ? <p className="muted" role="alert">{t('common.errorGeneric')}</p> : null}

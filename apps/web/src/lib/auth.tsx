@@ -6,7 +6,8 @@ import { auth, db } from './firebase';
 import { call } from './api';
 import { useI18n } from './i18n';
 import { clearCart } from './cart';
-import { disablePush } from './push';
+import { disablePush, syncPushToken } from './push';
+import { getRegistration } from './sw';
 
 interface AuthCtx {
   user: User | null;
@@ -71,6 +72,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const res = await call<{ profile: UserProfile }>('ensureProfile', { locale: localeRef.current });
         if (current !== generation) return;
         setProfile(res.profile);
+        // Sign-out deletes this device's token but leaves the browser permission granted, so a new
+        // session has to register again or it silently receives nothing.
+        void syncPushToken(u.uid, localeRef.current, getRegistration());
       } catch {
         if (current !== generation) return;
         setProfile(null);
@@ -83,13 +87,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!user) return;
+    // `profile?.uid` is in the deps on purpose: firestore.rules only allows this query once
+    // users/{uid} exists, which ensureProfile creates. A brand-new owner subscribed first, was
+    // denied, and the dashboard showed a load error for the rest of the session.
     const q = query(collection(db, 'memberships'), where('uid', '==', user.uid), where('active', '==', true));
     return onSnapshot(q, (snap) => { setMemberships(snap.docs.map((d) => d.data() as Membership)); setMembershipsError(null); setMembershipUid(user.uid); }, (error) => { setMemberships([]); setMembershipsError(error); setMembershipUid(user.uid); });
-  }, [user]);
+  }, [user, profile?.uid]);
 
   const signOut = useCallback(async () => {
     // Clear account-specific state on sign-out (cart, prefs stay device-local but are cleared for privacy).
     clearCart();
+    // The checkout form (name, phone, note, chosen address) lives in sessionStorage and survives a
+    // sign-out in the same tab, so the next person to sign in inherited it.
+    try {
+      sessionStorage.removeItem('qareeb.checkout.form');
+      sessionStorage.removeItem('qareeb.cart.quotedTotal');
+    } catch {
+      /* ignore */
+    }
     // Forgetting the token locally is not enough: it stays registered under the signed-out user, so
     // the server keeps pushing their notifications to this device. Unregister before losing auth.
     const uid = auth.currentUser?.uid;

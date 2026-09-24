@@ -1,7 +1,9 @@
 import { makeId, type Localized, type ModifierOption } from '@qareeb/shared';
 import { useT } from '@/lib/i18n';
-import { Button, TextInput, Checkbox, IconButton } from '@/design/components';
-import { LocalizedInput } from './CatalogPages';
+import { Button, Stepper } from '@/design/components';
+import { LocalizedInput, type Loc } from './LocalizedInput';
+import { LedgerRow, Switch } from './CatalogControls';
+import { EditLines, MoneyInput } from './EditLines';
 
 /** The editable content of an option group, shared by the product editor and the extras library. */
 export interface GroupDraft {
@@ -20,42 +22,53 @@ export function newGroupDraft(): GroupDraft {
   return { name: {}, required: false, minSelect: 0, maxSelect: 0, options: [newOption(0)] };
 }
 
-export function agorotInput(v: number) { return (v / 100).toString(); }
-export function parseAgorot(s: string) { const n = Number(s.replace(',', '.')); return Number.isFinite(n) ? Math.round(n * 100) : 0; }
+export { agorotInput, parseAgorot } from './EditLines';
 
-export function ModifierGroupFields({ value: g, onChange, foot }: { value: GroupDraft; onChange: (g: GroupDraft) => void; foot?: React.ReactNode }) {
+const SELECT_MAX = 30; // schemas.ts caps minSelect/maxSelect at 30
+
+/** "Required" is not a separate control: a group is required exactly when the customer must pick at
+ *  least one. Legacy groups stored `required` with minSelect 0, which meant the same as a minimum of 1. */
+export function effectiveMin(g: Pick<GroupDraft, 'required' | 'minSelect'>) { return g.required ? Math.max(1, g.minSelect) : g.minSelect; }
+
+export function ModifierGroupFields({ value: g, onChange, lang }: { value: GroupDraft; onChange: (g: GroupDraft) => void; lang: Loc }) {
   const t = useT();
   const set = (patch: Partial<GroupDraft>) => onChange({ ...g, ...patch });
+  const min = effectiveMin(g);
+  const setMin = (v: number) => set({ minSelect: v, required: v >= 1, maxSelect: g.maxSelect && g.maxSelect < v ? v : g.maxSelect });
+  // Max 0 means "no limit"; stepping a limit below the minimum pulls the minimum down with it.
+  const setMax = (v: number) => set({ maxSelect: v, ...(v > 0 && v < min ? { minSelect: v, required: v >= 1 } : {}) });
   const setOpt = (i: number, patch: Partial<ModifierOption>) => set({ options: g.options.map((o, k) => (k === i ? { ...o, ...patch } : o)) });
+  const optName = (o: ModifierOption) => o.name[lang] || t('catalog.option');
   return (
     <>
-      <div className="edit-row edit-row--plain">
-        <div className="edit-row__main">
-          <LocalizedInput label={t('common.name')} value={g.name} required onChange={(name) => set({ name })} />
-          <div className="form-row">
-            <Checkbox label={t('catalog.groupRequired')} checked={g.required} onChange={(e) => set({ required: e.target.checked, minSelect: e.target.checked ? Math.max(1, g.minSelect) : g.minSelect })} />
-            <TextInput label={t('catalog.minSelect')} type="number" ltr min={0} value={g.minSelect} onChange={(e) => set({ minSelect: Number(e.target.value) })} />
-            <TextInput label={t('catalog.maxSelect')} type="number" ltr min={0} value={g.maxSelect} onChange={(e) => set({ maxSelect: Number(e.target.value) })} />
-          </div>
-          <Checkbox label={t('catalog.groupPlacement')} checked={!!g.placement} onChange={(e) => set({ placement: e.target.checked })} />
+      <div className="pe-sec pe-sec--first">
+        <LocalizedInput lang={lang} label={t('common.name')} value={g.name} required onChange={(name) => set({ name })} />
+        <div className="pe-rule">
+          <div className="field"><span className="field__label">{t('catalog.atLeast')}</span><Stepper value={min} max={SELECT_MAX} onChange={setMin} decLabel={`${t('catalog.atLeast')}: ${t('common.decrease')}`} incLabel={`${t('catalog.atLeast')}: ${t('common.increase')}`} /></div>
+          <div className="field"><span className="field__label">{t('catalog.upToLabel')}</span><Stepper value={g.maxSelect} max={SELECT_MAX} onChange={setMax} format={(v) => (v === 0 ? '∞' : String(v))} decLabel={`${t('catalog.upToLabel')}: ${t('common.decrease')}`} incLabel={`${t('catalog.upToLabel')}: ${t('common.increase')}`} /></div>
         </div>
-        {foot ? <div className="edit-row__foot">{foot}</div> : null}
+        <div className="kvrow-list">
+          <LedgerRow label={t('catalog.groupPlacement')}><Switch checked={!!g.placement} label={t('catalog.groupPlacement')} onChange={(placement) => set({ placement })} /></LedgerRow>
+        </div>
       </div>
-      {g.options.map((o, oi) => (
-        <div key={o.id ?? oi} className="soft-block stack--sm stack">
-          <div className="edit-row edit-row--plain">
-            <div className="edit-row__main">
-              <LocalizedInput label={t('common.name')} value={o.name} required onChange={(name) => setOpt(oi, { name })} />
-              <div className="form-row">
-                <TextInput label={t('catalog.priceDelta')} type="number" ltr step="0.1" value={agorotInput(o.priceDeltaAgorot)} onChange={(e) => setOpt(oi, { priceDeltaAgorot: parseAgorot(e.target.value) })} />
-                <Checkbox label={t('catalog.available')} checked={o.available} onChange={(e) => setOpt(oi, { available: e.target.checked })} />
-              </div>
-            </div>
-            <div className="edit-row__foot"><IconButton icon="trash" label={t('common.remove')} disabled={g.options.length <= 1} onClick={() => set({ options: g.options.filter((_, k) => k !== oi) })} /></div>
-          </div>
+      <div className="pe-sec">
+        <div className="pe-sec__head">
+          <h3>{t('catalog.options')}</h3>
+          <Button variant="ghost" icon="plus" onClick={() => set({ options: [...g.options, newOption(g.options.length)] })}>{t('common.add')}</Button>
         </div>
-      ))}
-      <Button size="sm" variant="ghost" icon="plus" onClick={() => set({ options: [...g.options, newOption(g.options.length)] })}>{t('catalog.addOption')}</Button>
+        <EditLines
+          priceLabel={t('catalog.priceDelta')}
+          rows={g.options.map((o, oi) => ({
+            key: o.id ?? String(oi),
+            name: <LocalizedInput lang={lang} bare label={t('catalog.option')} value={o.name} required onChange={(name) => setOpt(oi, { name })} />,
+            price: <MoneyInput label={`${t('catalog.priceDelta')}: ${optName(o)}`} agorot={o.priceDeltaAgorot} onChange={(priceDeltaAgorot) => setOpt(oi, { priceDeltaAgorot })} />,
+            available: <Switch checked={o.available} label={`${t('catalog.available')}: ${optName(o)}`} onChange={(available) => setOpt(oi, { available })} />,
+            removeLabel: `${t('common.remove')}: ${optName(o)}`,
+            onRemove: g.options.length > 1 ? () => set({ options: g.options.filter((_, k) => k !== oi) }) : undefined,
+          }))}
+          onAddLast={() => set({ options: [...g.options, newOption(g.options.length)] })}
+        />
+      </div>
     </>
   );
 }

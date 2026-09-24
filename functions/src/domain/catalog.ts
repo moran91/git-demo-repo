@@ -1,7 +1,7 @@
 import { onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { z } from 'zod';
 import { MAX_PROMOTIONS, categoryInputSchema, cleanLocalized, comboInputSchema, idSchema, productInputSchema, promotionInputSchema, sharedModifierGroupInputSchema, makeId, type Branch, type Business, type Category, type Combo, type ModifierGroup, type Product, type Promotion, type SharedModifierGroup } from '@qareeb/shared';
-import { REGION, col, db, nowIso, storage } from '../lib/firebase.js';
+import { REGION, col, db, nowIso, storage, commitInChunks } from '../lib/firebase.js';
 import { handled, fail } from '../lib/errors.js';
 import { parse } from '../lib/validate.js';
 import { requireCaller, requireMembership } from '../lib/auth.js';
@@ -86,7 +86,7 @@ function materializeShared(g: Pick<ModifierGroup, 'id' | 'sortOrder'>, s: Shared
   return { id: g.id, sortOrder: g.sortOrder, sharedGroupId: s.id, name: s.name, required: s.required, minSelect: s.minSelect, maxSelect: s.maxSelect, options: s.options.map((o) => ({ ...o })), placement: s.placement };
 }
 
-function buildProduct(existing: Product | undefined, input: z.infer<typeof productInputSchema>, ids: { id: string; branchId: string; businessId: string }, now: string, shared: Map<string, SharedModifierGroup>): Product {
+function buildProduct(existing: Product | undefined, input: z.infer<typeof productInputSchema>, ids: { id: string; branchId: string; businessId: string }, now: string, shared: Map<string, SharedModifierGroup>, defaultSortOrder = 0): Product {
   if (input.pricingMode === 'weight' && input.variants.length > 0) fail('invalid_argument', { issues: [{ path: 'variants', message: 'weight_items_cannot_have_variants' }] });
   if (input.pricingMode === 'weight' && input.modifierGroups.length > 0) fail('invalid_argument', { issues: [{ path: 'modifierGroups', message: 'weight_items_cannot_have_modifiers' }] });
   const variants = input.variants.map((v, i) => ({ ...v, id: v.id ?? makeId(8), name: cleanLocalized(v.name), sortOrder: v.sortOrder ?? i }));
@@ -137,7 +137,7 @@ function buildProduct(existing: Product | undefined, input: z.infer<typeof produ
     stockQty: input.trackInventory ? (existing?.trackInventory ? existing.stockQty ?? input.stockQty ?? 0 : input.stockQty ?? 0) : undefined,
     mostOrdered: input.mostOrdered ?? false,
     archived: existing?.archived ?? false,
-    sortOrder: input.sortOrder ?? existing?.sortOrder ?? 0,
+    sortOrder: input.sortOrder ?? existing?.sortOrder ?? defaultSortOrder,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   };
@@ -154,16 +154,20 @@ export const saveProduct = onCall(opts, handled(async (req: CallableRequest<unkn
     if (!catSnap.exists) fail('invalid_argument', { issues: [{ path: 'categoryId', message: 'unknown_category' }] });
     const existingSnap = await tx.get(ref);
     if (input.productId && !existingSnap.exists) fail('not_found');
+    // A new product goes to the end of the menu. Without this every product ties at sortOrder 0 and
+    // the orderBy('sortOrder') lists fall back to document-id order, i.e. an arbitrary menu.
+    let nextSortOrder = 0;
     if (!input.productId) {
       const count = await tx.get(col.products(input.businessId, input.branchId).limit(1000));
       if (count.size >= 1000) fail('invalid_argument', { issues: [{ path: 'product', message: 'too_many_products' }] });
+      nextSortOrder = count.docs.reduce((next, doc) => Math.max(next, (doc.data().sortOrder ?? 0) + 1), 0);
     }
     const existing = existingSnap.data() as Product | undefined;
     const sharedIds = [...new Set(input.product.modifierGroups.map((g) => g.sharedGroupId).filter((x): x is string => !!x))];
     const sharedSnaps = await Promise.all(sharedIds.map((id) => tx.get(col.modifierGroups(input.businessId, input.branchId).doc(id))));
     const shared = new Map(sharedSnaps.filter((s) => s.exists).map((s) => [s.id, s.data() as SharedModifierGroup]));
     const now = nowIso();
-    const p = buildProduct(existing, input.product, { id: ref.id, branchId: input.branchId, businessId: input.businessId }, now, shared);
+    const p = buildProduct(existing, input.product, { id: ref.id, branchId: input.branchId, businessId: input.businessId }, now, shared, nextSortOrder);
     tx.set(ref, p);
     projectProductInTx(tx, ctx.business, ctx.branch, p);
     return p;
@@ -183,6 +187,23 @@ export const setProductArchived = onCall(opts, handled(async (req: CallableReque
     const p = { ...(snap.data() as Product), archived: input.archived, updatedAt: nowIso() };
     tx.set(ref, p);
     projectProductInTx(tx, ctx.business, ctx.branch, p);
+  });
+  return { ok: true };
+}));
+
+/** Change availability without overwriting another editor's product fields. */
+export const setProductAvailable = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
+  const c = await requireCaller(req);
+  const input = parse(z.object({ businessId: idSchema, branchId: idSchema, productId: idSchema, available: z.boolean() }).strict(), req.data);
+  await requireMembership(c, input.businessId, [...CATALOG_ROLES], input.branchId);
+  await db.runTransaction(async (tx) => {
+    const ctx = await loadContext(tx, input.businessId, input.branchId);
+    const ref = col.products(input.businessId, input.branchId).doc(input.productId);
+    const snap = await tx.get(ref);
+    if (!snap.exists) fail('not_found');
+    const product = { ...(snap.data() as Product), available: input.available, updatedAt: nowIso() };
+    tx.set(ref, product);
+    projectProductInTx(tx, ctx.business, ctx.branch, product);
   });
   return { ok: true };
 }));
@@ -273,32 +294,43 @@ export const copyToBranch = onCall(opts, handled(async (req: CallableRequest<unk
   await requireMembership(c, input.businessId, [...CATALOG_ROLES], input.fromBranchId);
   await requireMembership(c, input.businessId, [...CATALOG_ROLES], input.toBranchId);
   if (input.fromBranchId === input.toBranchId) fail('invalid_argument', { issues: [{ path: 'toBranchId', message: 'same_branch' }] });
-  const [srcCats, srcProds, dstCats] = await Promise.all([
+  const [srcCats, srcProds, dstCats, dstProds, destination] = await Promise.all([
     col.categories(input.businessId, input.fromBranchId).where('archived', '==', false).get(),
     input.productId ? col.products(input.businessId, input.fromBranchId).doc(input.productId).get().then((s) => (s.exists ? [s] : [])) : col.products(input.businessId, input.fromBranchId).where('archived', '==', false).get().then((q) => q.docs),
     col.categories(input.businessId, input.toBranchId).get(),
+    col.products(input.businessId, input.toBranchId).get(),
+    col.branch(input.businessId, input.toBranchId).get(),
   ]);
+  if (!destination.exists) fail('not_found');
   if (input.productId && srcProds.length === 0) fail('not_found');
+  if (dstProds.size + srcProds.length > 1000) fail('invalid_argument', { issues: [{ path: 'product', message: 'too_many_products' }] });
   const now = nowIso();
-  const batch = db.batch();
+  // Queued and committed in chunks: one batch is capped at 500 operations, and a branch can hold 1000
+  // products, so a full copy used to fail outright with a generic error.
+  const ops: Array<(batch: FirebaseFirestore.WriteBatch) => void> = [];
   // Map source categories to destination categories by identical name (create when missing).
-  const dstByName = new Map(dstCats.docs.map((d) => [JSON.stringify((d.data() as Category).name), d.id]));
+  const nameKey = (name: Category['name']) => JSON.stringify(Object.entries(name).sort(([a], [b]) => a.localeCompare(b)));
+  const dstByName = new Map(dstCats.docs.filter((d) => !d.data().archived).map((d) => [nameKey((d.data() as Category).name), d.id]));
   const catMap = new Map<string, string>();
-  let sort = dstCats.size;
-  for (const d of srcCats.docs) {
+  let sort = dstCats.docs.reduce((next, d) => Math.max(next, (d.data().sortOrder ?? 0) + 1), 0);
+  let productSort = dstProds.docs.reduce((next, d) => Math.max(next, (d.data().sortOrder ?? 0) + 1), 0);
+  const usedCategories = new Set(srcProds.map((d) => (d.data() as Product).categoryId));
+  for (const d of [...srcCats.docs].sort((a, b) => a.data().sortOrder - b.data().sortOrder)) {
     const cat = d.data() as Category;
-    const key = JSON.stringify(cat.name);
+    if (!usedCategories.has(cat.id)) continue;
+    const key = nameKey(cat.name);
     let id = dstByName.get(key);
     if (!id) {
       const ref = col.categories(input.businessId, input.toBranchId).doc();
       id = ref.id;
-      batch.set(ref, { ...cat, id, branchId: input.toBranchId, sortOrder: sort++ } satisfies Category);
+      const cs = { ...cat, id, branchId: input.toBranchId, sortOrder: sort++ } satisfies Category;
+      ops.push((b) => b.set(ref, cs));
       dstByName.set(key, id);
     }
     catMap.set(cat.id, id);
   }
   let copied = 0;
-  for (const d of srcProds) {
+  for (const d of [...srcProds].sort((a, b) => (a.data() as Product).sortOrder - (b.data() as Product).sortOrder)) {
     const p = d.data() as Product;
     const ref = col.products(input.businessId, input.toBranchId).doc();
     const categoryId = catMap.get(p.categoryId);
@@ -306,10 +338,12 @@ export const copyToBranch = onCall(opts, handled(async (req: CallableRequest<unk
     // Images are not duplicated (tenant path is branch-scoped); the copy starts without a photo.
     // Library links are branch-scoped; the copy keeps the current content as independent groups.
     const modifierGroups = p.modifierGroups.map(({ sharedGroupId: _s, ...g }) => g);
-    batch.set(ref, { ...p, id: ref.id, branchId: input.toBranchId, categoryId, modifierGroups, imagePath: undefined, stockQty: p.trackInventory ? 0 : undefined, createdAt: now, updatedAt: now } satisfies Product);
+    const variants = p.variants.map((v) => ({ ...v, stockQty: p.trackInventory ? 0 : undefined }));
+    const next = { ...p, id: ref.id, branchId: input.toBranchId, categoryId, modifierGroups, variants, sortOrder: productSort++, imagePath: undefined, stockQty: p.trackInventory ? 0 : undefined, createdAt: now, updatedAt: now } satisfies Product;
+    ops.push((b) => b.set(ref, next));
     copied++;
   }
-  await batch.commit();
+  await commitInChunks(ops);
   await reprojectCatalog(input.businessId, input.toBranchId);
   return { copied };
 }));
@@ -347,9 +381,11 @@ export const saveSharedModifierGroup = onCall(opts, handled(async (req: Callable
     await loadContext(tx, input.businessId, input.branchId);
     const existingSnap = await tx.get(ref);
     if (input.groupId && !existingSnap.exists) fail('not_found');
+    let nextSortOrder = 0;
     if (!input.groupId) {
       const count = await tx.get(col.modifierGroups(input.businessId, input.branchId).limit(200));
       if (count.size >= 200) fail('invalid_argument', { issues: [{ path: 'group', message: 'too_many_groups' }] });
+      nextSortOrder = count.docs.reduce((next, doc) => Math.max(next, (doc.data().sortOrder ?? 0) + 1), 0);
     }
     const existing = existingSnap.data() as SharedModifierGroup | undefined;
     const options = input.group.options.map((o, j) => ({ ...o, id: o.id ?? makeId(8), name: cleanLocalized(o.name), sortOrder: o.sortOrder ?? j }));
@@ -365,7 +401,7 @@ export const saveSharedModifierGroup = onCall(opts, handled(async (req: Callable
       maxSelect: input.group.maxSelect,
       options,
       placement: input.group.placement,
-      sortOrder: input.group.sortOrder ?? existing?.sortOrder ?? 0,
+      sortOrder: input.group.sortOrder ?? existing?.sortOrder ?? nextSortOrder,
       archived: existing?.archived ?? false,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
@@ -426,6 +462,11 @@ export const saveCombo = onCall(opts, handled(async (req: CallableRequest<unknow
     const ctx = await loadContext(tx, input.businessId, input.branchId);
     const existingSnap = await tx.get(ref);
     if (input.comboId && !existingSnap.exists) fail('not_found');
+    let nextSortOrder = 0;
+    if (!input.comboId) {
+      const count = await tx.get(col.combos(input.businessId, input.branchId).limit(100));
+      nextSortOrder = count.docs.reduce((next, doc) => Math.max(next, (doc.data().sortOrder ?? 0) + 1), 0);
+    }
     // Every bundled item must be a live, unit-priced product of this branch (weight items cannot be bundled).
     const seen = new Set<string>();
     let sum = 0;
@@ -457,7 +498,7 @@ export const saveCombo = onCall(opts, handled(async (req: CallableRequest<unknow
       promoted: input.combo.promoted,
       active: input.combo.active,
       archived: existing?.archived ?? false,
-      sortOrder: input.combo.sortOrder ?? existing?.sortOrder ?? 0,
+      sortOrder: input.combo.sortOrder ?? existing?.sortOrder ?? nextSortOrder,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
@@ -533,7 +574,7 @@ export const setComboImage = onCall(opts, handled(async (req: CallableRequest<un
     tx.set(ref, next);
     projectComboInTx(tx, ctx.business, ctx.branch, next);
   });
-  if (removed) await storage.bucket().file(removed).delete({ ignoreNotFound: true }).catch(() => undefined);
+  if (removed) await deleteImageWithVariants(removed);
   return { ok: true };
 }));
 
@@ -632,4 +673,3 @@ export const setPromotionImage = onCall(opts, handled(async (req: CallableReques
   if (removed) await deleteImageWithVariants(removed);
   return { ok: true };
 }));
-

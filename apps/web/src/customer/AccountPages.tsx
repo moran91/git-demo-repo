@@ -74,7 +74,7 @@ export function AccountPage() {
           </nav>
           <section className="card stack">
             <h2>{t('account.notifications')}</h2>
-            {push === 'granted' ? <Alert tone="success">{t('account.pushEnabled')}</Alert> : push === 'denied' ? <Alert tone="warn">{t('account.pushDenied')}</Alert> : push === 'unsupported' || push === 'not_configured' ? <Alert tone="info">{t('account.pushUnsupported')}</Alert> : <Button variant="secondary" icon="bell" onClick={async () => setPush(await enablePush(user.uid, locale, getRegistration()))}>{t('account.pushEnable')}</Button>}
+            {push === 'granted' ? <Alert tone="success">{t('account.pushEnabled')}</Alert> : push === 'denied' ? <Alert tone="warn">{t('account.pushDenied')}</Alert> : push === 'unsupported' || push === 'not_configured' ? <Alert tone="info">{t('account.pushUnsupported')}</Alert> : <Button variant="secondary" icon="bell" onClick={async () => { try { setPush(await enablePush(user.uid, locale, getRegistration())); } catch (e) { toast(t(errorKey(e)), 'danger'); } }}>{t('account.pushEnable')}</Button>}
             <p className="muted">{t('account.pushHint')}</p>
           </section>
           <Button variant="secondary" icon="logout" onClick={() => setConfirmOut(true)}>{t('common.signOut')}</Button>
@@ -233,6 +233,9 @@ export function NotificationsPage() {
   );
 }
 
+/** Server reason codes on ledger entries; free-text staff reasons are internal and not shown to customers. */
+const LEDGER_REASON: Record<string, string> = { rejected: 'orders.status.rejected', revision_cap: 'orders.revised' };
+
 export function LoyaltyPage() {
   const t = useT();
   const { L, locale } = useI18n();
@@ -261,9 +264,17 @@ export function LoyaltyPage() {
       {ledger.data.length > 0 ? (
         <section className="stack--sm stack">
           <h2>{t('account.loyaltyHistory')}</h2>
-          <div className="table-wrap"><table className="table"><thead><tr><th>{t('common.date')}</th><th>{t('common.name')}</th><th>{t('admin.points')}</th><th>{t('common.reason')}</th></tr></thead><tbody>
-            {ledger.data.map((e) => <tr key={e.id}><td><bdi>{formatLocalDateTime(e.at, locale)}</bdi></td><td>{bizName(e.businessId)}</td><td className="num">{e.points !== 0 ? (e.points > 0 ? `+${e.points}` : e.points) : e.reservedDelta > 0 ? `(${e.reservedDelta})` : `(${e.reservedDelta})`}</td><td>{t(`loyalty.entry.${e.type}` as never)}{e.reason ? ` · ${e.reason}` : ''}</td></tr>)}
-          </tbody></table></div>
+          <ul className="card ledger-list">
+            {ledger.data.map((e) => (
+              <li key={e.id} className="ledger-row">
+                <div className="list__grow">
+                  <div>{t(`loyalty.entry.${e.type}` as never)}{e.reason && LEDGER_REASON[e.reason] ? <span className="muted"> · {t(LEDGER_REASON[e.reason] as never)}</span> : null}</div>
+                  <div className="muted">{bizName(e.businessId)} · <bdi>{formatLocalDateTime(e.at, locale)}</bdi></div>
+                </div>
+                <bdi className="num ledger-row__pts">{e.points !== 0 ? (e.points > 0 ? `+${e.points}` : e.points) : `(${e.reservedDelta})`}</bdi>
+              </li>
+            ))}
+          </ul>
         </section>
       ) : null}
     </div>

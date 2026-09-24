@@ -5,6 +5,7 @@ import { useI18n, useT } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
 import { useCollection, where, limit } from '@/lib/queries';
 import { EmptyState, Skeleton, Badge, Button, toast } from '@/design/components';
+import { Icon } from '@/design/Icon';
 import { errorKey } from '@/lib/errors';
 import { LoadError } from './BusinessExperience';
 import { LanguageSelect } from '@/app/Shell';
@@ -27,19 +28,31 @@ export function BusinessHome() {
   if (membershipsError || businesses.error) return <main className="page"><LoadError /></main>;
   if (!user) return null;
   return (
-    <main className="page stack">
-      <div className="row row--between"><h1>{t('dash.title')}</h1><LanguageSelect compact /></div>
+    <main className="page stack home">
+      <div className="home__head"><h1>{t('dash.title')}</h1><LanguageSelect compact /></div>
       {memberships.length === 0 ? (
-        <EmptyState icon="store" title={t('dash.noBusiness')} action={<div className="row"><Link className="btn btn--primary" to="/business/new">{t('dash.createBusiness')}</Link>{isAdmin ? <Link className="btn btn--secondary" to="/admin">{t('nav.admin')}</Link> : null}<Link className="btn btn--ghost" to="/">{t('common.goHome')}</Link></div>} />
+        <EmptyState icon="store" title={t('dash.noBusiness')} action={<div className="home__actions"><Link className="btn btn--primary" to="/business/new">{t('dash.createBusiness')}</Link>{isAdmin ? <Link className="btn btn--secondary" to="/admin">{t('nav.admin')}</Link> : null}<Link className="btn btn--ghost" to="/">{t('common.goHome')}</Link></div>} />
       ) : (
         <ul className="grid-cards">
           {businesses.data.map((b) => (
-            <li key={b.id}><Link to={`/business/${b.id}`} className="card card--interactive stack--sm stack" style={{ display: 'flex', textDecoration: 'none', color: 'inherit' }}><strong>{L(b.name, b.defaultLocale)}</strong><span className="muted">{b.type === 'restaurant' ? t('common.restaurant') : t('common.supermarket')}</span><Badge tone={b.approval === 'approved' ? 'success' : b.approval === 'pending' ? 'accent' : 'danger'}>{t(`admin.state.${b.approval}`)}</Badge></Link></li>
+            <li key={b.id}>
+              <Link to={`/business/${b.id}`} className="card card--interactive home__card">
+                <span className="dash__identity-mark" aria-hidden="true">{L(b.name, b.defaultLocale).trim().charAt(0)}</span>
+                <span className="home__card-text">
+                  <strong className="truncate">{L(b.name, b.defaultLocale)}</strong>
+                  <span className="muted">{b.type === 'restaurant' ? t('common.restaurant') : t('common.supermarket')}</span>
+                  <Badge tone={b.approval === 'approved' ? 'success' : b.approval === 'pending' ? 'accent' : 'danger'}>{t(`admin.state.${b.approval}`)}</Badge>
+                </span>
+                <Icon name="chevron" size={20} directional className="icon icon--dir home__card-chev" />
+              </Link>
+            </li>
           ))}
         </ul>
       )}
-      {memberships.length > 0 ? <div className="row"><Link className="btn btn--ghost" to="/business/new">{t('dash.createBusiness')}</Link></div> : null}
-      <Button variant="ghost" onClick={() => void signOut().catch((err) => toast(t(errorKey(err)), 'danger'))}>{t('common.signOut')}</Button>
+      <div className="home__actions">
+        {memberships.length > 0 ? <Link className="btn btn--secondary" to="/business/new">{t('dash.createBusiness')}</Link> : null}
+        <Button variant="ghost" onClick={() => void signOut().catch((err) => toast(t(errorKey(err)), 'danger'))}>{t('common.signOut')}</Button>
+      </div>
     </main>
   );
 }

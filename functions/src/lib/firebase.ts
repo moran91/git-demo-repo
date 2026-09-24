@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from 'firebase-admin/app';
-import { getFirestore, FieldValue, Timestamp, type Transaction } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue, Timestamp, type Transaction, type WriteBatch } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { getMessaging } from 'firebase-admin/messaging';
 import { getStorage } from 'firebase-admin/storage';
@@ -13,6 +13,19 @@ export const messaging = getMessaging();
 export const storage = getStorage();
 export { FieldValue, Timestamp };
 export type Tx = Transaction;
+
+/**
+ * Commits queued writes in batches that stay under Firestore's 500-operation limit. A single batch
+ * over that limit is rejected outright, which used to take down a whole reprojection or catalog copy
+ * for any branch with a few hundred products.
+ */
+export async function commitInChunks(ops: Array<(batch: WriteBatch) => void>, size = 450): Promise<void> {
+  for (let i = 0; i < ops.length; i += size) {
+    const batch = db.batch();
+    for (const op of ops.slice(i, i + size)) op(batch);
+    await batch.commit();
+  }
+}
 
 export const REGION = process.env.FUNCTIONS_REGION || 'me-west1';
 export const APP_ORIGIN = process.env.APP_ORIGIN || 'http://localhost:5173';

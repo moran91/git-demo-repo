@@ -77,8 +77,18 @@ service cloud.firestore {
       }
       match /deviceTokens/{token} {
         allow read: if activeUser() && uid() == userId;
-        allow create, update: if activeUser() && uid() == userId
+        allow create: if activeUser() && uid() == userId
           && request.resource.data.keys().hasOnly(['token', 'uid', 'platform', 'locale', 'createdAt', 'lastSeenAt', 'invalid'])
+          && request.resource.data.uid == userId
+          && request.resource.data.token == token
+          && request.resource.data.platform in ['web', 'android', 'ios']
+          && request.resource.data.invalid is bool;
+        // On update the key check must look at what CHANGES, not at the merged document: the server
+        // adds `invalidatedAt` when a send fails, and hasOnly() on the whole document then rejected
+        // every later re-registration, so the device stopped receiving notifications for good.
+        allow update: if activeUser() && uid() == userId
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['token', 'uid', 'platform', 'locale', 'createdAt', 'lastSeenAt', 'invalid'])
           && request.resource.data.uid == userId
           && request.resource.data.token == token
           && request.resource.data.platform in ['web', 'android', 'ios']

@@ -3,14 +3,16 @@ import { buildOrderReceipt, type Order, type PrinterConfig, type ReceiptModel } 
 import { useT } from '@/lib/i18n';
 import { useCollection, where, limit } from '@/lib/queries';
 import { Button, Dialog, Select, TextInput, Alert, toast } from '@/design/components';
+import { Icon } from '@/design/Icon';
 import { call, newIdempotencyKey, ApiError } from '@/lib/api';
 import { errorKey } from '@/lib/errors';
 import { useDash } from './shell';
 import { OsPrintTrigger } from '@/print/OsPrint';
 import { ReceiptPreview } from './PrintersPage';
 
-/** Print order / Reprint: enqueues an authorised job for a branch printer, or uses the OS print dialog. */
-export function PrintOrderButton({ order }: { order: Order }) {
+/** Print order / Reprint: enqueues an authorised job for a branch printer, or uses the OS print dialog.
+ * `iconOnly` renders a 48px square icon control whose accessible name is still "Print order". */
+export function PrintOrderButton({ order, iconOnly }: { order: Order; iconOnly?: boolean }) {
   const t = useT();
   const { business, branch } = useDash();
   const printers = useCollection<PrinterConfig>('printers', [where('businessId', '==', business.id), where('branchId', '==', branch.id), where('active', '==', true), limit(10)], [branch.id]);
@@ -50,8 +52,12 @@ export function PrintOrderButton({ order }: { order: Order }) {
   });
   return (
     <>
-      <Button size="sm" variant="secondary" icon="printer" onClick={() => setOpen(true)}>{t('dash.printOrder')}</Button>
-      <Dialog open={open} onClose={() => { setOpen(false); setDup(null); }} title={t('dash.printOrder')} sheet={false}>
+      {iconOnly ? (
+        <button type="button" className="oc-iconbtn" aria-label={t('dash.printOrder')} title={t('dash.printOrder')} onClick={() => setOpen(true)}><Icon name="printer" size={22} /></button>
+      ) : (
+        <Button size="sm" variant="secondary" icon="printer" onClick={() => setOpen(true)}>{t('dash.printOrder')}</Button>
+      )}
+      <Dialog open={open} onClose={() => { setOpen(false); setDup(null); }} title={t('dash.printOrder')}>
         <div className="stack">
           <Select label={t('printers.title')} value={selected?.id ?? ''} onChange={(e) => setPrinterId(e.target.value)}>
             {printers.data.map((p) => <option key={p.id} value={p.id}>{p.name} · {t(`printers.transport.${p.transport}`)}</option>)}
@@ -63,13 +69,11 @@ export function PrintOrderButton({ order }: { order: Order }) {
               <div className="stack--sm stack" style={{ marginTop: 8 }}><TextInput label={t('printers.reprintReason')} value={reason} onChange={(e) => setReason(e.target.value)} /><Button size="sm" loading={busy} onClick={() => enqueue(true)}>{t('dash.reprint')}</Button></div>
             </Alert>
           ) : null}
-          <div className="row">
+          <div className="odetail__actions">
             <Button loading={busy} disabled={!selected || selected.transport === 'os_print_dialog'} onClick={() => enqueue(false)} icon="printer">{selected?.transport === 'android_rfcomm' ? t('printers.sendToStation') : t('dash.printOrder')}</Button>
             <Button variant="secondary" icon="eye" onClick={() => setPreview(localModel())}>{t('printers.preview')}</Button>
             <Button variant="secondary" icon="download" onClick={() => setOsModel(localModel())}>{t('printers.transport.os_print_dialog')}</Button>
           </div>
-          <p className="muted">{t('printers.osHint')}</p>
-          {order.status === 'placed' ? <p className="muted">{t('receipt.awaitingAcceptance')} — {t('printers.autoHint')}</p> : null}
         </div>
       </Dialog>
       {osModel ? <OsPrintTrigger model={osModel} onDone={() => setOsModel(null)} /> : null}

@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@qareeb/shared": "*",
-    "firebase": "^12.18.0",
+    "firebase": "^12.19.0",
     "leaflet": "^1.9.4",
     "libheif-js": "^1.23.2",
     "qrcode": "^1.5.4",

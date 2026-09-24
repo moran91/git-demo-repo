@@ -69,16 +69,17 @@ jobs:
           npm run typecheck
           npm test -w packages/shared
 
+      - name: Build web app (production preflight)
+        if: ${{ github.event_name == 'push' || inputs.target != 'rules-only' }}
+        run: npm run build -w apps/web
+
       - name: Rules, indexes, Storage rules
+        if: ${{ github.event_name == 'push' || inputs.target != 'hosting-only' }}
         run: npx --yes firebase-tools@15 deploy --only firestore:rules,firestore:indexes,storage --project "$PROJECT_ID" --non-interactive
 
       - name: Cloud Functions
         if: ${{ github.event_name == 'push' || inputs.target == 'everything' }}
         run: npx --yes firebase-tools@15 deploy --only functions --project "$PROJECT_ID" --non-interactive --force
-
-      - name: Build web app (production preflight)
-        if: ${{ github.event_name == 'push' || inputs.target != 'rules-only' }}
-        run: npm run build -w apps/web
 
       - name: Hosting
         if: ${{ github.event_name == 'push' || inputs.target != 'rules-only' }}

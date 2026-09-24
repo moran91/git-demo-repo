@@ -9,8 +9,8 @@ setGlobalOptions({ region: REGION, maxInstances: 20, concurrency: 40 });
 
 export { ensureProfile, saveAddress, deleteAddress, setDefaultAddress, updateProfile } from './domain/users.js';
 export { createBusiness, updateBusiness, setBusinessImage, setLoyaltyRules, createBranch, updateBranch, setOrdersPaused, inviteMember, getInvitation, acceptInvitation, updateMembership, listMembers } from './domain/businesses.js';
-export { saveCategory, setCategoryArchived, reorderCategories, saveProduct, setProductArchived, reorderProducts, adjustStock, setProductImage, copyToBranch, saveSharedModifierGroup, setSharedModifierGroupArchived, setProductMostOrdered, saveCombo, setComboArchived, deleteCombo, setComboImage, savePromotion, removePromotion, setPromotionImage } from './domain/catalog.js';
-export { quoteOrder, placeOrder, decideOrder, reviseOrder, recordCash, reverseCash } from './domain/orders.js';
+export { saveCategory, setCategoryArchived, reorderCategories, saveProduct, setProductAvailable, setProductArchived, reorderProducts, adjustStock, setProductImage, copyToBranch, saveSharedModifierGroup, setSharedModifierGroupArchived, setProductMostOrdered, saveCombo, setComboArchived, deleteCombo, setComboImage, savePromotion, removePromotion, setPromotionImage } from './domain/catalog.js';
+export { quoteOrder, placeOrder, decideOrder, advanceOrder, reviseOrder, recordCash, reverseCash } from './domain/orders.js';
 export { savePrinter, deactivatePrinter, markPrinterVerified, registerStation, stationHeartbeat, releaseStation, enqueuePrint, claimPrintJob, reportPrintAttempt, resolvePrintJob } from './domain/printing.js';
 export { decideApproval, setUserSuspended, inviteOwner, saveCity, adminAdjustLoyalty, adminReverseCash, moderateProduct, setPlatformConfig, getAdminMetrics, adminListUsers } from './domain/admin.js';
 export { whatsappStart, whatsappCheck, authOptions } from './domain/whatsapp.js';

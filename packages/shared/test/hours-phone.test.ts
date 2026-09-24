@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateOpen, toLocal, EMPTY_WEEK } from '../src/hours.js';
+import { evaluateOpen, toLocal, startOfLocalDay, EMPTY_WEEK } from '../src/hours.js';
 import { normalizeIsraeliPhone, formatPhoneDisplay } from '../src/phone.js';
 import { resolveLocalized } from '../src/localize.js';
 
 describe('opening hours in Asia/Jerusalem', () => {
+  it('finds midnight using the pre-transition offset on both DST change days', () => {
+    expect(startOfLocalDay(new Date('2026-03-27T12:00:00Z')).toISOString()).toBe('2026-03-26T22:00:00.000Z');
+    expect(startOfLocalDay(new Date('2026-10-25T12:00:00Z')).toISOString()).toBe('2026-10-24T21:00:00.000Z');
+    expect(startOfLocalDay(new Date('2026-07-05T21:15:12Z')).toISOString()).toBe('2026-07-05T21:00:00.000Z');
+  });
   const hours = { ...EMPTY_WEEK, '0': [{ startMin: 540, endMin: 1320 }], '4': [{ startMin: 1080, endMin: 1560 }] }; // Sun 09:00-22:00, Thu 18:00-02:00
   it('handles DST: 2026-07-05 (Sunday, UTC+3) 07:30Z = 10:30 local → open', () => {
     expect(evaluateOpen(new Date('2026-07-05T07:30:00Z'), hours).open).toBe(true);

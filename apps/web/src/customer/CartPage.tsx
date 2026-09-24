@@ -16,6 +16,8 @@ import type { PublicBranch, PublicBusiness } from './hooks';
 import type { PublicProduct } from './BusinessPage';
 import type { CartLine, FulfillmentMode } from '@qareeb/shared';
 
+const MODE_ERRORS = new Set(['below_minimum', 'delivery_not_available', 'pickup_not_available', 'dine_in_not_available']);
+
 export function CartPage() {
   const t = useT();
   const { L, locale } = useI18n();
@@ -31,7 +33,10 @@ export function CartPage() {
   const cart = state.cart;
   const problems = (error?.details.problems as Array<{ lineId: string; code: string; expected?: number; actual?: number }> | undefined) ?? [];
   const problemFor = (lineId: string) => problems.find((p) => p.lineId === lineId);
-  const canCheckout = !!quote && !error;
+  // The fulfillment mode is chosen at checkout, so a problem that only applies to the cart's current mode (under the
+  // delivery minimum, delivery not offered to this town…) must not trap the customer here: pickup or dine-in may be fine.
+  const modeOnly = !!error && MODE_ERRORS.has(error.code);
+  const canCheckout = (!!quote && !error) || modeOnly;
   const dl = state.meta.businessDefaultLocale;
   return (
     <div className="stack">

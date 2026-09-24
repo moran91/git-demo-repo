@@ -1,8 +1,9 @@
 import { Route, Routes, Navigate } from 'react-router';
 import { DashboardShell } from './shell';
 import { BusinessHome } from './BusinessHome';
+import { MorePage } from './MorePage';
 import { IncomingOrdersPage, OrderHistoryPage, OrderDetailPage } from './OrdersPages';
-import { CatalogPage } from './CatalogPages';
+import { CatalogPage } from './CatalogList';
 import { ExtrasLibraryPage } from './ExtrasLibraryPage';
 import { BranchSettingsPage, NewBranchPage, BusinessProfilePage, StaffPage, LoyaltySettingsPage, CashRecordsPage, NewBusinessPage } from './SettingsPages';
 import { PrintersPage } from './PrintersPage';
@@ -40,6 +41,7 @@ export function BusinessRoutes() {
         <Route path="staff" element={<StaffPage />} />
         <Route path="business" element={<BusinessProfilePage />} />
         <Route path="qr" element={<QrPage />} />
+        <Route path="more" element={<MorePage />} />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes></BusinessExperience>

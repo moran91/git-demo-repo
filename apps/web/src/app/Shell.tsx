@@ -45,8 +45,8 @@ export function LanguageSelect({ compact }: { compact?: boolean }) {
     <div className="lang-menu" ref={rootRef}>
       <button type="button" className="lang-menu__btn" aria-haspopup="menu" aria-expanded={open} aria-label={`${t('common.language')}: ${LOCALE_NAMES[locale]}`} onClick={() => setOpen((o) => !o)}>
         <Icon name="globe" size={18} />
-        <span lang={locale}>{LOCALE_NAMES[locale]}</span>
-        <Icon name="chevronDown" size={16} />
+        <span className="lang-menu__name" lang={locale}>{LOCALE_NAMES[locale]}</span>
+        <Icon name="chevronDown" size={16} className="icon lang-menu__chev" />
       </button>
       {open ? (
         <div className="lang-menu__list" role="menu" aria-label={t('common.language')}>

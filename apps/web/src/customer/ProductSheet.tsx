@@ -104,6 +104,7 @@ export function ProductSheet({ product, business, branch, mode, cityId, onClose,
     <>
       <Dialog
         open
+        expanded
         onClose={onClose}
         title={L(product.name, business.defaultLocale)}
         footer={

@@ -1,5 +1,5 @@
 import { Link, useParams, useLocation } from 'react-router';
-import { formatGrams, formatPhoneDisplay, placementSuffix, type Order, type OrderEvent } from '@qareeb/shared';
+import { formatGrams, formatPhoneDisplay, orderProgress, placementSuffix, type Order, type OrderEvent, type OrderProgress } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
 import { useCollection, useDoc, orderBy, where, limit } from '@/lib/queries';
@@ -10,11 +10,40 @@ import { Summary } from './Summary';
 import { AddressSummary } from './AddressForm';
 import { NotificationPrompt } from './NotificationPrompt';
 
-export function StatusBadge({ status }: { status: Order['status'] }) {
+const PROGRESS_TONE: Record<OrderProgress, 'accent' | 'success' | 'danger' | 'primary' | 'neutral'> = { placed: 'accent', accepted: 'success', preparing: 'primary', ready: 'success', completed: 'neutral', rejected: 'danger' };
+const PROGRESS_ICON: Record<OrderProgress, 'clock' | 'check' | 'x' | 'utensils' | 'bell'> = { placed: 'clock', accepted: 'check', preparing: 'utensils', ready: 'bell', completed: 'check', rejected: 'x' };
+
+export function StatusBadge({ status }: { status: OrderProgress }) {
   const t = useT();
-  const tone = status === 'accepted' ? 'success' : status === 'rejected' ? 'danger' : 'accent';
-  const icon = status === 'accepted' ? 'check' : status === 'rejected' ? 'x' : 'clock';
-  return <Badge tone={tone} icon={icon}>{t(`orders.statusShort.${status}`)}</Badge>;
+  return <Badge tone={PROGRESS_TONE[status]} icon={PROGRESS_ICON[status]}>{t(`orders.statusShort.${status}`)}</Badge>;
+}
+
+/** Four-step tracker: placed → preparing → ready → done. Hidden for rejected orders (the banner says why). */
+function OrderTrack({ progress }: { progress: OrderProgress }) {
+  const t = useT();
+  const idx = progress === 'placed' ? 0 : progress === 'accepted' || progress === 'preparing' ? 1 : progress === 'ready' ? 2 : 3;
+  const steps = [t('orders.track.placed'), progress === 'accepted' ? t('orders.track.accepted') : t('orders.track.preparing'), t('orders.track.ready'), t('orders.track.done')];
+  return (
+    <ol className="otrack" aria-label={t('orders.track.label')}>
+      {steps.map((label, i) => (
+        <li key={label} className={`otrack__step ${i < idx || (i === idx && idx === 3) ? 'otrack__step--done' : i === idx ? 'otrack__step--current' : ''}`} aria-current={i === idx ? 'step' : undefined}>
+          <span className="otrack__dot" aria-hidden="true">{i < idx || (i === idx && idx === 3) ? <Icon name="check" size={14} /> : null}</span>
+          {label}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** Banner headline for the customer, worded per fulfillment mode once the order is ready or done. The
+ *  hint only carries what the headline does not already say. */
+function progressCopy(o: Order, progress: OrderProgress, t: ReturnType<typeof useT>): { title: string; hint?: string } {
+  if (progress === 'ready') return { title: t(`orders.ready.${o.mode}`), hint: o.mode === 'pickup' ? t('orders.readyHint.pickup') : undefined };
+  if (progress === 'completed') return { title: t(`orders.completed.${o.mode}`) };
+  if (progress === 'preparing') return { title: t('orders.status.preparing') };
+  if (progress === 'placed') return { title: t('orders.status.placed') };
+  if (progress === 'rejected') return { title: t('orders.status.rejected'), hint: o.decisionReason ? `${t('orders.rejectionReason')}: ${o.decisionReason}` : undefined };
+  return { title: t('orders.status.accepted') };
 }
 
 export function OrdersPage() {
@@ -35,7 +64,7 @@ export function OrdersPage() {
             <Link to={`/orders/${o.id}`} className="card card--interactive stack--sm stack" style={{ textDecoration: 'none', color: 'inherit', display: 'flex' }}>
               <div className="row row--between">
                 <strong className="order-card__ref">{o.reference}</strong>
-                <StatusBadge status={o.status} />
+                <StatusBadge status={orderProgress(o)} />
               </div>
               <div className="wrap-anywhere">{L(o.businessName)} · {o.mode === 'delivery' ? t('orders.mode.delivery') : o.mode === 'dine_in' ? (o.tableNumber ? `${t('orders.mode.dineIn')} · ${t('orders.table', { n: o.tableNumber })}` : t('orders.mode.dineIn')) : t('orders.mode.pickup')}</div>
               <div className="row row--between muted"><span><bdi>{formatLocalDateTime(o.placedAt, locale)}</bdi></span><bdi className="price">{money(o.totals.cashDueAgorot, locale)}</bdi></div>
@@ -59,12 +88,15 @@ export function OrderPage() {
   if (!user) return <EmptyState icon="user" title={t('account.guest')} action={<Link className="btn btn--primary" to="/signin">{t('common.signIn')}</Link>} />;
   if (!order.data) return <EmptyState icon="alert" title={t('common.notFound')} action={<Link className="btn btn--secondary" to="/orders">{t('orders.title')}</Link>} />;
   const o = order.data;
-  const placedJustNow = (location.state as { placed?: boolean } | null)?.placed;
+  // The "sent, awaiting a decision" banner only while the order is still awaiting that decision.
+  const placedJustNow = (location.state as { placed?: boolean } | null)?.placed && o.status === 'placed';
   const revised = o.revision > 0;
   // cashRecords is owner/manager-only in firestore.rules, so a customer's read of it always failed
   // and every settled order fell back to "cash on delivery". Settlement state comes from the order:
   // recordCash rejects any amount other than the cash due and then locks the order.
   const cashPaidAgorot = o.cashRecordId && !o.cashReversedAt ? o.totals.cashDueAgorot : undefined;
+  const progress = orderProgress(o);
+  const copy = progressCopy(o, progress, t);
   return (
     <div className="stack">
       {placedJustNow ? <Alert tone="success">{t('checkout.success')} — {t('checkout.successBody')}</Alert> : null}
@@ -73,16 +105,16 @@ export function OrderPage() {
           <span className="muted">{t('checkout.orderReference')}</span>
           <span className="order-ref">{o.reference}</span>
         </div>
-        <StatusBadge status={o.status} />
+        <StatusBadge status={progress} />
       </div>
-      <div className={`status-banner status-banner--${o.status}`}>
-        <Icon name={o.status === 'accepted' ? 'check' : o.status === 'rejected' ? 'x' : 'clock'} size={22} />
-        <div>
-          <strong>{t(`orders.status.${o.status}`)}</strong>
-          {o.status === 'placed' ? <div>{t('orders.awaiting')}</div> : null}
-          {o.status === 'rejected' && o.decisionReason ? <div>{t('orders.rejectionReason')}: {o.decisionReason}</div> : null}
+      <div className={`status-banner status-banner--${progress}`} role="status">
+        <Icon name={PROGRESS_ICON[progress]} size={22} />
+        <div className="status-banner__text">
+          <strong>{copy.title}</strong>
+          {copy.hint ? <div>{copy.hint}</div> : null}
         </div>
       </div>
+      {progress !== 'rejected' ? <OrderTrack progress={progress} /> : null}
       <a className="btn btn--primary" href={telHref(o.branchPhone)}><Icon name="phone" size={18} /> {t('orders.callBusiness')} · <bdi className="num">{formatPhoneDisplay(o.branchPhone)}</bdi></a>
       {placedJustNow ? <NotificationPrompt /> : null}
       <p className="muted">{t('orders.contactBusiness')}</p>

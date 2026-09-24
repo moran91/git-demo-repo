@@ -25,3 +25,7 @@ android/print-station/app/google-services.json
 .DS_Store
 .emulator-logs/
 apps/web/.env.local.deploy-bak
+.playwright-mcp/
+docs/screenshots/
+docs/mockups/
+assets/morano-menu-photos/

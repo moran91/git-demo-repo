@@ -23,14 +23,16 @@ for (const locale of locales) {
       await page.goto('/b/biz-abu-salim/br-abu-salim-main');
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
       await shot(page, `business-${locale}-${w}`);
-      await page.getByRole('button', { name: /Shawarma|שווארמה|شاورما/ }).first().click();
+      // Anchored: the storefront also renders combo cards and promo chips whose names contain the
+      // product name, and an unanchored match picked one of those instead of the product tile.
+      await page.getByRole('button', { name: /^(Shawarma|שווארמה|شاورما)$/ }).first().click();
       await expect(page.getByRole('dialog')).toBeVisible();
       await shot(page, `product-options-${locale}-${w}`);
       await page.keyboard.press('Escape');
       if (locale === 'en' || w === 390) {
         await signInAsCustomer(page, 'seed-customer1');
         await page.goto('/b/biz-abu-salim/br-abu-salim-main');
-        await page.getByRole('button', { name: /Fries|צ׳יפס|بطاطا/ }).first().click();
+        await page.getByRole('button', { name: /^(Fries|צ׳יפס|بطاطا مقلية)$/ }).first().click();
         await page.getByRole('dialog').getByRole('button', { name: /Add to cart|הוספה לסל|إضافة إلى السلة/ }).click();
         await page.goto('/checkout');
         await expect(page.getByRole('heading', { level: 1 })).toBeVisible();

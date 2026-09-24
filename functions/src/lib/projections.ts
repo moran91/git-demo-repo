@@ -1,5 +1,5 @@
 import type { Branch, Business, Category, Combo, Product, Promotion } from '@qareeb/shared';
-import { col, db, nowIso, type Tx } from './firebase.js';
+import { col, db, nowIso, type Tx, commitInChunks } from './firebase.js';
 
 /**
  * Public projections: what anonymous customers may read. Written only by the server, and only when
@@ -41,6 +41,7 @@ export interface PublicBranchDoc {
   hours: Branch['hours'];
   hoursOverrides: Branch['hoursOverrides'];
   pickupEnabled: boolean;
+  dineInEnabled: boolean;
   deliveryEnabled: boolean;
   deliveryCities: Branch['deliveryCities'];
   deliveryCityIds: string[];
@@ -81,7 +82,11 @@ export function toPublicBusiness(b: Business): PublicBusinessDoc {
 /** Legacy branches saved delivery enabled with no delivery areas; treat that as "own city, free" so
  *  the branch is discoverable and orderable in delivery mode instead of silently vanishing. */
 export function effectiveDeliveryCities(br: Pick<Branch, 'cityId' | 'deliveryEnabled' | 'deliveryCities'>): Branch['deliveryCities'] {
-  return br.deliveryEnabled && br.deliveryCities.length === 0 ? [{ cityId: br.cityId, feeAgorot: 0, minSubtotalAgorot: 0 }] : br.deliveryCities;
+  // Delivery off means no delivery rules at all: publicBranches used to keep the saved rules here
+  // while emptying deliveryCityIds, so availableFulfillmentModes on the client still offered delivery
+  // and the order was only rejected by the server at checkout.
+  if (!br.deliveryEnabled) return [];
+  return br.deliveryCities.length === 0 ? [{ cityId: br.cityId, feeAgorot: 0, minSubtotalAgorot: 0 }] : br.deliveryCities;
 }
 
 export function toPublicBranch(b: Business, br: Branch): PublicBranchDoc {
@@ -103,6 +108,7 @@ export function toPublicBranch(b: Business, br: Branch): PublicBranchDoc {
     hours: br.hours,
     hoursOverrides: br.hoursOverrides,
     pickupEnabled: br.pickupEnabled,
+    dineInEnabled: br.dineInEnabled !== false,
     deliveryEnabled: br.deliveryEnabled,
     deliveryCities,
     deliveryCityIds: br.deliveryEnabled ? deliveryCities.map((c) => c.cityId) : [],
@@ -163,30 +169,36 @@ export async function reprojectCatalog(businessId: string, branchId: string): Pr
     col.publicCombos(branchId).get(),
     col.publicPromotions(branchId).get(),
   ]);
-  const batch = db.batch();
-  for (const d of pubCats.docs) batch.delete(d.ref);
-  for (const d of pubProds.docs) batch.delete(d.ref);
-  for (const d of pubCombos.docs) batch.delete(d.ref);
-  for (const d of pubPromos.docs) batch.delete(d.ref);
+  const ops: Array<(batch: FirebaseFirestore.WriteBatch) => void> = [];
+  const retained = new Set<string>();
+  const publish = (ref: FirebaseFirestore.DocumentReference, value: FirebaseFirestore.DocumentData) => {
+    retained.add(ref.path);
+    ops.push((batch) => batch.set(ref, value));
+  };
   if (visible) {
     for (const d of combos.docs) {
       const c = d.data() as Combo;
-      if (!c.archived && c.active) batch.set(col.publicCombos(branchId).doc(c.id), c);
+      if (!c.archived && c.active) publish(col.publicCombos(branchId).doc(c.id), c);
     }
     for (const d of promos.docs) {
       const p = d.data() as Promotion;
-      if (p.active) batch.set(col.publicPromotions(branchId).doc(p.id), p);
+      if (p.active) publish(col.publicPromotions(branchId).doc(p.id), p);
     }
     for (const d of cats.docs) {
       const c = d.data() as Category;
-      if (!c.archived) batch.set(col.publicCategories(branchId).doc(c.id), c);
+      if (!c.archived) publish(col.publicCategories(branchId).doc(c.id), c);
     }
     for (const d of prods.docs) {
       const p = d.data() as Product;
-      if (!p.archived) batch.set(col.publicProducts(branchId).doc(p.id), toPublicProduct(p));
+      if (!p.archived) publish(col.publicProducts(branchId).doc(p.id), toPublicProduct(p));
     }
   }
-  await batch.commit();
+  // Replace live documents in place. Delete only obsolete projections, so a failed later chunk
+  // cannot leave an otherwise live menu empty halfway through republishing.
+  for (const d of [...pubCats.docs, ...pubProds.docs, ...pubCombos.docs, ...pubPromos.docs]) {
+    if (!retained.has(d.ref.path)) ops.push((batch) => batch.delete(d.ref));
+  }
+  await commitInChunks(ops);
 }
 
 /** Within a transaction: update a single product's public projection if the branch is visible. */

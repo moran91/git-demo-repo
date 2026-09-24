@@ -20,9 +20,21 @@ export const FULFILLMENT_MODES: readonly FulfillmentMode[] = ['delivery', 'picku
 /** Approval states for businesses and branches. Completely separate from order statuses. */
 export type ApprovalState = 'pending' | 'approved' | 'rejected' | 'suspended';
 
-/** The ONLY order statuses. placed → accepted | rejected. No other values exist anywhere. */
+/** The ONLY order decision statuses. placed → accepted | rejected. Fulfillment progress lives in `stage`. */
 export type OrderStatus = 'placed' | 'accepted' | 'rejected';
 export const ORDER_STATUSES: readonly OrderStatus[] = ['placed', 'accepted', 'rejected'] as const;
+/**
+ * Kitchen stage of an ACCEPTED order: set to 'preparing' on acceptance, advanced by advanceOrder
+ * (preparing → ready → completed, ready → preparing allowed as an undo). Absent on placed/rejected
+ * orders and on orders accepted before stages existed. The board shows preparing + ready.
+ */
+export type OrderStage = 'preparing' | 'ready' | 'completed';
+export const ORDER_STAGES: readonly OrderStage[] = ['preparing', 'ready', 'completed'] as const;
+/** What the customer sees: the decision, refined by the stage once accepted. */
+export type OrderProgress = 'placed' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'rejected';
+export function orderProgress(o: { status: OrderStatus; stage?: OrderStage }): OrderProgress {
+  return o.status === 'accepted' && o.stage ? o.stage : o.status;
+}
 
 export type MembershipRole = 'owner' | 'manager' | 'staff';
 
@@ -138,6 +150,10 @@ export interface Promotion {
   updatedAt: string;
 }
 export const MAX_PROMOTIONS = 10;
+/** Distinct product lines in one combo, and featured products in one promotion. The zod schemas in
+ *  `schemas.ts` and the owner pickers both read these, so the two sides cannot drift. */
+export const MAX_COMBO_ITEMS = 10;
+export const MAX_PROMO_PRODUCTS = 10;
 
 export interface Business {
   id: string;
@@ -191,6 +207,8 @@ export interface Branch {
   hours: WeeklyHours;
   hoursOverrides: HoursOverride[];
   pickupEnabled: boolean;
+  /** Restaurants only; absent means on (branches saved before the switch existed). */
+  dineInEnabled?: boolean;
   deliveryEnabled: boolean;
   deliveryCities: DeliveryCityRule[];
   /** Temporary pause of new orders; existing orders remain actionable. */
@@ -476,6 +494,11 @@ export interface Order {
   decisionReason?: string;
   decidedAt?: string;
   decidedBy?: string;
+  /** Fulfillment stage (accepted orders only). */
+  stage?: OrderStage;
+  stageUpdatedAt?: string;
+  readyAt?: string;
+  completedAt?: string;
   /** Optimistic concurrency version. Increments on every mutation. */
   version: number;
   /** Revision counter (0 = as placed). */
@@ -503,6 +526,8 @@ export type OrderEventType =
   | 'placed'
   | 'accepted'
   | 'rejected'
+  | 'ready'
+  | 'completed'
   | 'revised'
   | 'cash_recorded'
   | 'cash_reversed'
@@ -527,6 +552,8 @@ export interface OrderEvent {
 export interface CashRecord {
   id: string;
   orderId: string;
+  /** Order reference for display (absent on records written before it was stored). */
+  reference?: string;
   businessId: string;
   branchId: string;
   amountAgorot: Agorot;
@@ -580,6 +607,8 @@ export type NotificationKind =
   | 'order_placed'
   | 'order_accepted'
   | 'order_rejected'
+  | 'order_ready'
+  | 'order_completed'
   | 'order_revised'
   | 'cash_recorded'
   | 'membership_changed'

@@ -16,7 +16,8 @@ import { rateLimit } from '../lib/ratelimit.js';
 // Secrets are only bound when WHATSAPP_OTP=1 (functions/.env): binding them unconditionally makes
 // `firebase deploy` fail on projects where the Twilio secrets were never created.
 const WHATSAPP_OTP_ENABLED = process.env.WHATSAPP_OTP === '1';
-const opts = { region: REGION, ...(WHATSAPP_OTP_ENABLED ? { secrets: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_VERIFY_SERVICE_SID'] as string[] } : {}) };
+export const whatsappOpts = { region: REGION, ...(WHATSAPP_OTP_ENABLED ? { secrets: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_VERIFY_SERVICE_SID'] as string[] } : {}) };
+const opts = whatsappOpts;
 
 function twilioConfig() {
   const sid = process.env.TWILIO_ACCOUNT_SID;
@@ -26,8 +27,10 @@ function twilioConfig() {
   return { sid, token, service };
 }
 
+// The flag gates the feature on its own: a redeploy with WHATSAPP_OTP=0 keeps previously bound
+// secret env vars on the Cloud Run revision, so checking the secrets alone would leave it enabled.
 export function whatsappConfigured(): boolean {
-  return twilioConfig() !== null;
+  return WHATSAPP_OTP_ENABLED && twilioConfig() !== null;
 }
 
 async function twilio(path: string, body: Record<string, string>): Promise<{ status: string; sid?: string }> {
@@ -118,6 +121,8 @@ export const whatsappCheck = onCall(opts, handled(async (req: CallableRequest<un
   return { customToken: token };
 }));
 
-export const authOptions = onCall({ region: REGION }, handled(async () => {
+// Bound to the same (conditional) secrets as whatsappStart: a callable only receives the secrets it
+// declares, so this used to answer `whatsapp: false` even on a fully configured project.
+export const authOptions = onCall(whatsappOpts, handled(async () => {
   return { whatsapp: whatsappConfigured() };
 }));

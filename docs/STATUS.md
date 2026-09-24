@@ -11,7 +11,7 @@ what remains blocked on external access or hardware._
 | Backend callables: place/decide/revise/cash/reverse, stock race, idempotency, notifications fan-out, approvals, suspension, memberships, printer setup, stations, leases/fences, duplicate copies, metrics | `functions` vitest — 16 integration tests against emulators |
 | Firestore security rules (isolation, branch limits, closed collections, suspended users) | `tests/rules` — 10 tests |
 | Browser flows: guest discovery in he/ar/en with direction switch, restaurant order with modifiers → phone sign-in → village-address delivery checkout → order reference/status/Call business; cart replacement confirmation; deep-link 404; manager accepts in real time; staff branch limits; admin approvals page | `e2e` Playwright — 20 tests (7 flows + 13 screenshot captures) |
-| Design captures at 360/390/768/1440 in three languages | `docs/screenshots/`, notes in `docs/DESIGN_VERIFICATION.md` |
+| Design captures at 360/390/768/1440 in three languages | `e2e/screenshots.spec.ts` (output not committed), notes in `docs/DESIGN_VERIFICATION.md` |
 | Build/typecheck/lint | `npm run typecheck`, `npm run build`, `npm run lint` |
 
 ## Implemented but only verifiable outside this environment

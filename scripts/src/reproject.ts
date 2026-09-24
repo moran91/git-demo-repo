@@ -23,11 +23,14 @@ export async function reprojectBusinessSeed(db: Firestore, businessId: string): 
     const br = d.data() as Branch;
     const ref = db.collection('publicBranches').doc(br.id);
     const vis = visible(b, br);
+    // Same rule as functions/src/lib/projections.ts: delivery off projects no delivery rules at all,
+    // and a legacy "enabled with no areas" means the branch's own city, free.
+    const delivery = !br.deliveryEnabled ? [] : br.deliveryCities.length === 0 ? [{ cityId: br.cityId, feeAgorot: 0, minSubtotalAgorot: 0 }] : br.deliveryCities;
     if (!vis) {
       batch.delete(ref);
       continue;
     }
-    batch.set(ref, { id: br.id, businessId: b.id, type: b.type, name: br.name, businessName: b.name, businessDefaultLocale: b.defaultLocale, logoPath: b.logoPath, coverPath: b.coverPath, cityId: br.cityId, locationDescription: br.locationDescription, lat: br.lat, lng: br.lng, phone: br.phone, hours: br.hours, hoursOverrides: br.hoursOverrides, pickupEnabled: br.pickupEnabled, deliveryEnabled: br.deliveryEnabled, deliveryCities: br.deliveryCities, deliveryCityIds: br.deliveryEnabled ? br.deliveryCities.map((c) => c.cityId) : [], ordersPaused: br.ordersPaused, visible: true, updatedAt: now });
+    batch.set(ref, { id: br.id, businessId: b.id, type: b.type, name: br.name, businessName: b.name, businessDefaultLocale: b.defaultLocale, logoPath: b.logoPath, coverPath: b.coverPath, cityId: br.cityId, locationDescription: br.locationDescription, lat: br.lat, lng: br.lng, phone: br.phone, hours: br.hours, hoursOverrides: br.hoursOverrides, pickupEnabled: br.pickupEnabled, dineInEnabled: br.dineInEnabled !== false, deliveryEnabled: br.deliveryEnabled, deliveryCities: delivery, deliveryCityIds: delivery.map((c) => c.cityId), ordersPaused: br.ordersPaused, visible: true, updatedAt: now });
     const combos = await d.ref.collection('combos').get();
     for (const c of combos.docs) { const combo = c.data() as Combo; if (!combo.archived && combo.active) batch.set(ref.collection('combos').doc(combo.id), combo); }
     const promos = await d.ref.collection('promotions').get();
