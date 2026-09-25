@@ -268,6 +268,7 @@ export const productInputSchema = z
     trackInventory: z.boolean(),
     stockQty: z.number().int().min(0).max(1_000_000).optional(),
     mostOrdered: z.boolean().optional(),
+    inStories: z.boolean().optional(),
     sortOrder: z.number().int().min(0).max(10000).optional(),
   })
   .strict();
@@ -372,3 +373,19 @@ export const promotionInputSchema = z
   })
   .strict();
 export type PromotionInput = z.infer<typeof promotionInputSchema>;
+
+/** ---------- Explore-feed posts ---------- */
+export const postCaptionSchema = z
+  .object({ he: z.string().max(300).optional(), ar: z.string().max(300).optional(), en: z.string().max(300).optional() })
+  .strict();
+export const publishPostSchema = z
+  .object({
+    businessId: idSchema,
+    branchId: idSchema,
+    postId: idSchema,
+    path: z.string().min(1).max(400),
+    caption: postCaptionSchema,
+    productId: idSchema.optional(),
+  })
+  .strict();
+export type PublishPostInput = z.infer<typeof publishPostSchema>;

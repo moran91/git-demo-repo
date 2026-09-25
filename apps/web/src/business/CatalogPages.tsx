@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ref as sref, uploadBytes } from 'firebase/storage';
-import { hasAnyTranslation, makeId, productInputSchema, type Category, type Localized, type ModifierGroup, type Product, type ProductInput, type SharedModifierGroup } from '@qareeb/shared';
+import { MAX_STORY_ITEMS, hasAnyTranslation, makeId, productInputSchema, type Category, type Localized, type ModifierGroup, type Product, type ProductInput, type SharedModifierGroup } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
 import { storage } from '@/lib/firebase';
 import { useCollection, orderBy, limit } from '@/lib/queries';
@@ -17,7 +17,7 @@ import { LangSwitch, LocalizedInput, initialLang, missingLangs, type Loc } from 
 import { ModifierGroupFields, agorotInput, effectiveMin, newGroupDraft, parseAgorot } from './ModifierGroupFields';
 import { EditLines, MoneyInput } from './EditLines';
 import { SharedGroupDialog } from './ExtrasLibraryPage';
-import { ActionSheet, LedgerRow, Switch, type SheetAction } from './CatalogControls';
+import { ActionSheet, LedgerRow, Switch, storyIssue, type SheetAction } from './CatalogControls';
 import './catalog.css';
 
 export { LocalizedInput };
@@ -60,7 +60,7 @@ export function CopyDialog({ productId, onClose }: { productId?: string; onClose
 
 type Draft = ProductInput & { imagePath?: string };
 function draftFrom(p: Product | undefined, categoryId: string): Draft {
-  if (!p) return { categoryId, name: {}, description: {}, dietaryText: {}, pricingMode: 'unit', priceAgorot: 0, unitLabel: {}, quantityStep: 1, minQuantity: 1, variants: [], modifierGroups: [], available: true, trackInventory: false, stockQty: 0, weightStepGrams: 100, minWeightGrams: 100, mostOrdered: false };
+  if (!p) return { categoryId, name: {}, description: {}, dietaryText: {}, pricingMode: 'unit', priceAgorot: 0, unitLabel: {}, quantityStep: 1, minQuantity: 1, variants: [], modifierGroups: [], available: true, trackInventory: false, stockQty: 0, weightStepGrams: 100, minWeightGrams: 100, mostOrdered: false, inStories: false };
   // Callable responses encode omitted optional values as null; Firestore snapshots omit them.
   // Normalize both sources, including variant/extra fields, before editing and validating.
   const normalized = JSON.parse(JSON.stringify(p, (_key, value) => value === null ? undefined : value)) as Product;
@@ -155,7 +155,7 @@ export function ProductEditor({ initial, categoryId, categories, onClose }: { in
       const res = await call<{ product: Product }>('saveProduct', { businessId: business.id, branchId: branch.id, productId, product: { ...product, variants: product.variants.map((v) => ({ ...v, id: v.id || makeId(8) })), modifierGroups: product.modifierGroups.map((g) => ({ ...g, id: g.id || makeId(8), options: g.options.map((o) => ({ ...o, id: o.id || makeId(8) })) })) } });
       saved = res.product;
     } catch (e) {
-      setError(t('catalog.saveFailed') + ' ' + t(errorKey(e)));
+      setError(storyIssue(e) ? t('catalog.storiesLimit', { max: MAX_STORY_ITEMS }) : t('catalog.saveFailed') + ' ' + t(errorKey(e)));
       setBusy(false);
       return;
     }
@@ -231,6 +231,7 @@ export function ProductEditor({ initial, categoryId, categories, onClose }: { in
       <div className="kvrow-list pe-toggles">
         <LedgerRow label={t('catalog.available')}><Switch checked={d.available} label={t('catalog.available')} onChange={(available) => set({ available })} /></LedgerRow>
         <LedgerRow label={t('product.mostOrdered')}><Switch checked={!!d.mostOrdered} label={t('product.mostOrdered')} onChange={(mostOrdered) => set({ mostOrdered })} /></LedgerRow>
+        <LedgerRow label={t('catalog.inStories')} hint={hasPhoto ? undefined : t('catalog.storiesNeedsPhoto')}><Switch checked={!!d.inStories} disabled={!hasPhoto && !d.inStories} label={t('catalog.inStories')} onChange={(inStories) => set({ inStories })} /></LedgerRow>
       </div>
       {supermarket ? pricing : null}
       <section className="pe-sec">

@@ -63,6 +63,7 @@ export function useNavSections(placedCount = 0): NavSection[] {
       { to: `${base}/deals`, icon: 'tag', label: t('deals.manage'), perm: 'catalog' },
     ] },
     { id: 'branch', label: t('dash.switchBranch'), items: [
+      { to: `${base}/posts`, icon: 'flame', label: t('posts.manage'), perm: 'catalog' },
       { to: `${base}/branch`, icon: 'building', label: t('dash.branchSettings'), perm: 'settings' },
       // createBranch is owner-only on the server, and the route lives outside the branch shell. Without
       // this the page was reachable only while the business had no branch at all.

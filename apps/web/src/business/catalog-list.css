@@ -41,7 +41,7 @@
 
 /* ---------- item row: [img][name / ★ price · sizes · stock][switch] ---------- */
 .business-app .irow.list__item--catalog { flex-wrap: nowrap; }
-.irow { display: grid; grid-template-columns: 52px minmax(0, 1fr) 52px; align-items: center; column-gap: var(--space-3); min-height: 72px; padding: var(--space-2) var(--space-3); border-top: 1px solid var(--color-border); background: var(--color-surface); }
+.irow { display: grid; grid-template-columns: 52px minmax(0, 1fr) 40px 52px; align-items: center; column-gap: var(--space-3); min-height: 72px; padding: var(--space-2) var(--space-3); border-top: 1px solid var(--color-border); background: var(--color-surface); }
 .irow__img { width: 52px; height: 52px; border-radius: 10px; }
 .irow__main { align-self: stretch; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; margin: calc(-1 * var(--space-2)) 0; padding: var(--space-2) 0; background: none; border: 0; border-radius: 0; font: inherit; color: inherit; text-align: start; cursor: pointer; }
 .irow__main:focus-visible { outline: 3px solid var(--color-focus); outline-offset: -3px; border-radius: var(--radius-control); }
@@ -71,3 +71,17 @@
 .is-lifted > .grip, .is-lifted > .csec__head > .grip { color: var(--color-primary); cursor: grabbing; }
 body:has(.is-lifted) { user-select: none; -webkit-user-select: none; }
 .cbar__input::-webkit-search-cancel-button { display: none; }
+
+/* Stories toggle: a small story circle. Off, a hairline; on, the same brand ring the customer sees on
+ * the home page (gradient border over the surface). */
+.irow__story { width: 40px; height: 44px; display: grid; place-items: center; padding: 0; border: 0; background: none; cursor: pointer; color: var(--color-text-muted); }
+.irow__story-ring { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; border: 2px solid var(--color-border-strong); }
+.irow__story[aria-pressed='true'] .irow__story-ring {
+  border-color: transparent;
+  background: linear-gradient(var(--color-surface), var(--color-surface)) padding-box, conic-gradient(from 200deg, #20583b, #6f9d3a, #e8a93c, #c9602b, #20583b) border-box;
+  color: var(--color-primary);
+}
+.irow__story:disabled { cursor: not-allowed; opacity: 0.35; }
+.irow__story[aria-busy='true'] { opacity: 0.6; }
+.irow__story:focus-visible { outline: none; }
+.irow__story:focus-visible .irow__story-ring { outline: 3px solid var(--color-focus); outline-offset: 2px; }

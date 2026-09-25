@@ -187,7 +187,7 @@ for (const locale of ['he', 'ar', 'en'] as const) {
       const errors: string[] = [];
       page.on('pageerror', (error) => errors.push(error.message));
       await signInEmail(page, 'owner.restaurant@qareeb.test');
-      for (const section of ['orders', 'history', 'catalog', 'catalog/extras', 'deals', 'branch', 'business', 'staff', 'loyalty', 'cash', 'printers', 'qr']) {
+      for (const section of ['orders', 'history', 'catalog', 'catalog/extras', 'deals', 'posts', 'branch', 'business', 'staff', 'loyalty', 'cash', 'printers', 'qr']) {
         await page.goto(`${base}/${section}`);
         await expect(page.locator('.dash__main h1')).toBeVisible();
         await expect(page.locator('.dash__main [role="alert"]')).toHaveCount(0);

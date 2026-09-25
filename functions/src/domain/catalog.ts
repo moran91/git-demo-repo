@@ -1,6 +1,6 @@
 import { onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { z } from 'zod';
-import { MAX_PROMOTIONS, categoryInputSchema, cleanLocalized, comboInputSchema, idSchema, productInputSchema, promotionInputSchema, sharedModifierGroupInputSchema, makeId, type Branch, type Business, type Category, type Combo, type ModifierGroup, type Product, type Promotion, type SharedModifierGroup } from '@qareeb/shared';
+import { MAX_PROMOTIONS, MAX_STORY_ITEMS, categoryInputSchema, cleanLocalized, comboInputSchema, idSchema, productInputSchema, promotionInputSchema, sharedModifierGroupInputSchema, makeId, type Branch, type Business, type Category, type Combo, type ModifierGroup, type Product, type Promotion, type SharedModifierGroup } from '@qareeb/shared';
 import { REGION, col, db, nowIso, storage, commitInChunks } from '../lib/firebase.js';
 import { handled, fail } from '../lib/errors.js';
 import { parse } from '../lib/validate.js';
@@ -136,6 +136,8 @@ function buildProduct(existing: Product | undefined, input: z.infer<typeof produ
     // Stock is only changed through adjustStock (audited) once tracking exists, except initial set.
     stockQty: input.trackInventory ? (existing?.trackInventory ? existing.stockQty ?? input.stockQty ?? 0 : input.stockQty ?? 0) : undefined,
     mostOrdered: input.mostOrdered ?? false,
+    // An older client that does not send the field keeps what the product had.
+    inStories: input.inStories ?? existing?.inStories ?? false,
     archived: existing?.archived ?? false,
     sortOrder: input.sortOrder ?? existing?.sortOrder ?? defaultSortOrder,
     createdAt: existing?.createdAt ?? now,
@@ -168,6 +170,7 @@ export const saveProduct = onCall(opts, handled(async (req: CallableRequest<unkn
     const shared = new Map(sharedSnaps.filter((s) => s.exists).map((s) => [s.id, s.data() as SharedModifierGroup]));
     const now = nowIso();
     const p = buildProduct(existing, input.product, { id: ref.id, branchId: input.branchId, businessId: input.businessId }, now, shared, nextSortOrder);
+    if (p.inStories && !existing?.inStories) await assertStoryRoom(tx, input.businessId, input.branchId, ref.id);
     tx.set(ref, p);
     projectProductInTx(tx, ctx.business, ctx.branch, p);
     return p;
@@ -339,7 +342,7 @@ export const copyToBranch = onCall(opts, handled(async (req: CallableRequest<unk
     // Library links are branch-scoped; the copy keeps the current content as independent groups.
     const modifierGroups = p.modifierGroups.map(({ sharedGroupId: _s, ...g }) => g);
     const variants = p.variants.map((v) => ({ ...v, stockQty: p.trackInventory ? 0 : undefined }));
-    const next = { ...p, id: ref.id, branchId: input.toBranchId, categoryId, modifierGroups, variants, sortOrder: productSort++, imagePath: undefined, stockQty: p.trackInventory ? 0 : undefined, createdAt: now, updatedAt: now } satisfies Product;
+    const next = { ...p, id: ref.id, branchId: input.toBranchId, categoryId, modifierGroups, variants, sortOrder: productSort++, imagePath: undefined, inStories: false, stockQty: p.trackInventory ? 0 : undefined, createdAt: now, updatedAt: now } satisfies Product;
     ops.push((b) => b.set(ref, next));
     copied++;
   }
@@ -434,6 +437,33 @@ export const setSharedModifierGroupArchived = onCall(opts, handled(async (req: C
   });
   return { ok: true };
 }));
+/** Refuses a branch's next story item once `MAX_STORY_ITEMS` are featured (reads must precede writes). */
+async function assertStoryRoom(tx: FirebaseFirestore.Transaction, businessId: string, branchId: string, productId: string): Promise<void> {
+  const featured = await tx.get(col.products(businessId, branchId).where('inStories', '==', true).limit(MAX_STORY_ITEMS + 1));
+  if (featured.docs.filter((d) => d.id !== productId && !(d.data() as Product).archived).length >= MAX_STORY_ITEMS) {
+    fail('invalid_argument', { issues: [{ path: 'inStories', message: 'too_many_story_items' }] });
+  }
+}
+
+/** Features a menu item in the branch's stories, or takes it out (owners and managers of the branch). */
+export const setProductInStories = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
+  const c = await requireCaller(req);
+  const input = parse(z.object({ businessId: idSchema, branchId: idSchema, productId: idSchema, inStories: z.boolean() }).strict(), req.data);
+  await requireMembership(c, input.businessId, [...CATALOG_ROLES], input.branchId);
+  await db.runTransaction(async (tx) => {
+    const ctx = await loadContext(tx, input.businessId, input.branchId);
+    const ref = col.products(input.businessId, input.branchId).doc(input.productId);
+    const snap = await tx.get(ref);
+    if (!snap.exists) fail('not_found');
+    const current = snap.data() as Product;
+    if (input.inStories && !current.inStories) await assertStoryRoom(tx, input.businessId, input.branchId, input.productId);
+    const p = { ...current, inStories: input.inStories, updatedAt: nowIso() };
+    tx.set(ref, p);
+    projectProductInTx(tx, ctx.business, ctx.branch, p);
+  });
+  return { ok: true };
+}));
+
 /** Owner-controlled "Most ordered" highlight (owners and managers of the branch). */
 export const setProductMostOrdered = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
   const c = await requireCaller(req);

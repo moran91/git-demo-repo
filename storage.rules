@@ -84,6 +84,12 @@ service firebase.storage {
       allow write: if signedIn() && notSuspended() && isCatalogEditor(businessId, branchId) && validImage();
       allow delete: if signedIn() && notSuspended() && isCatalogEditor(businessId, branchId);
     }
+    // Explore-feed posts (a photo live for 24 hours): businesses/{b}/branches/{br}/posts/{id}/{file}
+    match /businesses/{businessId}/branches/{branchId}/posts/{postId}/{file} {
+      allow read: if true;
+      allow write: if signedIn() && notSuspended() && isCatalogEditor(businessId, branchId) && validImage();
+      allow delete: if signedIn() && notSuspended() && isCatalogEditor(businessId, branchId);
+    }
     // Everything else (including any private receipt data) is server-only.
     match /{allPaths=**} {
       allow read, write: if false;

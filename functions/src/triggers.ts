@@ -5,6 +5,7 @@ import type Sharp from 'sharp';
 import { REGION, storage } from './lib/firebase.js';
 import { processOutboxEvent, sweepOutbox } from './lib/outbox.js';
 import { sweepPrintLeases } from './domain/printing.js';
+import { sweepExpiredPosts } from './domain/posts.js';
 
 export const onOutboxCreated = onDocumentCreated({ region: REGION, document: 'outbox/{id}', retry: true }, async (event) => {
   await processOutboxEvent(event.params.id);
@@ -13,7 +14,9 @@ export const onOutboxCreated = onDocumentCreated({ region: REGION, document: 'ou
 export const scheduledSweeps = onSchedule({ region: REGION, schedule: 'every 5 minutes', timeZone: 'Asia/Jerusalem' }, async () => {
   const outbox = await sweepOutbox();
   const print = await sweepPrintLeases();
-  console.info('sweeps', { outbox, ...print });
+  // Isolated so a failure here (e.g. the collection-group index still building) never stops the outbox.
+  const posts = await sweepExpiredPosts().catch((e: unknown) => { console.error('post sweep failed', e); return { deleted: -1 }; });
+  console.info('sweeps', { outbox, ...print, expiredPosts: posts.deleted });
 });
 
 const ALLOWED = new Set(['image/jpeg', 'image/png', 'image/webp']);

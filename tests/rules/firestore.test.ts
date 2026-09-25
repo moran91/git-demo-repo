@@ -34,6 +34,8 @@ beforeAll(async () => {
     await setDoc(doc(db, 'loyaltyAccounts/biz1_cust1'), { businessId: 'biz1', uid: 'cust1', available: 5 });
     await setDoc(doc(db, 'users/cust1/notifications/n1'), { read: false, title: 'x' });
     await setDoc(doc(db, 'audit/a1'), { action: 'x' });
+    await setDoc(doc(db, 'publicBranches/brA/posts/post1'), { id: 'post1', expiresAt: '2099-01-01T00:00:00.000Z' });
+    await setDoc(doc(db, 'businesses/biz1/branches/brA/posts/post1'), { id: 'post1', expiresAt: '2099-01-01T00:00:00.000Z' });
   });
 });
 afterAll(async () => env.cleanup());
@@ -46,6 +48,17 @@ describe('public projections', () => {
     await assertSucceeds(getDoc(doc(anon(), 'publicBusinesses/biz2')));
     await assertFails(setDoc(doc(anon(), 'publicBusinesses/biz1'), { id: 'biz1' }));
     await assertFails(setDoc(doc(as('owner1'), 'publicBusinesses/biz1'), { id: 'biz1' }));
+  });
+  it('explore posts: public projection is world-readable, the private copy is members-only, both server-written', async () => {
+    await assertSucceeds(getDoc(doc(anon(), 'publicBranches/brA/posts/post1')));
+    await assertSucceeds(getDocs(collection(anon(), 'publicBranches/brA/posts')));
+    await assertFails(setDoc(doc(anon(), 'publicBranches/brA/posts/post2'), { id: 'post2' }));
+    await assertFails(setDoc(doc(as('owner1'), 'publicBranches/brA/posts/post2'), { id: 'post2' }));
+    await assertSucceeds(getDoc(doc(as('owner1'), 'businesses/biz1/branches/brA/posts/post1')));
+    await assertFails(getDoc(doc(as('cust1'), 'businesses/biz1/branches/brA/posts/post1')));
+    await assertFails(getDoc(doc(as('owner2'), 'businesses/biz1/branches/brA/posts/post1')));
+    await assertFails(getDoc(doc(as('staffB'), 'businesses/biz1/branches/brA/posts/post1')));
+    await assertFails(setDoc(doc(as('owner1'), 'businesses/biz1/branches/brA/posts/post3'), { id: 'post3' }));
   });
   it('unapproved private business data is not readable by the public', async () => {
     await assertFails(getDoc(doc(anon(), 'businesses/biz1')));

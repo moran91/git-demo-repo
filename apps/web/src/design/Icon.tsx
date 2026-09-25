@@ -8,6 +8,8 @@ const paths: Record<string, string> = {
   pin: 'M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z M12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
   locate: 'M12 2.5v3 M12 18.5v3 M2.5 12h3 M18.5 12h3 M12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12z M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
   compass: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M15.5 8.5l-2 5-5 2 2-5 5-2z',
+  flame: 'M12 21c-3.9 0-6.5-2.6-6.5-6.2 0-3.4 2.4-5.6 3.8-7.6.3 1.7 1.2 2.9 2.4 3.4C11.6 7.6 12.5 4.7 14.6 3c.2 3.3 3.9 5.3 3.9 9.9 0 4.4-2.8 8.1-6.5 8.1z',
+  share: 'M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7 M12 15V3 M8 7l4-4 4 4',
   heart: 'M12 20.5s-8-4.9-8-11A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 8 2.5c0 6.1-8 11-8 11z',
   cart: 'M3 4h2l2.4 11.2a1 1 0 0 0 1 .8h9.3a1 1 0 0 0 1-.8L21 8H7 M9 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z M17 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z',
   user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4 21a8 8 0 0 1 16 0',
@@ -60,6 +62,7 @@ const paths: Record<string, string> = {
   qr: 'M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M14 14h3v3h-3z M20 14v.5 M17 20h3 M20 17v.5',
   building: 'M4 21V5l8-2v18 M12 9h8v12 M8 8h.5 M8 12h.5 M8 16h.5 M16 13h.5 M16 17h.5',
   pause: 'M7 4.5h3.5v15H7z M13.5 4.5H17v15h-3.5z',
+  play: 'M7.5 4.5v15l12-7.5z',
   grid: 'M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M14 14h6v6h-6z',
   arrowBack: 'M19 12H5 M11 6l-6 6 6 6',
   layers: 'M12 3l9 5-9 5-9-5 9-5z M3 13l9 5 9-5',
@@ -68,7 +71,7 @@ const paths: Record<string, string> = {
 };
 
 /** Bars this thin read as a smudge when stroked, so `pause` is drawn filled. */
-const filled = new Set<string>(['pause', 'grip']);
+const filled = new Set<string>(['pause', 'play', 'grip']);
 
 export type IconName = keyof typeof paths;
 

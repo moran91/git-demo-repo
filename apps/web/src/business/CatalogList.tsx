@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Link } from 'react-router';
-import type { Category, Localized, Product } from '@qareeb/shared';
+import { MAX_STORY_ITEMS, type Category, type Localized, type Product } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
 import { useCollection, orderBy, limit } from '@/lib/queries';
 import { Button, Dialog, IconButton, Badge, EmptyState, Skeleton, toast } from '@/design/components';
@@ -12,7 +12,7 @@ import { PageTitle, useDash } from './shell';
 import { LoadError } from './BusinessExperience';
 import { StorageImage } from '@/customer/StorageImage';
 import { LocalizedInput } from './LocalizedInput';
-import { ActionSheet, Switch, type SheetAction } from './CatalogControls';
+import { ActionSheet, Switch, storyIssue, type SheetAction } from './CatalogControls';
 import { CopyDialog, ProductEditor } from './CatalogPages';
 import './catalog.css';
 import './catalog-list.css';
@@ -96,6 +96,13 @@ export function CatalogPage() {
     try { await call('setProductAvailable', { businessId: business.id, branchId: branch.id, productId: p.id, available }); }
     catch (e) { fail(e); }
     finally { setPending((ids) => { const next = new Set(ids); next.delete(p.id); return next; }); }
+  };
+  /** Save only the stories flag, like availability, so another editor's changes remain intact. */
+  const setInStories = async (p: Product, inStories: boolean) => {
+    setPending((ids) => new Set(ids).add(`story:${p.id}`));
+    try { await call('setProductInStories', { businessId: business.id, branchId: branch.id, productId: p.id, inStories }); }
+    catch (e) { toast(storyIssue(e) ? t('catalog.storiesLimit', { max: MAX_STORY_ITEMS }) : t(errorKey(e)), 'danger'); }
+    finally { setPending((ids) => { const next = new Set(ids); next.delete(`story:${p.id}`); return next; }); }
   };
   const categoryActions = (c: Category): SheetAction[] => [
     { label: t('catalog.editCategory'), icon: 'edit', onSelect: () => setCatEdit({ id: c.id, name: c.name }) },
@@ -181,6 +188,19 @@ export function CatalogPage() {
                           {p.trackInventory ? <span>· {t('dash.stock')} <bdi>{p.variants.length ? p.variants.reduce((n, v) => n + (v.stockQty ?? 0), 0) : p.stockQty ?? 0}</bdi></span> : null}
                           {p.archived ? <Badge tone="muted">{t('catalog.archived')}</Badge> : null}
                         </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="irow__story"
+                        aria-pressed={!!p.inStories}
+                        aria-busy={pending.has(`story:${p.id}`) || undefined}
+                        // An item without a photo cannot show in stories; one already in them can always be taken out.
+                        disabled={pending.has(`story:${p.id}`) || p.archived || (!p.imagePath && !p.inStories)}
+                        aria-label={`${t('catalog.inStories')}: ${name(p.name)}`}
+                        title={!p.imagePath && !p.inStories ? t('catalog.storiesNeedsPhoto') : t('catalog.inStories')}
+                        onClick={() => void setInStories(p, !p.inStories)}
+                      >
+                        <span className="irow__story-ring" aria-hidden="true"><Icon name="play" size={12} /></span>
                       </button>
                       <Switch checked={p.available} label={`${t('catalog.available')}: ${name(p.name)}`} busy={pending.has(p.id)} disabled={pending.has(p.id) || p.archived} onChange={(available) => void setAvailable(p, available)} />
                     </li>

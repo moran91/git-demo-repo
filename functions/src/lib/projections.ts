@@ -1,4 +1,4 @@
-import type { Branch, Business, Category, Combo, Product, Promotion } from '@qareeb/shared';
+import type { Branch, BranchPost, Business, Category, Combo, Product, Promotion } from '@qareeb/shared';
 import { col, db, nowIso, type Tx, commitInChunks } from './firebase.js';
 
 /**
@@ -159,15 +159,17 @@ export async function reprojectCatalog(businessId: string, branchId: string): Pr
   const [bSnap, brSnap] = await Promise.all([col.business(businessId).get(), col.branch(businessId, branchId).get()]);
   if (!bSnap.exists || !brSnap.exists) return;
   const visible = isPubliclyVisible(bSnap.data() as Business, brSnap.data() as Branch);
-  const [cats, prods, combos, promos, pubCats, pubProds, pubCombos, pubPromos] = await Promise.all([
+  const [cats, prods, combos, promos, posts, pubCats, pubProds, pubCombos, pubPromos, pubPosts] = await Promise.all([
     col.categories(businessId, branchId).get(),
     col.products(businessId, branchId).get(),
     col.combos(businessId, branchId).get(),
     col.promotions(businessId, branchId).get(),
+    col.posts(businessId, branchId).get(),
     col.publicCategories(branchId).get(),
     col.publicProducts(branchId).get(),
     col.publicCombos(branchId).get(),
     col.publicPromotions(branchId).get(),
+    col.publicPosts(branchId).get(),
   ]);
   const ops: Array<(batch: FirebaseFirestore.WriteBatch) => void> = [];
   const retained = new Set<string>();
@@ -184,6 +186,11 @@ export async function reprojectCatalog(businessId: string, branchId: string): Pr
       const p = d.data() as Promotion;
       if (p.active) publish(col.publicPromotions(branchId).doc(p.id), p);
     }
+    const now = nowIso();
+    for (const d of posts.docs) {
+      const p = d.data() as BranchPost;
+      if (p.expiresAt > now) publish(col.publicPosts(branchId).doc(p.id), p);
+    }
     for (const d of cats.docs) {
       const c = d.data() as Category;
       if (!c.archived) publish(col.publicCategories(branchId).doc(c.id), c);
@@ -195,7 +202,7 @@ export async function reprojectCatalog(businessId: string, branchId: string): Pr
   }
   // Replace live documents in place. Delete only obsolete projections, so a failed later chunk
   // cannot leave an otherwise live menu empty halfway through republishing.
-  for (const d of [...pubCats.docs, ...pubProds.docs, ...pubCombos.docs, ...pubPromos.docs]) {
+  for (const d of [...pubCats.docs, ...pubProds.docs, ...pubCombos.docs, ...pubPromos.docs, ...pubPosts.docs]) {
     if (!retained.has(d.ref.path)) ops.push((batch) => batch.delete(d.ref));
   }
   await commitInChunks(ops);
@@ -218,6 +225,13 @@ export function projectComboInTx(tx: Tx, business: Business, branch: Branch, com
 export function projectPromotionInTx(tx: Tx, business: Business, branch: Branch, promotion: Promotion): void {
   const ref = col.publicPromotions(branch.id).doc(promotion.id);
   if (isPubliclyVisible(business, branch) && promotion.active) tx.set(ref, promotion);
+  else tx.delete(ref);
+}
+
+/** A live post is public while the branch is; expired ones are removed by the sweep. */
+export function projectPostInTx(tx: Tx, business: Business, branch: Branch, post: BranchPost): void {
+  const ref = col.publicPosts(branch.id).doc(post.id);
+  if (isPubliclyVisible(business, branch)) tx.set(ref, post);
   else tx.delete(ref);
 }
 

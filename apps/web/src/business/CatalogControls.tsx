@@ -62,3 +62,9 @@ export function LedgerRow({ label, hint, children }: { label: ReactNode; hint?: 
     </div>
   );
 }
+
+/** True when a save was refused because the branch already features the maximum of story items. */
+export function storyIssue(e: unknown): boolean {
+  const details = (e as { details?: { issues?: Array<{ message?: string }> } } | null)?.details;
+  return details?.issues?.some((i) => i.message === 'too_many_story_items') ?? false;
+}

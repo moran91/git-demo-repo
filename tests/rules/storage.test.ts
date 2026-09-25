@@ -88,6 +88,17 @@ describe('storage rules', () => {
     await assertFails(uploadBytes(ref(s.storage(), 'businesses/biz1/branches/brA/products/p1/big.png'), new Uint8Array(5 * 1024 * 1024 + 1), meta));
   });
 
+  // The emulator cannot resolve the membership lookup (see the budget note above), so the "editor may
+  // upload" half is asserted statically: the posts block grants exactly what the promotions block does.
+  it('explore-post photos: same grant as promotion banners; guests and non-images refused', async () => {
+    const src = fs.readFileSync(path.resolve(__dirname, '../../storage.rules'), 'utf8');
+    const grant = (seg: string) => src.split(`/branches/{branchId}/${seg}/`)[1]?.split('}\n')[0]?.split('\n').slice(1, 4).join('\n');
+    expect(grant('posts')).toBeTruthy();
+    expect(grant('posts')).toBe(grant('promotions'));
+    await assertFails(uploadBytes(ref(env.unauthenticatedContext().storage(), 'businesses/biz1/branches/brA/posts/post1/b.png'), png, meta));
+    await assertFails(uploadBytes(ref(env.authenticatedContext('owner1').storage(), 'businesses/biz1/branches/brA/posts/post1/c.pdf'), png, { contentType: 'application/pdf' }));
+  });
+
   it('closes every path outside the tenant layout, including branding files not named logo/cover', async () => {
     const s = env.authenticatedContext('owner1');
     await assertFails(uploadBytes(ref(s.storage(), 'receipts/secret.png'), png, meta));

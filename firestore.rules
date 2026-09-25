@@ -45,6 +45,7 @@ service cloud.firestore {
       match /products/{productId} { allow read: if true; allow write: if false; }
       match /combos/{comboId} { allow read: if true; allow write: if false; }
       match /promotions/{promotionId} { allow read: if true; allow write: if false; }
+      match /posts/{postId} { allow read: if true; allow write: if false; }
     }
     match /cities/{cityId} { allow read: if true; allow write: if false; }
     match /config/platform { allow read: if true; allow write: if false; }
@@ -134,6 +135,10 @@ service cloud.firestore {
           allow write: if false;
         }
         match /promotions/{promotionId} {
+          allow read: if isAdmin() || coversBranch(businessId, branchId);
+          allow write: if false;
+        }
+        match /posts/{postId} {
           allow read: if isAdmin() || coversBranch(businessId, branchId);
           allow write: if false;
         }

@@ -5,6 +5,7 @@ import { ErrorView } from '@/app/Shell';
 import { useCity, useDiscovery } from './hooks';
 import { BusinessCard } from './BusinessCard';
 import { cityPickerStore } from './CityControl';
+import { StoriesBar } from './StoriesBar';
 
 export function DiscoveryPage() {
   const t = useT();
@@ -16,10 +17,9 @@ export function DiscoveryPage() {
 
   return (
     <div className="stack--lg stack">
-      <div className="hero">
-        <h1>{t('brand.tagline')}</h1>
-        <p>{t('brand.subtitle')}</p>
-      </div>
+      <StoriesBar cityId={prefs.cityId} />
+      {/* The page title stays for screen readers and the document outline; the stories open the page visually. */}
+      <h1 className="visually-hidden">{t('brand.tagline')}</h1>
       <div className="controls">
         <div>
           <Segmented
