@@ -144,6 +144,18 @@ test.describe('owner usability regressions', () => {
     await expect(page).toHaveURL(/\/business\/biz-abu-salim\/[^/]+\/branch$/);
     await expect(page.getByRole('textbox', { name: 'Branch name English', exact: true })).toHaveValue(name);
     expect(dialogs).toEqual([]);
+
+    // The go-live checklist on its Orders tab: hours came pre-filled, the map pin and first product are
+    // still missing, and approval is pending.
+    await page.goto(page.url().replace(/\/branch$/, '/orders'));
+    const card = page.locator('section.golive');
+    await expect(card.getByRole('heading', { name: 'Open your store', exact: true })).toBeVisible();
+    await expect(card.getByText('1 of 4', { exact: true })).toBeVisible();
+    await expect(card.locator('.golive__step--done')).toHaveText(['Opening hours']);
+    await expect(card.getByRole('link', { name: 'Set location', exact: true })).toHaveClass(/btn--primary/);
+    await expect(card.getByText('In review', { exact: true })).toBeVisible();
+    await card.getByRole('link', { name: 'Opening hours', exact: true }).click();
+    await expect(page).toHaveURL(/\/branch#bs-hours$/);
   });
 
   test('mobile navigation traps focus, closes with Escape, and restores the opener', async ({ page }) => {

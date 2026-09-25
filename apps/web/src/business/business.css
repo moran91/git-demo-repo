@@ -27,8 +27,41 @@
 .business-app .save-bar { position: sticky; bottom: 0; z-index: 10; background: var(--color-surface); border: 1px solid var(--color-border-strong); border-radius: var(--radius-control); padding: 12px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 .business-app .save-status { font-size: 16px; color: var(--color-accent-text); }
 .business-app .save-status--saved { color: var(--color-success-text); }
-.business-app .owner-guide__steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px; }
-.business-app .owner-guide { border-color: var(--color-border-strong); }
+/* Go-live checklist (GoLiveCard) on the Orders tab until the branch's first order. */
+.business-app .golive { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-card); box-shadow: var(--shadow-card); padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); max-width: 560px; }
+.business-app .golive h2 { margin: 0; font-size: 18px; line-height: 1.3; }
+.business-app .golive__head, .business-app .golive__row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; }
+.business-app .golive__count { font-size: var(--text-secondary); color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+.business-app .golive__meter { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-1); }
+.business-app .golive__meter i { height: 4px; border-radius: 2px; background: var(--color-border); }
+.business-app .golive__meter i.on { background: var(--color-primary); }
+.business-app .golive__steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.business-app .golive__step { display: flex; align-items: center; gap: 10px; min-height: var(--touch-min); border-top: 1px solid var(--color-border); }
+.business-app .golive__step:first-child { border-top: 0; }
+.business-app .golive__link { display: flex; align-items: center; gap: 10px; flex: 1; min-height: var(--touch-min); color: inherit; text-decoration: none; }
+.business-app .golive__tick { width: 24px; height: 24px; border-radius: 50%; flex: none; display: grid; place-items: center; border: 1.5px solid var(--color-border-strong); }
+.business-app .golive__step--done .golive__tick { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-on-primary); }
+.business-app .golive__step--done .golive__label { color: var(--color-text-muted); }
+.business-app .golive__label { flex: 1; min-width: 0; }
+.business-app .golive__chev { color: var(--color-text-muted); flex: none; }
+.business-app .golive__step--next { flex-wrap: wrap; padding-block: 10px; }
+.business-app .golive__step--next .golive__label { font-weight: 600; }
+.business-app .golive__step--next .btn { flex-basis: 100%; }
+.business-app .golive__pill { font-size: var(--text-badge); font-weight: 600; padding: 3px 8px; border-radius: var(--radius-badge); flex: none; }
+.business-app .golive__pill--wait { color: var(--color-accent-text); background: var(--color-accent-bg); }
+.business-app .golive__pill--danger { color: var(--color-danger-text); background: var(--color-danger-bg); }
+.business-app .golive__actions { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+.business-app .golive .btn { white-space: nowrap; gap: var(--space-2); }
+.business-app .golive--live { background: var(--color-success-bg); border-color: transparent; }
+.business-app .golive--live h2 { color: var(--color-success-text); }
+.business-app .golive-first { display: flex; align-items: center; gap: var(--space-3); background: var(--color-primary); color: var(--color-on-primary); border-radius: var(--radius-card); padding: 14px var(--space-4); max-width: 560px; font-size: 17px; }
+.business-app .golive-first__burst { width: 40px; height: 40px; flex: none; position: relative; }
+.business-app .golive-first__burst::after { content: ""; position: absolute; inset: 11px; border-radius: 50%; background: var(--color-on-primary); }
+.business-app .golive-first__burst i { position: absolute; left: 50%; top: 50%; width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px; border-radius: 50%; background: var(--color-accent-bg); transform: rotate(var(--a)) translateY(-15px); animation: golive-pop 1.1s var(--ease) both; }
+.business-app .golive-first__burst i:nth-child(odd) { width: 3px; height: 8px; border-radius: 2px; margin: -4px 0 0 -1.5px; background: var(--color-on-primary); transform: rotate(var(--a)) translateY(-17px); }
+@keyframes golive-pop { from { opacity: 0; transform: rotate(var(--a)) translateY(-4px) scale(0.3); } }
+@media (prefers-reduced-motion: reduce) { .business-app .golive-first__burst i { animation: none; } }
+.business-app #bs-hours { scroll-margin-top: 96px; }
 .business-app .catalog-search { max-width: 640px; }
 .business-app .catalog-actions { flex-wrap: wrap; }
 .business-app .auth-card { max-width: 560px; }

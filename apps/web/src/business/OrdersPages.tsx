@@ -18,7 +18,7 @@ import { AddressSummary } from '@/customer/AddressForm';
 import { Summary } from '@/customer/Summary';
 import { useNow } from '@/customer/hooks';
 import { useAuth } from '@/lib/auth';
-import { GettingStarted, LoadError } from './BusinessExperience';
+import { GoLiveCard, LoadError } from './BusinessExperience';
 
 function useNewOrderAlert(orders: Order[], loading: boolean) {
   const t = useT();
@@ -114,6 +114,7 @@ export function IncomingOrdersPage() {
       </div>
       {aging ? <Alert tone="warn">{t('dash.agingWarning')}</Alert> : null}
       {error ? <LoadError /> : null}
+      <GoLiveCard />
       <div className="board">
         {COLUMNS.map((c) => (
           <section key={c} id={`board-col-${c}`} aria-labelledby={`board-h-${c}`} className={`board__col board__col--${c}`}>
@@ -128,7 +129,6 @@ export function IncomingOrdersPage() {
           </section>
         ))}
       </div>
-      {!loading ? <GettingStarted /> : null}
     </div>
   );
 }

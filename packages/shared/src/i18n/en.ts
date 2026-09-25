@@ -36,14 +36,6 @@ export const en = {
   "location.steps.desktop": "Click the lock or site icon in the address bar → Location → Allow. Then click Try again.",
 
   // Business-owner guidance and recovery
-  "owner.guideTitle": "Start here",
-  "owner.guideBody": "Set up your branch, add products, then check what customers see. You can return to this guide anytime.",
-  "owner.stepBranch": "1. Check hours and delivery",
-  "owner.stepCatalog": "2. Add products and prices",
-  "owner.stepPreview": "3. View your shop",
-  "owner.guideOrders": "New orders appear here automatically. Open Order history to find accepted orders and record payment after you receive the cash.",
-  "owner.hideGuide": "Hide guide",
-  "owner.showGuide": "Getting started",
   "owner.loadError": "This information could not be loaded. Try again before making changes.",
   "owner.unsaved": "You have unsaved changes.",
   "owner.discard": "Leave without saving your changes?",
@@ -1299,6 +1291,22 @@ export const en = {
   'catalog.storiesNeedsPhoto': 'Needs a photo to show in stories',
   'catalog.storiesLimit': 'Up to {max} items in stories',
   'stories.fromMenu': 'From the menu',
+  'golive.title': 'Open your store',
+  'golive.progress': '{done} of {total}',
+  'golive.stepSetup': 'Location and ordering',
+  'golive.stepHours': 'Opening hours',
+  'golive.stepProduct': 'First product on the menu',
+  'golive.setSetup': 'Set location',
+  'golive.setHours': 'Set hours',
+  'golive.addProduct': 'Add a product',
+  'golive.stepApproval': 'Qareeb approval',
+  'golive.inReview': 'In review',
+  'golive.ready': 'All set',
+  'golive.waiting': 'Waiting for Qareeb approval',
+  'golive.live': 'Your store is open for orders',
+  'golive.qr': 'QR code',
+  'golive.viewStore': 'View your store',
+  'golive.firstOrder': 'Your first order!',
 } as const;
 
 export type TranslationKey = keyof typeof en;
