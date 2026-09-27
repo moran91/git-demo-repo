@@ -13,6 +13,8 @@ for (const dir of ['ltr', 'rtl']) {
       <div class="dialog__body"><div class="stack">${Array.from({ length: 20 }, (_, i) => `<label class="choice"><input type="checkbox">Option ${i}</label>`).join('')}</div></div>
       <div class="dialog__footer"><button class="btn">Add to cart</button></div></dialog></body></html>`);
     await page.evaluate(() => { window.scrollTo(0, 700); document.querySelector('dialog')!.showModal(); });
+    // Measure the resting sheet, not the slide-up entrance.
+    await page.evaluate(() => Promise.all(document.querySelector('dialog')!.getAnimations().map((a) => a.finished)));
     for (const height of [844, 600, 420, 844]) {
       await page.setViewportSize({ width: 390, height });
       const box = await page.locator('dialog').boundingBox();

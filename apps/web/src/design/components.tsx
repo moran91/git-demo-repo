@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
+import { createContext, forwardRef, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 import { Icon, type IconName } from './Icon';
 import { useT } from '@/lib/i18n';
 
@@ -149,13 +149,51 @@ export function Alert({ tone = 'info', children, action }: { tone?: 'info' | 'wa
 /** `headerStart` renders before the title (e.g. a Back button, which then replaces Close when `hideClose`);
  *  `headerEnd` renders between the title and Close (e.g. a language switch). */
 export interface DialogChrome { headerStart?: ReactNode; headerEnd?: ReactNode; hideClose?: boolean; className?: string }
-export function Dialog({ open, onClose, title, children, footer, sheet = true, expanded = false, closeLabel, ...chrome }: { open: boolean; onClose: () => void; title: string; children: ReactNode; footer?: ReactNode; sheet?: boolean; expanded?: boolean; closeLabel?: string } & DialogChrome) {
-  if (!open) return null;
-  return <DialogInner onClose={onClose} title={title} footer={footer} sheet={sheet} expanded={expanded} closeLabel={closeLabel} {...chrome}>{children}</DialogInner>;
+type DialogProps = { open: boolean; onClose: () => void; title: string; children: ReactNode; footer?: ReactNode; sheet?: boolean; expanded?: boolean; closeLabel?: string } & DialogChrome;
+/** Matches --duration-exit; 0 under reduced motion, where the CSS exit is 0ms too. */
+function exitMs() {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 160;
+}
+function sameProps(a: object, b: object) {
+  const ka = Object.keys(a), kb = Object.keys(b);
+  return ka.length === kb.length && ka.every((k) => Object.is((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+}
+const LeavingContext = createContext(false);
+/** For a sheet mounted as `{item ? <Sheet item={item} /> : null}`: keeps the last item rendered while
+ *  the Dialog inside plays its exit, so closing is not an instant cut. */
+export function Presence<T>({ value, children }: { value: T | null; children: (value: T) => ReactNode }) {
+  const [kept, setKept] = useState(value);
+  if (value !== null && value !== kept) setKept(value);
+  useEffect(() => {
+    if (value !== null || kept === null) return;
+    const id = window.setTimeout(() => setKept(null), exitMs());
+    return () => window.clearTimeout(id);
+  }, [value, kept]);
+  const shown = value ?? kept;
+  if (shown === null) return null;
+  return <LeavingContext.Provider value={value === null}>{children(shown)}</LeavingContext.Provider>;
+}
+export function Dialog({ open: openProp, ...props }: DialogProps) {
+  const leaving = useContext(LeavingContext);
+  const open = openProp && !leaving;
+  // Stay mounted for the exit animation, showing the last open render: callers often clear the
+  // content with the flag (`open={!!item}` + `{item && …}`), which would collapse the sheet mid-exit.
+  const [shown, setShown] = useState(open);
+  if (open && !shown) setShown(true);
+  const [last, setLast] = useState(props);
+  if (open && !sameProps(last, props)) setLast(props);
+  useEffect(() => {
+    if (open || !shown) return;
+    const id = window.setTimeout(() => setShown(false), exitMs());
+    return () => window.clearTimeout(id);
+  }, [open, shown]);
+  if (!shown) return null;
+  const { onClose, title, children, footer, sheet = true, expanded = false, closeLabel, ...chrome } = open ? props : last;
+  return <DialogInner onClose={onClose} title={title} footer={footer} sheet={sheet} expanded={expanded} closeLabel={closeLabel} closing={!open} {...chrome}>{children}</DialogInner>;
 }
 
 /** Native <dialog> (focus trap + Escape) mounted only while open; focus is restored to the opener on unmount. */
-function DialogInner({ onClose, title, children, footer, sheet, expanded, closeLabel, headerStart, headerEnd, hideClose, className = '' }: { onClose: () => void; title: string; children: ReactNode; footer?: ReactNode; sheet: boolean; expanded: boolean; closeLabel?: string } & DialogChrome) {
+function DialogInner({ onClose, title, children, footer, sheet, expanded, closeLabel, closing, headerStart, headerEnd, hideClose, className = '' }: { onClose: () => void; title: string; children: ReactNode; footer?: ReactNode; sheet: boolean; expanded: boolean; closeLabel?: string; closing: boolean } & DialogChrome) {
   const t = useT();
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -185,8 +223,10 @@ function DialogInner({ onClose, title, children, footer, sheet, expanded, closeL
     return () => {
       d.removeEventListener('cancel', onCancel);
       d.removeEventListener('click', onClick);
+      // A dialog opened while this one was leaving already holds focus; do not pull it back out.
+      const active = document.activeElement;
       if (d.open) d.close();
-      opener?.focus?.();
+      if (!active || active === document.body || d.contains(active)) opener?.focus?.();
     };
   }, []);
   // Swipe-to-dismiss (mobile bottom sheet): a downward touch drag from the header, or from the body
@@ -242,7 +282,7 @@ function DialogInner({ onClose, title, children, footer, sheet, expanded, closeL
     };
   }, [sheet]);
   return (
-    <dialog ref={ref} className={`dialog ${sheet ? 'dialog--sheet' : ''} ${sheet && expanded ? 'dialog--expanded' : ''} ${className}`} aria-labelledby={titleId}>
+    <dialog ref={ref} className={`dialog ${sheet ? 'dialog--sheet' : ''} ${sheet && expanded ? 'dialog--expanded' : ''} ${closing ? 'is-closing' : ''} ${className}`} aria-labelledby={titleId} aria-hidden={closing || undefined}>
       {sheet ? <div className="dialog__grabber" aria-hidden="true" /> : null}
       <div className="dialog__header">
         {headerStart}
@@ -274,7 +314,8 @@ export function EmptyState({ icon = 'info', title, body, action }: { icon?: Icon
   return (
     <div className="empty">
       <Icon name={icon} size={40} />
-      <h2>{title}</h2>
+      {/* A heading never ends in a full stop, even when the message is a sentence ("The cart is empty."). */}
+      <h2>{title.replace(/\.$/, '')}</h2>
       {body ? <p>{body}</p> : null}
       {action}
     </div>
@@ -282,7 +323,7 @@ export function EmptyState({ icon = 'info', title, body, action }: { icon?: Icon
 }
 
 /* ---------- Toasts ---------- */
-export interface ToastItem { id: number; text: string; tone?: 'default' | 'danger' }
+export interface ToastItem { id: number; text: string; tone?: 'default' | 'danger'; leaving?: boolean }
 let toastListeners: Array<(t: ToastItem) => void> = [];
 let toastId = 0;
 export function toast(text: string, tone: ToastItem['tone'] = 'default') {
@@ -294,6 +335,7 @@ export function ToastRegion() {
   useEffect(() => {
     const l = (t: ToastItem) => {
       setItems((prev) => [...prev, t]);
+      setTimeout(() => setItems((prev) => prev.map((x) => (x.id === t.id ? { ...x, leaving: true } : x))), 4500 - exitMs());
       setTimeout(() => setItems((prev) => prev.filter((x) => x.id !== t.id)), 4500);
     };
     toastListeners.push(l);
@@ -304,7 +346,7 @@ export function ToastRegion() {
   return (
     <div className="toast-region" aria-live="polite" aria-atomic="false">
       {items.map((t) => (
-        <div key={t.id} className={`toast ${t.tone === 'danger' ? 'toast--danger' : ''}`} role={t.tone === 'danger' ? 'alert' : 'status'}>
+        <div key={t.id} className={`toast ${t.tone === 'danger' ? 'toast--danger' : ''} ${t.leaving ? 'is-leaving' : ''}`} role={t.tone === 'danger' ? 'alert' : 'status'}>
           {t.text}
         </div>
       ))}
@@ -325,4 +367,19 @@ export function Stepper({ value, min = 0, max = 999, step = 1, onChange, onRemov
       <button type="button" aria-label={incLabel} onClick={() => onChange(Math.min(max, value + step))} disabled={value + step > max}><Icon name="plus" size={18} /></button>
     </div>
   );
+}
+
+/**
+ * A table that turns into one labelled card per row on phones (see `.table-wrap--stack`). Each cell is labelled with
+ * its column header after every render, so callers keep writing a plain <table>.
+ */
+export function StackTable({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const table = ref.current?.querySelector('table');
+    if (!table) return;
+    const heads = [...table.querySelectorAll('thead th')].map((th) => th.textContent?.trim() ?? '');
+    table.querySelectorAll('tbody tr').forEach((tr) => [...tr.children].forEach((td, i) => td.setAttribute('data-label', heads[i] ?? '')));
+  });
+  return <div ref={ref} className="table-wrap table-wrap--stack">{children}</div>;
 }

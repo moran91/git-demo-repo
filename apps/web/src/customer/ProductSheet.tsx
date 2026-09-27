@@ -115,7 +115,7 @@ export function ProductSheet({ product, business, branch, mode, cityId, onClose,
       >
         <div className="stack">
           <div className="row row--nowrap" style={{ alignItems: 'flex-start' }}>
-            <StorageImage path={product.imagePath} alt={t('product.photoAlt', { name: L(product.name, business.defaultLocale) })} square className="product__img" fallbackLabel={t('discovery.imageFallback')} onClick={() => setShowPhoto(true)} />
+            {product.imagePath ? <StorageImage path={product.imagePath} alt={t('product.photoAlt', { name: L(product.name, business.defaultLocale) })} square className="product__img" fallbackLabel={t('discovery.imageFallback')} onClick={() => setShowPhoto(true)} /> : null}
             <div className="stack--sm stack" style={{ minWidth: 0 }}>
               {L(product.description, business.defaultLocale) ? <p className="wrap-anywhere">{L(product.description, business.defaultLocale)}</p> : null}
               {L(product.dietaryText, business.defaultLocale) ? <p className="muted wrap-anywhere"><strong>{t('business.dietary')}:</strong> {L(product.dietaryText, business.defaultLocale)}</p> : null}

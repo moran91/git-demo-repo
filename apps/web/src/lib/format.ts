@@ -1,4 +1,4 @@
-import { formatILS, formatGrams, formatLocalDateTime, formatLocalTime, formatPhoneDisplay, type Locale } from '@qareeb/shared';
+import { formatILS, formatGrams, formatLocalDateTime, formatLocalTime, formatPhoneDisplay, minutesToHHMM, toLocal, type Locale } from '@qareeb/shared';
 export { formatILS, formatGrams, formatLocalDateTime, formatLocalTime, formatPhoneDisplay };
 
 export function telHref(e164: string): string {
@@ -11,4 +11,9 @@ export function minutesSince(iso: string): number {
 
 export function money(agorot: number, locale: Locale): string {
   return formatILS(agorot, locale);
+}
+
+/** Local wall-clock time `inMin` minutes from now, as "9:30" or "00:30" (only a leading zero before a single-digit hour is dropped). */
+export function clockIn(inMin: number): string {
+  return minutesToHHMM(toLocal(new Date()).minutes + inMin).replace(/^0(?=[1-9]:)/, '');
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { normalizeIsraeliPhone, type SavedAddress } from '@qareeb/shared';
+import { formatPhoneDisplay, normalizeIsraeliPhone, type SavedAddress } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
 import { Button, TextArea, TextInput, Select, Checkbox } from '@/design/components';
 import { Icon } from '@/design/Icon';
@@ -111,7 +111,7 @@ export function AddressSummary({ a }: { a: Pick<SavedAddress, 'houseDescription'
       <div className="address-card__desc wrap-anywhere">{a.houseDescription}</div>
       {line2 ? <div className="muted wrap-anywhere">{line2}</div> : null}
       {line3 ? <div className="muted">{line3}</div> : null}
-      <div className="muted">{a.recipientName} · <bdi className="num">{a.recipientPhone}</bdi></div>
+      <div className="muted">{a.recipientName} · <bdi className="num">{formatPhoneDisplay(a.recipientPhone)}</bdi></div>
       {a.deliveryInstructions ? <div className="muted wrap-anywhere">{a.deliveryInstructions}</div> : null}
     </div>
   );

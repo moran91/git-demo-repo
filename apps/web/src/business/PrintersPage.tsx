@@ -104,7 +104,7 @@ export function PrintersPage() {
   const jobTone = (state: PrintJob['state']) => (state === 'confirmed' ? 'success' : state === 'needs_review' || state === 'failed_before_send' ? 'danger' : state === 'sending' ? 'accent' : 'neutral');
   return (
     <div className="sx-page sx-page--wide">
-      <PageTitle title={t('printers.title')}>{can('printers_config') ? <Button icon="plus" onClick={addPrinter}>{t('printers.add')}</Button> : null}</PageTitle>
+      <PageTitle title={t('printers.title')}>{can('printers_config') && printers.data.length > 0 ? <Button icon="plus" onClick={addPrinter}>{t('printers.add')}</Button> : null}</PageTitle>
       {printers.error || stations.error || jobs.error ? <LoadError /> : null}
       <p className="sx-card__sub">{t('printers.staffOnlyNote')} {t('printers.compat')}</p>
       {support !== 'ok' ? <Alert tone="info">{support === 'insecure' ? t('printers.insecure') : t('printers.unsupported')}</Alert> : null}

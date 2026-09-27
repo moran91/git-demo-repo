@@ -1,5 +1,6 @@
 import { HttpsError, type FunctionsErrorCode } from 'firebase-functions/v2/https';
 import type { QareebErrorCode } from '@qareeb/shared';
+import { flushAdminAudit } from './adminAudit.js';
 
 const codeMap: Record<QareebErrorCode, FunctionsErrorCode> = {
   unauthenticated: 'unauthenticated',
@@ -58,7 +59,9 @@ export function fail(code: QareebErrorCode, details?: Record<string, unknown>, m
 export function handled<TReq, TRes>(fn: (req: TReq) => Promise<TRes>): (req: TReq) => Promise<TRes> {
   return async (req) => {
     try {
-      return await fn(req);
+      const result = await fn(req);
+      await flushAdminAudit(req as unknown as object);
+      return result;
     } catch (e) {
       if (e instanceof QareebError) throw e.toHttps();
       if (e instanceof HttpsError) throw e;

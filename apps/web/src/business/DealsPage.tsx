@@ -235,9 +235,9 @@ function ComboEditor({ initial, products, categories, onClose }: { initial: { id
           <h3>{t('deals.priceTitle')}</h3>
           <TextInput label={t('deals.price')} type="number" ltr inputMode="decimal" min={0} step="0.5" value={priceText} error={priceAboveSum ? t('deals.priceAboveSum') : undefined} onChange={(e) => { setPriceText(e.target.value); set({ priceAgorot: toAgorot(e.target.value) }); }} />
           {sum !== null && d.items.length > 0 ? <div className="combo-summary summary">
-            <div className="summary__row"><span className="owner-only"><Icon name="shield" size={14} />{t('deals.sum')}</span><bdi className="num">{money(sum, locale)}</bdi></div>
-            {price > 0 && !priceAboveSum ? <div className="summary__row summary__row--saves"><span>{t('deals.customerSaves')}</span><bdi className="num">{money(sum - price, locale)}</bdi></div> : null}
-            <div className="summary__row summary__row--total"><span>{t('deals.comboPrice')}</span><bdi className="num">{price > 0 ? money(price, locale) : '—'}</bdi></div>
+            <div className="summary__row"><span className="owner-only"><Icon name="shield" size={14} />{t('deals.sum')}</span><bdi className="money">{money(sum, locale)}</bdi></div>
+            {price > 0 && !priceAboveSum ? <div className="summary__row summary__row--saves"><span>{t('deals.customerSaves')}</span><bdi className="money">{money(sum - price, locale)}</bdi></div> : null}
+            <div className="summary__row summary__row--total"><span>{t('deals.comboPrice')}</span><bdi className="money">{price > 0 ? money(price, locale) : '—'}</bdi></div>
             <span className="combo-summary__note"><Icon name="shield" size={16} />{t('deals.sumPrivate')}</span>
           </div> : null}
         </section>

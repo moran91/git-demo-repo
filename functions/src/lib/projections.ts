@@ -1,4 +1,5 @@
-import type { Branch, Business, Category, Combo, Product, Promotion } from '@qareeb/shared';
+import { FieldPath, FieldValue } from 'firebase-admin/firestore';
+import { toDishIndexEntry, type Branch, type BranchPost, type Business, type Category, type Combo, type DishIndexDoc, type Product, type Promotion } from '@qareeb/shared';
 import { col, db, nowIso, type Tx, commitInChunks } from './firebase.js';
 
 /**
@@ -159,15 +160,18 @@ export async function reprojectCatalog(businessId: string, branchId: string): Pr
   const [bSnap, brSnap] = await Promise.all([col.business(businessId).get(), col.branch(businessId, branchId).get()]);
   if (!bSnap.exists || !brSnap.exists) return;
   const visible = isPubliclyVisible(bSnap.data() as Business, brSnap.data() as Branch);
-  const [cats, prods, combos, promos, pubCats, pubProds, pubCombos, pubPromos] = await Promise.all([
+  const [cats, prods, combos, promos, posts, pubCats, pubProds, pubCombos, pubPromos, pubPosts, pubIndex] = await Promise.all([
     col.categories(businessId, branchId).get(),
     col.products(businessId, branchId).get(),
     col.combos(businessId, branchId).get(),
     col.promotions(businessId, branchId).get(),
+    col.posts(businessId, branchId).get(),
     col.publicCategories(branchId).get(),
     col.publicProducts(branchId).get(),
     col.publicCombos(branchId).get(),
     col.publicPromotions(branchId).get(),
+    col.publicPosts(branchId).get(),
+    col.publicDishIndex(branchId).get(),
   ]);
   const ops: Array<(batch: FirebaseFirestore.WriteBatch) => void> = [];
   const retained = new Set<string>();
@@ -184,6 +188,11 @@ export async function reprojectCatalog(businessId: string, branchId: string): Pr
       const p = d.data() as Promotion;
       if (p.active) publish(col.publicPromotions(branchId).doc(p.id), p);
     }
+    const now = nowIso();
+    for (const d of posts.docs) {
+      const p = d.data() as BranchPost;
+      if (p.expiresAt > now) publish(col.publicPosts(branchId).doc(p.id), p);
+    }
     for (const d of cats.docs) {
       const c = d.data() as Category;
       if (!c.archived) publish(col.publicCategories(branchId).doc(c.id), c);
@@ -192,10 +201,17 @@ export async function reprojectCatalog(businessId: string, branchId: string): Pr
       const p = d.data() as Product;
       if (!p.archived) publish(col.publicProducts(branchId).doc(p.id), toPublicProduct(p));
     }
+    const business = bSnap.data() as Business;
+    if (business.type === 'restaurant') {
+      const live = prods.docs.map((d) => d.data() as Product).filter((p) => !p.archived);
+      const doc: DishIndexDoc = { branchId, businessId, dishes: Object.fromEntries(live.map((p) => [p.id, toDishIndexEntry(p)])), updatedAt: nowIso() };
+      publish(col.publicDishIndex(branchId), doc);
+    }
   }
+  if (pubIndex.exists && !retained.has(pubIndex.ref.path)) ops.push((batch) => batch.delete(pubIndex.ref));
   // Replace live documents in place. Delete only obsolete projections, so a failed later chunk
   // cannot leave an otherwise live menu empty halfway through republishing.
-  for (const d of [...pubCats.docs, ...pubProds.docs, ...pubCombos.docs, ...pubPromos.docs]) {
+  for (const d of [...pubCats.docs, ...pubProds.docs, ...pubCombos.docs, ...pubPromos.docs, ...pubPosts.docs]) {
     if (!retained.has(d.ref.path)) ops.push((batch) => batch.delete(d.ref));
   }
   await commitInChunks(ops);
@@ -206,6 +222,19 @@ export function projectProductInTx(tx: Tx, business: Business, branch: Branch, p
   const ref = col.publicProducts(branch.id).doc(product.id);
   if (isPubliclyVisible(business, branch) && !product.archived) tx.set(ref, toPublicProduct(product));
   else tx.delete(ref);
+  projectDishIndexEntry(tx, business, branch, product);
+}
+
+/**
+ * Updates one product's entry in the branch's dish index without reading the document (transactions
+ * forbid reads after writes). `mergeFields` replaces exactly that entry and creates the document when
+ * missing. An invisible branch has no index at all: reprojectCatalog deletes it when a branch is hidden.
+ */
+export function projectDishIndexEntry(w: Pick<Tx, 'set'> | FirebaseFirestore.WriteBatch, business: Business, branch: Branch, product: Product): void {
+  if (business.type !== 'restaurant' || !isPubliclyVisible(business, branch)) return;
+  const entry = product.archived ? FieldValue.delete() : toDishIndexEntry(product);
+  const data = { branchId: branch.id, businessId: business.id, updatedAt: nowIso(), dishes: { [product.id]: entry } };
+  (w as FirebaseFirestore.WriteBatch).set(col.publicDishIndex(branch.id), data, { mergeFields: ['branchId', 'businessId', 'updatedAt', new FieldPath('dishes', product.id)] });
 }
 
 export function projectComboInTx(tx: Tx, business: Business, branch: Branch, combo: Combo): void {
@@ -218,6 +247,13 @@ export function projectComboInTx(tx: Tx, business: Business, branch: Branch, com
 export function projectPromotionInTx(tx: Tx, business: Business, branch: Branch, promotion: Promotion): void {
   const ref = col.publicPromotions(branch.id).doc(promotion.id);
   if (isPubliclyVisible(business, branch) && promotion.active) tx.set(ref, promotion);
+  else tx.delete(ref);
+}
+
+/** A live post is public while the branch is; expired ones are removed by the sweep. */
+export function projectPostInTx(tx: Tx, business: Business, branch: Branch, post: BranchPost): void {
+  const ref = col.publicPosts(branch.id).doc(post.id);
+  if (isPubliclyVisible(business, branch)) tx.set(ref, post);
   else tx.delete(ref);
 }
 

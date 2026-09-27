@@ -241,7 +241,7 @@ export function CheckoutPage() {
             {quote.lines.map((l) => (
               <li key={l.lineId} className="order-line">
                 <span className="wrap-anywhere">{l.pricingMode === 'weight' ? formatGrams(l.requestedGrams ?? 0, locale) : `${l.quantity} ×`} {L(l.name, dl)}{l.variantName ? ` (${L(l.variantName, dl)})` : ''}{l.modifiers.length ? <span className="muted"> · {l.modifiers.map((m) => L(m.optionName, dl) + placementSuffix(m.placement, t)).join(', ')}</span> : null}{l.comboItems ? <span className="muted"> · {l.comboItems.map((ci) => `${ci.quantity} × ${L(ci.name, dl)}`).join(' + ')}</span> : null}</span>
-                <bdi className="num">{money(l.lineTotalAgorot, locale)}</bdi>
+                <bdi className="money">{money(l.lineTotalAgorot, locale)}</bdi>
               </li>
             ))}
           </ul> : null}

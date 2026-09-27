@@ -4,6 +4,9 @@
  */
 import type { Firestore } from 'firebase-admin/firestore';
 import type { Branch, Business, Category, Combo, Product, Promotion } from '@qareeb/shared';
+// Relative .ts import: the seed runs under node --experimental-strip-types, which cannot resolve the
+// package's .js-suffixed re-exports; dishIndex.ts itself has only type imports.
+import { toDishIndexEntry } from '../../packages/shared/src/dishIndex.ts';
 
 function visible(b: Business, br: Branch): boolean {
   return b.approval === 'approved' && br.approval === 'approved';
@@ -49,6 +52,11 @@ export async function reprojectBusinessSeed(db: Firestore, businessId: string): 
       // Variant products keep their stock on the variants (see functions/src/lib/projections.ts).
       const remaining = prod.variants.length > 0 ? prod.variants.reduce((sum, v) => sum + (v.stockQty ?? 0), 0) : stockQty;
       batch.set(ref.collection('products').doc(prod.id), { ...rest, variants: prod.variants.map(({ stockQty: vs, sku: _vs, ...v }) => ({ ...v, available: v.available && (!prod.trackInventory || vs === undefined || vs > 0) })), inStock, available: prod.available && inStock, stockLeft: prod.trackInventory && remaining !== undefined ? Math.min(remaining, 10) : undefined });
+    }
+    // Same as functions/src/lib/projections.ts: restaurants get one dish-index document per branch.
+    if (b.type === 'restaurant') {
+      const live = prods.docs.map((p) => p.data() as Product).filter((p) => !p.archived);
+      batch.set(ref.collection('index').doc('dishes'), { branchId: br.id, businessId: b.id, dishes: Object.fromEntries(live.map((p) => [p.id, toDishIndexEntry(p)])), updatedAt: now });
     }
   }
   await batch.commit();

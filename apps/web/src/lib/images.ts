@@ -1,6 +1,6 @@
 import { deleteObject, ref } from 'firebase/storage';
 import type { HeifDecoder } from 'libheif-js/wasm-bundle';
-import { storage, USE_EMULATORS, firebaseConfig } from './firebase';
+import { storage, USE_EMULATORS, EMU_PORT_OFFSET, firebaseConfig } from './firebase';
 
 export type ImageSize = 'thumb' | 'display';
 
@@ -17,7 +17,7 @@ const RETRY_VARIANT_AFTER_MS = 60_000;
  * 5–8 s per thumbnail from Thailand. Against the emulators the Storage emulator is read directly.
  */
 export function publicImageUrl(path: string): string {
-  if (USE_EMULATORS) return `http://${location.hostname}:9199/v0/b/${firebaseConfig.storageBucket}/o/${encodeURIComponent(path)}?alt=media`;
+  if (USE_EMULATORS) return `http://${location.hostname}:${9199 + EMU_PORT_OFFSET}/v0/b/${firebaseConfig.storageBucket}/o/${encodeURIComponent(path)}?alt=media`;
   return `/img/${path.split('/').map(encodeURIComponent).join('/')}`;
 }
 

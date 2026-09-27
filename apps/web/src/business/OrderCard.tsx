@@ -100,7 +100,7 @@ export function OrderLines({ order, compact }: { order: Order; compact?: boolean
             {l.modifiers.length ? <div className="order-line__mods">+ {l.modifiers.map((m, i) => <span key={m.optionId + i}>{i ? ', ' : ''}{m.placement && m.placement !== 'whole' ? <PizzaIcon placement={m.placement} size={18} label={placementSuffix(m.placement, t)} /> : null} {L(m.optionName)}{placementSuffix(m.placement, t)}</span>)}</div> : null}
             {l.note ? <div className="order-line__mods">“{l.note}”</div> : null}
           </span>
-          {!compact ? <bdi className="num">{l.removed ? '' : money(l.lineTotalAgorot, locale)}</bdi> : null}
+          {!compact ? <bdi className="money">{l.removed ? '' : money(l.lineTotalAgorot, locale)}</bdi> : null}
         </li>
       ))}
     </ul>

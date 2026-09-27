@@ -51,7 +51,8 @@ test.describe('business dashboard', () => {
     await signInEmail(page, 'admin@qareeb.test');
     await page.goto('/admin/approvals');
     await expect(page.getByRole('heading', { name: 'Approvals' })).toBeVisible();
-    await expect(page.getByText('Mountain Bakery')).toBeVisible();
+    // Listed under both pending businesses and its pending branch (by name, not id).
+    await expect(page.getByText('Mountain Bakery').first()).toBeVisible();
     await page.goto('/admin');
     await expect(page.getByText('Acceptance is not revenue.')).toBeVisible();
   });

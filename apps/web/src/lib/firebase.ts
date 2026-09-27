@@ -17,6 +17,8 @@ export const firebaseConfig = {
 export const USE_EMULATORS =
   import.meta.env.VITE_USE_EMULATORS === '1' &&
   (import.meta.env.DEV || import.meta.env.VITE_ALLOW_EMULATOR_BUILD === '1');
+/** Shifts every emulator port for a second emulator suite beside the usual one (see functions/test/emu.ts). */
+export const EMU_PORT_OFFSET = Number(import.meta.env.VITE_EMU_PORT_OFFSET ?? 0) || 0;
 export const FUNCTIONS_REGION = (import.meta.env.VITE_FUNCTIONS_REGION as string) || 'me-west1';
 export const VAPID_KEY = (import.meta.env.VITE_FCM_VAPID_KEY as string) || '';
 
@@ -52,8 +54,9 @@ export const storage = getStorage(app);
 
 if (USE_EMULATORS) {
   const host = typeof location !== 'undefined' ? location.hostname : '127.0.0.1';
-  connectAuthEmulator(auth, `http://${host}:9099`, { disableWarnings: true });
-  connectFirestoreEmulator(db, host, 8080);
-  connectFunctionsEmulator(functions, host, 5001);
-  connectStorageEmulator(storage, host, 9199);
+  const off = EMU_PORT_OFFSET;
+  connectAuthEmulator(auth, `http://${host}:${9099 + off}`, { disableWarnings: true });
+  connectFirestoreEmulator(db, host, 8080 + off);
+  connectFunctionsEmulator(functions, host, 5001 + off);
+  connectStorageEmulator(storage, host, 9199 + off);
 }

@@ -1,0 +1,66 @@
+/* Platform admin. Builds on the dashboard primitives (dash, metrics, table, list, chips). */
+
+.metric--link { text-decoration: none; color: inherit; transition: border-color var(--duration) var(--ease), box-shadow var(--duration) var(--ease); }
+.metric--link:hover { border-color: var(--color-border-strong); box-shadow: var(--shadow-card); }
+.metric--accent { border-color: var(--color-accent-text); }
+.metric--danger { border-color: var(--color-danger); }
+.metric__sub { color: var(--color-text-muted); font-size: var(--text-caption); }
+@media (min-width: 900px) { .metrics--3 { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 599px) { .metrics--3 { grid-template-columns: 1fr; } }
+
+/* Orders-per-day bars: one hue, 2px gaps, rounded data end on the baseline, recessive axis. */
+.achart__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2) var(--space-4); flex-wrap: wrap; }
+.achart__readout { color: var(--color-text-muted); font-size: var(--text-secondary); }
+.achart__plot { position: relative; display: flex; align-items: flex-end; gap: 2px; height: 128px; padding-top: 18px; border-bottom: 1px solid var(--color-border); border-top: 1px dashed var(--color-border); }
+.achart__max { position: absolute; top: 2px; inset-inline-start: 0; font-size: var(--text-caption); color: var(--color-text-muted); line-height: 1; }
+.achart__col { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: flex-end; cursor: default; }
+.achart__bar { display: block; width: 100%; background: var(--color-primary); border-radius: 4px 4px 0 0; opacity: 0.85; transition: opacity var(--duration-micro) var(--ease); }
+.achart__bar--zero { height: 2px; background: var(--color-border-strong); border-radius: 0; opacity: 1; }
+.achart__col.is-active .achart__bar { opacity: 1; background: var(--color-primary-hover); }
+.achart__col.is-active .achart__bar--zero { background: var(--color-text-muted); }
+.achart__axis { display: flex; justify-content: space-between; color: var(--color-text-muted); font-size: var(--text-caption); margin-top: calc(-1 * var(--space-2)); }
+.achart__table summary, .admin-audit__detail summary { cursor: pointer; color: var(--color-primary); font-weight: 500; font-size: var(--text-secondary); min-height: 32px; display: flex; align-items: center; }
+.achart__table .table-wrap { margin-top: var(--space-2); }
+
+.admin-chips { margin-inline: 0; padding-inline: 0; }
+.admin-chips .chip .num { color: inherit; opacity: 0.7; margin-inline-start: 4px; }
+.admin-search { flex-wrap: nowrap; }
+.admin-search .input { flex: 1 1 auto; min-width: 0; }
+.admin-cols { display: grid; gap: var(--space-4); grid-template-columns: minmax(0, 1fr); align-items: start; }
+@media (min-width: 1000px) { .admin-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.admin-row { align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.admin-row > h2 { margin: 0; }
+.admin-grow { flex: 1 1 160px; min-width: 0; }
+.admin-narrow { max-width: 720px; }
+.admin-contact { display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.admin-uid { font-size: var(--text-caption); margin-inline-start: auto; overflow-wrap: anywhere; }
+.admin-ref { font-size: 16px; }
+.admin-badges { display: flex; flex-wrap: wrap; gap: var(--space-1); align-items: center; }
+
+.admin-item { align-items: flex-start; flex-wrap: wrap; row-gap: var(--space-2); }
+.admin-item > .icon { margin-top: 2px; color: var(--color-text-muted); flex: none; }
+/* The text keeps at least ~14rem; when badges and buttons do not fit beside it they wrap below
+   instead of squeezing the name into a one-word column. */
+.admin-item > .list__grow { flex: 1 1 14rem; }
+.admin-item__end { flex: 0 1 auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2); margin-inline-start: auto; }
+.admin-item__link { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-align: start; cursor: pointer; min-height: 40px; }
+.admin-item__link strong { color: var(--color-primary); text-decoration: underline; text-underline-offset: 3px; }
+
+.kvlist { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-2) var(--space-4); font-size: var(--text-secondary); }
+.kvlist > div { display: contents; }
+.kvlist > div > :last-child { overflow-wrap: anywhere; }
+
+.admin-alt + .admin-alt::before { content: ' · '; }
+.admin-aliases { display: flex; flex-wrap: wrap; gap: 4px; }
+.admin-alias { padding: 2px 8px; border-radius: var(--radius-badge); background: var(--color-bg); border: 1px solid var(--color-border); font-size: var(--text-caption); }
+
+.admin-audit__head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--space-2); }
+.admin-audit__head code { font-size: var(--text-secondary); font-weight: 600; }
+.admin-audit__head a, .admin-audit__head span { font-size: var(--text-caption); overflow-wrap: anywhere; }
+.admin-audit__diff { display: grid; gap: var(--space-2); grid-template-columns: minmax(0, 1fr); margin-top: var(--space-1); }
+@media (min-width: 700px) { .admin-audit__diff { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.admin-audit__diff pre { margin: 0; padding: var(--space-2); background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-control); font-size: 12px; max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.admin-linkpanel { border-color: var(--color-primary); }
+.admin-linkpanel p { margin: 0; }
+.admin-linkpanel__url { display: block; padding: var(--space-2) var(--space-3); background: var(--color-bg); border-radius: var(--radius-control); font-size: var(--text-caption); overflow-wrap: anywhere; user-select: all; }

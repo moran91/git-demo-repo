@@ -187,7 +187,7 @@ export const enqueuePrint = onCall(opts, handled(async (req: CallableRequest<unk
     if (!pSnap.exists) fail('not_found', { entity: 'printer' });
     const printer = pSnap.data() as PrinterConfig;
     if (!printer.active) fail('not_found', { entity: 'printer' });
-    await requireMembership(c, printer.businessId, ['owner', 'manager', 'staff'], printer.branchId, tx);
+    const { role } = await requireMembership(c, printer.businessId, ['owner', 'manager', 'staff'], printer.branchId, tx);
     const simulation = !!process.env.FUNCTIONS_EMULATOR;
     let job: PrintJob;
     if (input.template === 'test') {
@@ -215,7 +215,7 @@ export const enqueuePrint = onCall(opts, handled(async (req: CallableRequest<unk
         if (cash && !cash.reversed) cashReceived = cash.amountAgorot;
       }
       job = createOrderPrintJob(tx, { order, printer, trigger: 'manual', template: input.template, requestedBy: c.uid, copyIndex: 0, isReprint: !!input.reprint, reprintReason: input.reprintReason, cashReceivedAgorot: cashReceived, simulation });
-      const ev = { id: col.orderEvents(order.id).doc().id, orderId: order.id, type: 'printed' as const, actorUid: c.uid, actorRole: 'staff' as const, at: nowIso(), reason: input.reprint ? `reprint: ${input.reprintReason ?? ''}` : undefined, version: order.version, after: { jobId: job.id } };
+      const ev = { id: col.orderEvents(order.id).doc().id, orderId: order.id, type: 'printed' as const, actorUid: c.uid, actorRole: role, at: nowIso(), reason: input.reprint ? `reprint: ${input.reprintReason ?? ''}` : undefined, version: order.version, after: { jobId: job.id } };
       tx.set(col.orderEvents(order.id).doc(ev.id), ev);
     }
     tx.set(col.idempotency(c.uid, input.idempotencyKey), { uid: c.uid, key: input.idempotencyKey, kind: 'enqueuePrint', result: { jobId: job.id }, createdAt: nowIso() });

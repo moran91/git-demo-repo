@@ -8,7 +8,7 @@ let env: RulesTestEnvironment;
 const PROJECT = 'qareeb-rules-test';
 
 beforeAll(async () => {
-  env = await initializeTestEnvironment({ projectId: PROJECT, firestore: { rules: fs.readFileSync(path.resolve(__dirname, '../../firestore.rules'), 'utf8'), host: '127.0.0.1', port: 8080 } });
+  env = await initializeTestEnvironment({ projectId: PROJECT, firestore: { rules: fs.readFileSync(path.resolve(__dirname, '../../firestore.rules'), 'utf8'), host: '127.0.0.1', port: 8080 + (Number(process.env.EMU_PORT_OFFSET ?? 0) || 0) } });
   await env.clearFirestore();
   await env.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
@@ -34,6 +34,8 @@ beforeAll(async () => {
     await setDoc(doc(db, 'loyaltyAccounts/biz1_cust1'), { businessId: 'biz1', uid: 'cust1', available: 5 });
     await setDoc(doc(db, 'users/cust1/notifications/n1'), { read: false, title: 'x' });
     await setDoc(doc(db, 'audit/a1'), { action: 'x' });
+    await setDoc(doc(db, 'publicBranches/brA/posts/post1'), { id: 'post1', expiresAt: '2099-01-01T00:00:00.000Z' });
+    await setDoc(doc(db, 'businesses/biz1/branches/brA/posts/post1'), { id: 'post1', expiresAt: '2099-01-01T00:00:00.000Z' });
   });
 });
 afterAll(async () => env.cleanup());
@@ -46,6 +48,23 @@ describe('public projections', () => {
     await assertSucceeds(getDoc(doc(anon(), 'publicBusinesses/biz2')));
     await assertFails(setDoc(doc(anon(), 'publicBusinesses/biz1'), { id: 'biz1' }));
     await assertFails(setDoc(doc(as('owner1'), 'publicBusinesses/biz1'), { id: 'biz1' }));
+  });
+  it('explore posts: public projection is world-readable, the private copy is members-only, both server-written', async () => {
+    await assertSucceeds(getDoc(doc(anon(), 'publicBranches/brA/posts/post1')));
+    await assertSucceeds(getDocs(collection(anon(), 'publicBranches/brA/posts')));
+    await assertFails(setDoc(doc(anon(), 'publicBranches/brA/posts/post2'), { id: 'post2' }));
+    await assertFails(setDoc(doc(as('owner1'), 'publicBranches/brA/posts/post2'), { id: 'post2' }));
+    await assertSucceeds(getDoc(doc(as('owner1'), 'businesses/biz1/branches/brA/posts/post1')));
+    await assertFails(getDoc(doc(as('cust1'), 'businesses/biz1/branches/brA/posts/post1')));
+    await assertFails(getDoc(doc(as('owner2'), 'businesses/biz1/branches/brA/posts/post1')));
+    await assertFails(getDoc(doc(as('staffB'), 'businesses/biz1/branches/brA/posts/post1')));
+    await assertFails(setDoc(doc(as('owner1'), 'businesses/biz1/branches/brA/posts/post3'), { id: 'post3' }));
+  });
+  it('dish index: anyone reads a branch index, no client writes it', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => { await setDoc(doc(ctx.firestore(), 'publicBranches/brA/index/dishes'), { branchId: 'brA', dishes: {} }); });
+    await assertSucceeds(getDoc(doc(anon(), 'publicBranches/brA/index/dishes')));
+    await assertFails(setDoc(doc(anon(), 'publicBranches/brA/index/dishes'), { dishes: {} }));
+    await assertFails(setDoc(doc(as('owner1'), 'publicBranches/brA/index/dishes'), { dishes: {} }));
   });
   it('unapproved private business data is not readable by the public', async () => {
     await assertFails(getDoc(doc(anon(), 'businesses/biz1')));
@@ -111,6 +130,16 @@ describe('businesses and staff', () => {
     await assertFails(getDoc(doc(as('owner1'), 'audit/a1')));
     await assertSucceeds(getDoc(doc(as('admin', { admin: true }), 'audit/a1')));
     await assertSucceeds(getDoc(doc(as('admin', { admin: true }), 'orders/o1')));
+  });
+  it('platform admin reads every business-scoped document but cannot write directly', async () => {
+    const a = as('admin', { admin: true });
+    await assertSucceeds(getDoc(doc(a, 'businesses/biz1')));
+    await assertSucceeds(getDoc(doc(a, 'businesses/biz1/branches/brA')));
+    await assertSucceeds(getDoc(doc(a, 'businesses/biz1/branches/brA/products/p1')));
+    await assertSucceeds(getDoc(doc(a, 'memberships/owner1_biz1')));
+    await assertSucceeds(getDoc(doc(a, 'cashRecords/c1')));
+    await assertFails(setDoc(doc(a, 'businesses/biz1/branches/brA/products/p1'), { name: 'x' }));
+    await assertFails(updateDoc(doc(a, 'businesses/biz1'), { approval: 'approved' }));
   });
   it('server-only collections are closed to everyone', async () => {
     for (const p of ['outbox/x', 'idempotency/x', 'otpChallenges/x', 'rateLimits/x', 'orderRefs/x', 'invitations/x']) {

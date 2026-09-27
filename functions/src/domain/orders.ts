@@ -9,6 +9,7 @@ import {
   computeTotals,
   decideOrderSchema,
   evaluateOpen,
+  toLocal,
   FIRST_ORDER_NUMBER,
   normalizeIsraeliPhone,
   placeOrderSchema,
@@ -32,6 +33,7 @@ import {
   type FulfillmentMode,
   type LoyaltyAccount,
   type LoyaltyLedgerEntry,
+  type MembershipRole,
   type Order,
   type OrderEvent,
   type OrderLine,
@@ -287,7 +289,9 @@ function ledgerEntry(tx: Tx, e: Omit<LoyaltyLedgerEntry, 'id' | 'at'>): void {
 }
 
 function bumpMetrics(tx: Tx, fields: Record<string, number>): void {
-  const date = new Date().toISOString().slice(0, 10);
+  // Bucket by the Israeli calendar day the admin overview shows, not the UTC day (00:00–03:00 local
+  // would otherwise count toward yesterday).
+  const date = toLocal(new Date()).date;
   const inc: Record<string, FirebaseFirestore.FieldValue | string> = { date };
   for (const [k, v] of Object.entries(fields)) inc[k] = FieldValue.increment(v);
   tx.set(col.metricsDaily(date), inc, { merge: true });
@@ -417,7 +421,7 @@ export const placeOrder = onCall(hot, handled(async (req: CallableRequest<unknow
 
 /** ---------- Accept / reject ---------- */
 
-async function loadOrderForStaff(tx: Tx, c: Caller, orderId: string, roles: Array<'owner' | 'manager' | 'staff'>): Promise<{ order: Order; role: string }> {
+async function loadOrderForStaff(tx: Tx, c: Caller, orderId: string, roles: Array<'owner' | 'manager' | 'staff'>): Promise<{ order: Order; role: MembershipRole | 'admin' }> {
   const snap = await tx.get(col.order(orderId));
   if (!snap.exists) fail('not_found', { entity: 'order' });
   const order = snap.data() as Order;
@@ -681,7 +685,7 @@ export const recordCash = onCall(opts, handled(async (req: CallableRequest<unkno
   return db.runTransaction(async (tx) => {
     const cached = await readIdempotent<{ cashRecordId: string; pointsEarned: number }>(tx, c.uid, input.idempotencyKey);
     if (cached) return { ...cached, replay: true };
-    const { order } = await loadOrderForStaff(tx, c, input.orderId, ['owner', 'manager', 'staff']);
+    const { order, role } = await loadOrderForStaff(tx, c, input.orderId, ['owner', 'manager', 'staff']);
     if (order.status !== 'accepted') fail('invalid_status_transition', { status: order.status });
     if (order.cashRecordId) fail('already_settled');
     if (order.version !== input.expectedVersion) fail('version_conflict', { version: order.version });
@@ -720,7 +724,7 @@ export const recordCash = onCall(opts, handled(async (req: CallableRequest<unkno
       if (reserved > 0) ledgerEntry(tx, { businessId: order.businessId, uid: order.customer.uid, orderId: order.id, type: 'consume', points: 0, reservedDelta: -reserved, rulesVersion: order.loyalty.rulesVersion, actorUid: c.uid, key: `${order.id}:consume` });
       if (earned > 0) ledgerEntry(tx, { businessId: order.businessId, uid: order.customer.uid, orderId: order.id, type: 'earn', points: earned, reservedDelta: 0, rulesVersion: order.loyalty.rulesVersion, actorUid: c.uid, key: `${order.id}:earn` });
     }
-    const ev: OrderEvent = { id: col.orderEvents(order.id).doc().id, orderId: order.id, type: 'cash_recorded', actorUid: c.uid, actorRole: 'staff', at: now, after: { amountAgorot: input.amountAgorot, pointsEarned: earned }, version: next.version };
+    const ev: OrderEvent = { id: col.orderEvents(order.id).doc().id, orderId: order.id, type: 'cash_recorded', actorUid: c.uid, actorRole: role, at: now, after: { amountAgorot: input.amountAgorot, pointsEarned: earned }, version: next.version };
     tx.set(col.orderEvents(order.id).doc(ev.id), ev);
     enqueueEvent(tx, { kind: 'cash_recorded', recipients: [order.customer.uid], params: { reference: order.reference }, link: `/orders/${order.id}`, orderId: order.id, businessId: order.businessId, branchId: order.branchId, key: `cash_recorded:${order.id}` });
     bumpMetrics(tx, { cashRecordsCount: 1, cashRecordedAgorot: input.amountAgorot });

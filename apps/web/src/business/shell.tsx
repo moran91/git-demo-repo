@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router';
@@ -63,6 +63,7 @@ export function useNavSections(placedCount = 0): NavSection[] {
       { to: `${base}/deals`, icon: 'tag', label: t('deals.manage'), perm: 'catalog' },
     ] },
     { id: 'branch', label: t('dash.switchBranch'), items: [
+      { to: `${base}/posts`, icon: 'flame', label: t('posts.manage'), perm: 'catalog' },
       { to: `${base}/branch`, icon: 'building', label: t('dash.branchSettings'), perm: 'settings' },
       // createBranch is owner-only on the server, and the route lives outside the branch shell. Without
       // this the page was reachable only while the business had no branch at all.
@@ -167,6 +168,7 @@ export function DashboardShell() {
         </header>
         <main className="dash__main" id="main" tabIndex={-1}>
           <OfflineBanner />
+          {role === 'admin' ? <AdminModeBanner name={L(business.data.name, business.data.defaultLocale)} businessId={business.data.id} /> : null}
           {branch.ordersPaused ? <div className="alert alert--warn dash__paused" role="status"><Icon name="clock" size={18} /> {t('dash.pausedBanner')}</div> : null}
           <div key={`${businessId}/${branch.id}`}><Outlet /></div>
         </main>
@@ -199,11 +201,11 @@ function NavGroups({ placedCount, onNavigate }: { placedCount: number; onNavigat
 function SidebarFoot({ compact }: { compact?: boolean }) {
   const t = useT();
   const { business } = useDash();
-  const { memberships, signOut } = useAuth();
+  const { signOut } = useAuth();
   const confirmNavigation = useConfirmNavigation();
   return (
     <div className={`dash__sidebar-foot${compact ? ' dash__sidebar-foot--row' : ''}`}>
-      {memberships.length > 1 ? <BusinessSwitcher currentBusinessId={business.id} /> : null}
+      <BusinessSwitcher currentBusinessId={business.id} />
       <LanguageSelect compact={compact} />
       <button type="button" className="dash__signout" onClick={() => { if (confirmNavigation()) void signOut().catch((e) => toast(t(errorKey(e)), 'danger')); }}><Icon name="logout" size={20} directional /><span>{t('common.signOut')}</span></button>
     </div>
@@ -311,19 +313,47 @@ function useBranches(businessId: string | null, membership: Membership | null, i
   return docs.key === key ? docs : { data: [], loading: true };
 }
 
-/** Select between the caller's businesses (only rendered when there is more than one). */
+/** Businesses the caller can switch between: every business for a platform admin, otherwise their memberships. */
+export function useSwitchableBusinesses(): { businesses: Business[]; loading: boolean } {
+  const { L } = useI18n();
+  const { memberships, isAdmin } = useAuth();
+  const ids = memberships.map((m) => m.businessId);
+  const mine = useCollection<Business>(!isAdmin && ids.length ? 'businesses' : null, [where('__name__', 'in', ids.slice(0, 10)), limit(10)], [ids.join(',')]);
+  const all = useCollection<Business>(isAdmin ? 'businesses' : null, [limit(500)], [isAdmin]);
+  const list = isAdmin ? all : mine;
+  const businesses = useMemo(() => [...list.data].sort((a, b) => L(a.name, a.defaultLocale).localeCompare(L(b.name, b.defaultLocale))), [list.data, L]);
+  return { businesses, loading: list.loading };
+}
+
+/** Select between businesses (renders nothing when there is only one). Long lists get a name filter. */
 export function BusinessSwitcher({ currentBusinessId }: { currentBusinessId: string }) {
   const t = useT();
   const { L } = useI18n();
-  const { memberships } = useAuth();
   const navigate = useNavigate();
-  const ids = memberships.map((m) => m.businessId);
-  const businesses = useCollection<Business>(ids.length ? 'businesses' : null, [where('__name__', 'in', ids.slice(0, 10)), limit(10)], [ids.join(',')]);
-  if (memberships.length <= 1) return null;
+  const { businesses } = useSwitchableBusinesses();
+  const [q, setQ] = useState('');
+  if (businesses.length <= 1) return null;
+  const needle = q.trim().toLowerCase();
+  const shown = needle ? businesses.filter((b) => b.id === currentBusinessId || L(b.name, b.defaultLocale).toLowerCase().includes(needle)) : businesses;
   return (
-    <select className="select" value={currentBusinessId} aria-label={t('dash.switchBusiness')} onChange={(e) => { navigate(`/business/${e.target.value}`); }}>
-      {businesses.data.map((b) => <option key={b.id} value={b.id}>{L(b.name, b.defaultLocale)}</option>)}
-    </select>
+    <div className="stack stack--sm">
+      {businesses.length > 8 ? <input className="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('admin.searchBusinesses')} aria-label={t('admin.searchBusinesses')} /> : null}
+      <select className="select" value={currentBusinessId} aria-label={t('dash.switchBusiness')} onChange={(e) => { navigate(`/business/${e.target.value}`); }}>
+        {shown.map((b) => <option key={b.id} value={b.id}>{L(b.name, b.defaultLocale)}</option>)}
+      </select>
+    </div>
+  );
+}
+
+/** Shown on every dashboard page while a platform admin works inside a business they do not belong to. */
+function AdminModeBanner({ name, businessId }: { name: string; businessId: string }) {
+  const t = useT();
+  return (
+    <div className="alert alert--warn dash__admin" role="status">
+      <Icon name="shield" size={18} />
+      <span className="dash__admin-text">{t('admin.modeBanner', { name })}</span>
+      <Link to={`/admin/businesses/${businessId}`}>{t('admin.backToAdmin')}</Link>
+    </div>
   );
 }
 

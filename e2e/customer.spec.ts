@@ -17,7 +17,8 @@ test.describe('customer storefront', () => {
     await page.getByRole('option', { name: 'חורפיש', exact: true }).click();
     await expect(page.locator('.city-pill')).toContainText('חורפיש');
     await page.getByRole('radio', { name: 'מסעדות' }).click();
-    await expect(page.getByText('סניף חורפיש')).toBeVisible();
+    // Scoped to the places list: dish rows above also name the branch of a two-branch business.
+    await expect(page.locator('.place-list').getByText('סניף חורפיש')).toBeVisible();
     // Language switch preserves route and direction flips
     await page.getByRole('button', { name: /^שפה:/ }).click();
     await page.getByRole('menuitemradio', { name: 'English' }).click();
@@ -48,8 +49,9 @@ test.describe('customer storefront', () => {
     await page.goto('/cart');
     await expect(page.getByText('Laffa, Fries inside')).toBeVisible();
     await expect(page.locator('.summary')).toContainText('₪86');
-    // The seed deliberately has no product photos; owner-usability covers upload and customer zoom.
-    await expect(page.getByRole('img', { name: 'No photo provided by the business yet' })).toBeVisible();
+    // The seed deliberately has no product photos; a line without one shows no empty photo frame.
+    // owner-usability covers upload and customer zoom.
+    await expect(page.getByRole('img', { name: 'No photo provided by the business yet' })).toHaveCount(0);
     // Edit in place: the sheet opens prefilled, and saving replaces the same line (still one line).
     await page.getByRole('button', { name: /Edit: Shawarma/ }).click();
     const edit = page.getByRole('dialog');

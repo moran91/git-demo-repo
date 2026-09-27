@@ -29,3 +29,6 @@ apps/web/.env.local.deploy-bak
 docs/screenshots/
 docs/mockups/
 assets/morano-menu-photos/
+.claude/worktrees/
+brag-output/
+scripts/test-results/

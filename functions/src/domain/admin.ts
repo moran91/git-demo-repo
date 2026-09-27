@@ -1,6 +1,7 @@
 import { onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { z } from 'zod';
-import { AggregateField, FieldPath } from 'firebase-admin/firestore';
+import { randomBytes } from 'node:crypto';
+import { AggregateField, FieldPath, FieldValue } from 'firebase-admin/firestore';
 import {
   DEFAULT_LOYALTY_RULES,
   approvalDecisionSchema,
@@ -8,6 +9,7 @@ import {
   cityInputSchema,
   cleanLocalized,
   idSchema,
+  normalizeIsraeliPhone,
   reverseCashSchema,
   type Branch,
   type Business,
@@ -25,7 +27,7 @@ import { requireAdmin, requireCaller } from '../lib/auth.js';
 import { writeAudit } from '../lib/audit.js';
 import { reprojectBusiness } from '../lib/projections.js';
 import { enqueueEvent } from '../lib/outbox.js';
-import { createInvitation } from './businesses.js';
+import { createInvitation, hashToken, invitationLink, type InvitationDoc } from './businesses.js';
 import { reverseCashInternal } from './orders.js';
 import { whatsappConfigured, whatsappOpts } from './whatsapp.js';
 
@@ -78,7 +80,8 @@ export const setUserSuspended = onCall(opts, handled(async (req: CallableRequest
     if (!snap.exists) fail('not_found');
     const u = snap.data() as UserProfile;
     if (u.isAdmin) fail('forbidden', { reason: 'cannot_suspend_admin' });
-    tx.update(ref, { suspended: input.suspended, suspendedReason: input.suspended ? input.reason : undefined, updatedAt: nowIso() });
+    // `undefined` is dropped (ignoreUndefinedProperties), so reinstating has to delete the reason explicitly.
+    tx.update(ref, { suspended: input.suspended, suspendedReason: input.suspended ? input.reason : FieldValue.delete(), updatedAt: nowIso() });
     writeAudit(tx, { actorUid: c.uid, action: input.suspended ? 'user.suspend' : 'user.reinstate', targetType: 'user', targetId: input.uid, reason: input.reason });
   });
   // Block promptly even with an older token: disable the Auth user and revoke refresh tokens; rules and
@@ -103,7 +106,8 @@ export const inviteOwner = onCall(opts, handled(async (req: CallableRequest<unkn
   }
   const inv = await createInvitation({ email: input.email, businessId, role: 'owner', allBranches: true, branchIds: [], invitedBy: c.uid });
   await db.runTransaction(async (tx) => writeAudit(tx, { actorUid: c.uid, action: 'owner.invite', targetType: 'invitation', targetId: inv.id, after: { email: input.email.toLowerCase(), businessId } }));
-  return { invitationId: inv.id, businessId, ...(process.env.FUNCTIONS_EMULATOR ? { link: inv.link } : {}) };
+  // Nothing sends email, so the admin delivers the link (copy / WhatsApp).
+  return { invitationId: inv.id, businessId, link: inv.link };
 }));
 
 export const saveCity = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
@@ -197,49 +201,67 @@ export const setPlatformConfig = onCall(configOpts, handled(async (req: Callable
   return { ok: true };
 }));
 
-/** Real database-backed metrics using aggregation queries and the daily counters. */
+/**
+ * Real database-backed metrics using aggregation queries and the daily counters. Each query needs its
+ * own composite index in production (the emulator does not check), so one missing index degrades that
+ * number to null instead of failing the whole overview.
+ */
 export const getAdminMetrics = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
   const c = await requireCaller(req);
   requireAdmin(c);
   const since = new Date(Date.now() - 30 * 86400000).toISOString();
   const agingSince = new Date(Date.now() - 30 * 60000).toISOString();
+  const settle = async <T>(name: string, run: () => Promise<T>): Promise<T | null> => {
+    try { return await run(); } catch (e) { console.error(`getAdminMetrics: ${name} failed`, e); return null; }
+  };
+  const sumQuery = (q: FirebaseFirestore.Query, field: string) => settle(field, async () => {
+    const d = (await q.aggregate({ count: AggregateField.count(), value: AggregateField.sum(field) }).get()).data();
+    return { count: d.count, value: d.value ?? 0 };
+  });
+  const count = (name: string, q: FirebaseFirestore.Query) => settle(name, async () => (await q.count().get()).data().count);
   const [placed, accepted, cash, pendingBiz, pendingBranches, aging, daily, users, businesses] = await Promise.all([
-    col.orders().where('placedAt', '>=', since).aggregate({ count: AggregateField.count(), value: AggregateField.sum('totals.cashDueAgorot') }).get(),
-    col.orders().where('placedAt', '>=', since).where('status', '==', 'accepted').aggregate({ count: AggregateField.count(), value: AggregateField.sum('totals.cashDueAgorot') }).get(),
-    col.cashRecords().where('recordedAt', '>=', since).where('reversed', '==', false).aggregate({ count: AggregateField.count(), value: AggregateField.sum('amountAgorot') }).get(),
-    col.businesses().where('approval', '==', 'pending').count().get(),
-    db.collectionGroup('branches').where('approval', '==', 'pending').count().get(),
-    col.orders().where('status', '==', 'placed').where('placedAt', '<', agingSince).count().get(),
-    db.collection('metricsDaily').orderBy('date', 'desc').limit(30).get(),
-    col.users().count().get(),
-    col.businesses().where('approval', '==', 'approved').count().get(),
+    sumQuery(col.orders().where('placedAt', '>=', since), 'totals.cashDueAgorot'),
+    sumQuery(col.orders().where('placedAt', '>=', since).where('status', '==', 'accepted'), 'totals.cashDueAgorot'),
+    sumQuery(col.cashRecords().where('recordedAt', '>=', since).where('reversed', '==', false), 'amountAgorot'),
+    count('pendingBusinesses', col.businesses().where('approval', '==', 'pending')),
+    // The orderBy lets the count use the (approval, createdAt) collection-group index the approvals list already needs.
+    count('pendingBranches', db.collectionGroup('branches').where('approval', '==', 'pending').orderBy('createdAt', 'desc')),
+    count('agingOrders', col.orders().where('status', '==', 'placed').where('placedAt', '<', agingSince)),
+    settle('daily', async () => (await db.collection('metricsDaily').orderBy('date', 'desc').limit(30).get()).docs.map((d) => d.data())),
+    count('users', col.users()),
+    count('approvedBusinesses', col.businesses().where('approval', '==', 'approved')),
   ]);
   return {
     last30Days: {
-      placedCount: placed.data().count,
-      placedValueAgorot: placed.data().value ?? 0,
-      acceptedCount: accepted.data().count,
-      acceptedValueAgorot: accepted.data().value ?? 0,
-      cashRecordsCount: cash.data().count,
-      cashRecordedAgorot: cash.data().value ?? 0,
+      placedCount: placed?.count ?? null,
+      placedValueAgorot: placed?.value ?? null,
+      acceptedCount: accepted?.count ?? null,
+      acceptedValueAgorot: accepted?.value ?? null,
+      cashRecordsCount: cash?.count ?? null,
+      cashRecordedAgorot: cash?.value ?? null,
     },
-    pendingBusinessApprovals: pendingBiz.data().count,
-    pendingBranchApprovals: pendingBranches.data().count,
-    agingPlacedOrders: aging.data().count,
-    totalUsers: users.data().count,
-    approvedBusinesses: businesses.data().count,
-    daily: daily.docs.map((d) => d.data()),
+    pendingBusinessApprovals: pendingBiz,
+    pendingBranchApprovals: pendingBranches,
+    agingPlacedOrders: aging,
+    totalUsers: users,
+    approvedBusinesses: businesses,
+    daily: daily ?? [],
   };
 }));
 
-/** Bounded user lookup for the admin console (exact email or phone, or recent users). */
+/**
+ * Bounded user lookup for the admin console: exact email, phone in any local/international form, a
+ * display-name prefix, or recent users (the only mode that pages).
+ */
 export const adminListUsers = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
   const c = await requireCaller(req);
   requireAdmin(c);
-  const input = parse(z.object({ email: z.string().max(120).optional(), phone: z.string().max(30).optional(), limit: z.number().int().min(1).max(50).default(20), cursor: z.string().max(100).optional() }).strict(), req.data ?? {});
+  const input = parse(z.object({ email: z.string().max(120).optional(), phone: z.string().max(30).optional(), name: z.string().trim().min(1).max(60).optional(), limit: z.number().int().min(1).max(50).default(20), cursor: z.string().max(100).optional() }).strict(), req.data ?? {});
   let q: FirebaseFirestore.Query = col.users();
-  if (input.email) q = q.where('email', '==', input.email.toLowerCase());
-  else if (input.phone) q = q.where('phone', '==', input.phone);
+  const listing = !input.email && !input.phone && !input.name;
+  if (input.email) q = q.where('email', '==', input.email.trim().toLowerCase());
+  else if (input.phone) q = q.where('phone', '==', normalizeIsraeliPhone(input.phone) ?? input.phone.trim());
+  else if (input.name) q = q.orderBy('displayName').startAt(input.name).endAt(`${input.name}\uf8ff`);
   else {
     // Tiebreak on the document id: users created in the same instant share a `createdAt`, and a
     // cursor on that field alone skips every one of them. Matching directions keep this served by
@@ -255,9 +277,55 @@ export const adminListUsers = onCall(opts, handled(async (req: CallableRequest<u
     snap.docs.map(async (d) => {
       const u = d.data() as UserProfile;
       const ms = await col.memberships().where('uid', '==', u.uid).limit(20).get();
-      return { uid: u.uid, displayName: u.displayName, email: u.email, phone: u.phone, phoneVerified: u.phoneVerified, suspended: u.suspended, isAdmin: u.isAdmin, createdAt: u.createdAt, memberships: ms.docs.map((m) => m.data() as Membership) };
+      return { uid: u.uid, displayName: u.displayName, email: u.email, phone: u.phone, phoneVerified: u.phoneVerified, suspended: u.suspended, suspendedReason: u.suspendedReason, isAdmin: u.isAdmin, createdAt: u.createdAt, memberships: ms.docs.map((m) => m.data() as Membership) };
     }),
   );
+  // A short page is the last one; returning a cursor there shows a "Load more" that loads nothing.
   const last = snap.docs[snap.docs.length - 1];
-  return { users, nextCursor: last && !input.email && !input.phone ? `${(last.data() as UserProfile).createdAt}|${last.id}` : undefined };
+  return { users, nextCursor: listing && last && snap.size === input.limit ? `${(last.data() as UserProfile).createdAt}|${last.id}` : undefined };
+}));
+
+type InvitationRow = Omit<InvitationDoc, 'tokenHash' | 'status'> & { status: InvitationDoc['status'] | 'expired' };
+
+/** Every invitation, newest first (owner invitations from the admin and staff invitations from owners). */
+export const adminListInvitations = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
+  const c = await requireCaller(req);
+  requireAdmin(c);
+  const input = parse(z.object({ limit: z.number().int().min(1).max(50).default(30), cursor: z.string().max(100).optional() }).strict(), req.data ?? {});
+  let q = col.invitations().orderBy('createdAt', 'desc').orderBy(FieldPath.documentId(), 'desc');
+  if (input.cursor) {
+    const sep = input.cursor.lastIndexOf('|');
+    if (sep > 0) q = q.startAfter(input.cursor.slice(0, sep), input.cursor.slice(sep + 1));
+  }
+  const snap = await q.limit(input.limit).get();
+  const now = nowIso();
+  const invitations: InvitationRow[] = snap.docs.map((d) => {
+    const { tokenHash: _hash, ...inv } = d.data() as InvitationDoc;
+    return { ...inv, status: inv.status === 'pending' && inv.expiresAt < now ? 'expired' : inv.status };
+  });
+  const last = snap.docs[snap.docs.length - 1];
+  return { invitations, nextCursor: last && snap.size === input.limit ? `${(last.data() as InvitationDoc).createdAt}|${last.id}` : undefined };
+}));
+
+/**
+ * Revokes an open invitation, or renews one (a new token, so only the new link works, and seven more
+ * days). The token is stored hashed, so renewing is the only way to hand out a link again.
+ */
+export const adminInvitationAction = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
+  const c = await requireCaller(req);
+  requireAdmin(c);
+  const input = parse(z.object({ id: idSchema, action: z.enum(['revoke', 'renew']) }).strict(), req.data);
+  const token = randomBytes(24).toString('base64url');
+  await db.runTransaction(async (tx) => {
+    const ref = col.invitations().doc(input.id);
+    const snap = await tx.get(ref);
+    if (!snap.exists) fail('not_found');
+    const inv = snap.data() as InvitationDoc;
+    if (inv.status === 'accepted') fail('invalid_argument', { issues: [{ path: 'id', message: 'already_accepted' }] });
+    const now = new Date();
+    if (input.action === 'revoke') tx.update(ref, { status: 'revoked' });
+    else tx.update(ref, { status: 'pending', tokenHash: hashToken(token), expiresAt: new Date(now.getTime() + 7 * 86400000).toISOString() });
+    writeAudit(tx, { actorUid: c.uid, action: `invitation.${input.action}`, targetType: 'invitation', targetId: inv.id, before: { status: inv.status }, after: { email: inv.email, businessId: inv.businessId } });
+  });
+  return input.action === 'renew' ? { link: invitationLink(input.id, token) } : { ok: true };
 }));

@@ -5,7 +5,7 @@ import { expect, type Page } from '@playwright/test';
  * tokens, and the Firestore emulator REST API is queried with the "owner" bearer token.
  */
 const PROJECT = 'qareeb-dev';
-const FS = `http://127.0.0.1:8080/v1/projects/${PROJECT}/databases/(default)/documents`;
+const FS = `http://127.0.0.1:${8080 + (Number(process.env.EMU_PORT_OFFSET ?? 0) || 0)}/v1/projects/${PROJECT}/databases/(default)/documents`;
 export const PASSWORD = 'Qareeb-Test-1234';
 
 function b64url(s: string) {

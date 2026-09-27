@@ -26,11 +26,19 @@
   --color-focus: #20583b;
   --color-overlay: rgba(25, 62, 45, 0.45);
   --color-skeleton: #ece9df;
+  /* Home: the green band behind the stories and the butter lift under the dish search field. */
+  --color-band: #20583b;
+  --color-on-band: #fffefa;
+  --color-crave-lift: #f4df8a;
 
   --font-sans: 'Noto Sans Hebrew', 'Noto Sans Arabic', 'Noto Sans', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
   --text-body: 16px;
   --text-secondary: 14px;
   --text-badge: 12px;
+  /* In-between steps that controls and captions already used as literals; named so they stay deliberate. */
+  --text-caption: 13px;
+  --text-control: 15px;
+  --text-title: 18px;
   --text-heading: 20px;
   --text-headline: 28px;
   --text-headline-lg: 36px;
@@ -61,10 +69,28 @@
   --touch-min: 44px;
   --duration: 180ms;
   --ease: cubic-bezier(0.2, 0, 0, 1);
+  /* Motion scale: presses are near-instant, surfaces arriving take longer than surfaces leaving.
+   * Entering decelerates into place (ease-out); leaving accelerates away (ease-in). */
+  --duration-micro: 90ms;
+  --duration-enter: 260ms;
+  --duration-exit: 160ms;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
   --bottom-nav-height: 64px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-top: env(safe-area-inset-top, 0px);
   --max-content: 1200px;
+
+  /* Stories: the unseen-story ring runs brand green → leaf → saffron → clay. The viewer is always dark,
+   * whatever the theme, so these are deliberately not redefined under [data-theme='dark']. */
+  --story-ring: conic-gradient(from 200deg, #20583b, #6f9d3a, #e8a93c, #c9602b, #20583b);
+  --story-ink: #fffefa;
+  --story-backdrop: #060908;
+  --story-stage: #111a15;
+  --story-face: #2d4034;
+  --story-card-ink: #193e2d;
+  --story-go: #20583b;
+  --story-focus: #f0b85a;
 }
 @media (max-width: 360px) {
   :root { --gutter: 16px; }
@@ -97,7 +123,10 @@
   --color-focus: #add7a6;
   --color-overlay: rgba(0, 0, 0, 0.6);
   --color-skeleton: #2c3831;
+  --color-band: #1f3d2b;
+  --color-on-band: #f2f1e9;
+  --color-crave-lift: #8a7424;
 }
 @media (prefers-reduced-motion: reduce) {
-  :root { --duration: 0ms; }
+  :root { --duration: 0ms; --duration-micro: 0ms; --duration-enter: 0ms; --duration-exit: 0ms; }
 }

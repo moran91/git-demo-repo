@@ -18,7 +18,7 @@ import { AddressSummary } from '@/customer/AddressForm';
 import { Summary } from '@/customer/Summary';
 import { useNow } from '@/customer/hooks';
 import { useAuth } from '@/lib/auth';
-import { GettingStarted, LoadError } from './BusinessExperience';
+import { GoLiveCard, LoadError } from './BusinessExperience';
 
 function useNewOrderAlert(orders: Order[], loading: boolean) {
   const t = useT();
@@ -114,6 +114,7 @@ export function IncomingOrdersPage() {
       </div>
       {aging ? <Alert tone="warn">{t('dash.agingWarning')}</Alert> : null}
       {error ? <LoadError /> : null}
+      <GoLiveCard />
       <div className="board">
         {COLUMNS.map((c) => (
           <section key={c} id={`board-col-${c}`} aria-labelledby={`board-h-${c}`} className={`board__col board__col--${c}`}>
@@ -128,7 +129,6 @@ export function IncomingOrdersPage() {
           </section>
         ))}
       </div>
-      {!loading ? <GettingStarted /> : null}
     </div>
   );
 }
@@ -349,7 +349,7 @@ function OrderDetailBody({ o, events, cashRecordData, backHref }: { o: Order; ev
             <h2 className="odetail__h2">{t('orders.items')}</h2>
             <OrderLines order={o} />
             <div className="summary-ledger"><Summary totals={o.totals} mode={o.mode} cashReceived={cashPaidAgorot} rejected={o.status === 'rejected'} /></div>
-            {o.revision > 0 ? <div className="summary__row muted"><span>{t('orders.original')} · {t('common.version')} {o.version} · rev {o.revision}</span><bdi className="num">{money(o.originalTotals.cashDueAgorot, locale)}</bdi></div> : null}
+            {o.revision > 0 ? <div className="summary__row muted"><span>{t('orders.original')} · {t('common.version')} {o.version} · rev {o.revision}</span><bdi className="money">{money(o.originalTotals.cashDueAgorot, locale)}</bdi></div> : null}
             {o.locked ? <Alert tone="info">{t('dash.locked')}</Alert> : null}
             {canRecordCash && o.totals.isEstimated ? <Alert tone="warn">{t('dash.cashBlockedWeights')}</Alert> : null}
             {cashPaidAgorot !== undefined ? <Alert tone="success"><div>{t('dash.cashRecorded', { amount: money(cashPaidAgorot, locale) })}{cashRecord ? <div className="muted">{t('dash.cashRecordedBy', { name: cashRecord.recordedBy === userUid ? t('dash.actorYou') : cashRecord.recordedBy.slice(0, 6), time: formatLocalDateTime(cashRecord.recordedAt, locale) })}</div> : o.cashSettledAt ? <div className="muted"><bdi>{formatLocalDateTime(o.cashSettledAt, locale)}</bdi></div> : null}</div></Alert> : null}

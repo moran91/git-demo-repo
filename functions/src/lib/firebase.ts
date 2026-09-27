@@ -56,6 +56,8 @@ export const col = {
   publicCombos: (branchId: string) => db.collection('publicBranches').doc(branchId).collection('combos'),
   promotions: (businessId: string, branchId: string) => db.collection('businesses').doc(businessId).collection('branches').doc(branchId).collection('promotions'),
   publicPromotions: (branchId: string) => db.collection('publicBranches').doc(branchId).collection('promotions'),
+  posts: (businessId: string, branchId: string) => db.collection('businesses').doc(businessId).collection('branches').doc(branchId).collection('posts'),
+  publicPosts: (branchId: string) => db.collection('publicBranches').doc(branchId).collection('posts'),
   approvalHistory: (businessId: string) => db.collection('businesses').doc(businessId).collection('approvalHistory'),
   publicBusinesses: () => db.collection('publicBusinesses'),
   publicBusiness: (id: string) => db.collection('publicBusinesses').doc(id),
@@ -63,6 +65,10 @@ export const col = {
   publicBranch: (branchId: string) => db.collection('publicBranches').doc(branchId),
   publicCategories: (branchId: string) => db.collection('publicBranches').doc(branchId).collection('categories'),
   publicProducts: (branchId: string) => db.collection('publicBranches').doc(branchId).collection('products'),
+  /** One compact document per restaurant branch listing its live dishes for the home's dish search. */
+  /** One pending machine-translation job per catalog document (latest save wins). */
+  translationJobs: () => db.collection('translationJobs'),
+  publicDishIndex: (branchId: string) => db.collection('publicBranches').doc(branchId).collection('index').doc('dishes'),
   orders: () => db.collection('orders'),
   order: (id: string) => db.collection('orders').doc(id),
   orderEvents: (orderId: string) => db.collection('orders').doc(orderId).collection('events'),

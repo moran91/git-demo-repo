@@ -90,8 +90,8 @@
 .business-app .sx-savebar__status .save-status { margin: 0; display: inline-flex; align-items: center; gap: var(--space-2); font-size: 14px; font-weight: 600; }
 .business-app .sx-savebar__status .save-status::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
 .business-app .sx-savebar__actions { display: flex; gap: var(--space-3); }
-.business-app .sx-savebar__actions > .btn { flex: 1 1 0; min-height: 52px; }
-.business-app .sx-savebar__actions > .btn--primary { flex: 2 1 0; }
+.business-app .sx-savebar__actions > .btn { flex: 1 1 auto; min-height: 52px; white-space: nowrap; }
+.business-app .sx-savebar__actions > .btn--primary { flex: 2 1 auto; }
 @media (max-width: 899px) {
   .business-app .sx-savebar { bottom: calc(var(--bottom-nav-height, 0px) + var(--safe-bottom)); padding-bottom: var(--space-3); }
 }
@@ -120,7 +120,7 @@
 .business-app .sx-deal__top { display: flex; gap: var(--space-3); align-items: flex-start; min-width: 0; }
 .business-app .sx-deal__thumb { flex: 0 0 72px; width: 72px; height: 72px; border-radius: var(--radius-control); overflow: hidden; background: var(--color-skeleton); position: relative; }
 .business-app .sx-deal__thumb > .img-frame, .business-app .sx-deal__thumb > .combo-media { width: 100%; height: 100%; border-radius: 0; }
-.business-app .sx-deal__thumb .deal-card__badge { top: 4px; inset-inline-start: 4px; font-size: 10px; padding: 1px 5px; }
+.business-app .sx-deal__thumb .deal-card__badge { top: 4px; inset-inline-start: 4px; font-size: var(--text-badge); padding: 1px 5px; }
 .business-app .sx-deal__text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .business-app .sx-deal__name { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
 .business-app .sx-deal__name > strong { font-size: 18px; font-weight: 700; overflow-wrap: anywhere; }
@@ -143,6 +143,9 @@
 .business-app .sx-photo { display: flex; flex-direction: column; gap: var(--space-2); }
 .business-app .sx-photo .img-frame { width: 100%; height: auto; border-radius: var(--radius-control); }
 .business-app .sx-photo--logo .img-frame { max-width: 160px; }
+/* The cover preview is a preview, not the banner itself: capped so a wide screen does not show a 360px empty frame. */
+.business-app .sx-photo--cover .img-frame { max-width: 480px; }
+.business-app .sx-photo > .btn { max-width: 480px; }
 .business-app .sx-photo > .btn { align-self: stretch; }
 .business-app .sx-actions { display: flex; flex-direction: column; gap: var(--space-2); }
 .business-app .sx-actions > .btn { width: 100%; min-height: 48px; }

@@ -9,6 +9,7 @@ import { BranchSettingsPage, NewBranchPage, BusinessProfilePage, StaffPage, Loya
 import { PrintersPage } from './PrintersPage';
 import { QrPage } from './QrPage';
 import { DealsPage } from './DealsPage';
+import { PostsPage } from './PostsPage';
 import { EmailSignInPage, OwnerRegisterPage, ResetPasswordPage, VerifyEmailPage, InviteAcceptPage } from './AuthPages';
 import { NotFound } from '@/app/Shell';
 import { BusinessExperience } from './BusinessExperience';
@@ -33,6 +34,7 @@ export function BusinessRoutes() {
         <Route path="catalog" element={<CatalogPage />} />
         <Route path="catalog/extras" element={<ExtrasLibraryPage />} />
         <Route path="deals" element={<DealsPage />} />
+        <Route path="posts" element={<PostsPage />} />
         <Route path="branch" element={<BranchSettingsPage />} />
         <Route path="printers" element={<PrintersPage />} />
         <Route path="cash" element={<CashRecordsPage />} />

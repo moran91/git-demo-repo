@@ -215,9 +215,9 @@ export function NotificationsPage() {
   };
   return (
     <div className="stack">
-      <div className="row row--between"><h1>{t('nav.notifications')}</h1><Button size="sm" variant="ghost" onClick={markAll} disabled={!items.data.some((n) => !n.read)}>{t('account.markAllRead')}</Button></div>
+      <div className="row row--between"><h1>{t('nav.notifications')}</h1>{items.data.some((n) => !n.read) ? <Button size="sm" variant="ghost" onClick={markAll}>{t('account.markAllRead')}</Button> : null}</div>
       {items.data.length === 0 && !items.loading ? <EmptyState icon="bell" title={t('account.noNotifications')} /> : null}
-      <div className="card">
+      {items.data.length > 0 ? <div className="card">
         {items.data.map((n) => (
           <Link key={n.id} to={n.link} className={`notif-item ${n.read ? 'notif-item--read' : 'notif-item--unread'}`} onClick={() => { if (!n.read) void updateDoc(doc(db, `users/${user.uid}/notifications/${n.id}`), { read: true }); }}>
             <span className="notif-item__dot" aria-hidden="true" />
@@ -228,7 +228,7 @@ export function NotificationsPage() {
             </div>
           </Link>
         ))}
-      </div>
+      </div> : null}
     </div>
   );
 }

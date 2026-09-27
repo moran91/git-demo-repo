@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Link, Navigate, useNavigate, useParams } from 'react-router';
+import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router';
 import { ref as sref, uploadBytes } from 'firebase/storage';
-import { EMPTY_WEEK, LOYALTY_BOUNDS, branchInputSchema, normalizeIsraeliPhone, toLocal, hasAnyTranslation, hhmmToMinutes, makeId, minutesToHHMM, type Branch, type BusinessType, type CashRecord, type DeliveryCityRule, type HoursOverride, type LoyaltyLedgerEntry, type OpeningInterval, type WeeklyHours } from '@qareeb/shared';
+import { defaultWeek, LOYALTY_BOUNDS, branchInputSchema, normalizeIsraeliPhone, toLocal, hasAnyTranslation, hhmmToMinutes, makeId, minutesToHHMM, type Branch, type BusinessType, type CashRecord, type DeliveryCityRule, type HoursOverride, type LoyaltyLedgerEntry, type OpeningInterval, type WeeklyHours } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
 import { storage } from '@/lib/firebase';
 import { useCollection, useDoc, orderBy, where, limit } from '@/lib/queries';
@@ -70,7 +70,7 @@ export function DetailsCard({ summary, count, open, onToggle, children, card }: 
 type BranchDraft = { name: Branch['name']; cityId: string; locationDescription: Branch['locationDescription']; lat?: number; lng?: number; phone: string; hours: WeeklyHours; hoursOverrides: HoursOverride[]; pickupEnabled: boolean; dineInEnabled: boolean; deliveryEnabled: boolean; deliveryCities: DeliveryCityRule[] };
 
 function draftFromBranch(b?: Branch, cityId = 'beit-jann'): BranchDraft {
-  if (!b) return { name: {}, cityId, locationDescription: {}, phone: '', hours: { ...EMPTY_WEEK }, hoursOverrides: [], pickupEnabled: true, dineInEnabled: true, deliveryEnabled: false, deliveryCities: [] };
+  if (!b) return { name: {}, cityId, locationDescription: {}, phone: '', hours: defaultWeek(), hoursOverrides: [], pickupEnabled: true, dineInEnabled: true, deliveryEnabled: false, deliveryCities: [] };
   return { name: b.name, cityId: b.cityId, locationDescription: b.locationDescription, lat: b.lat, lng: b.lng, phone: b.phone, hours: b.hours, hoursOverrides: b.hoursOverrides, pickupEnabled: b.pickupEnabled, dineInEnabled: b.dineInEnabled !== false, deliveryEnabled: b.deliveryEnabled, deliveryCities: b.deliveryCities };
 }
 
@@ -228,6 +228,9 @@ export function BranchSettingsPage() {
   const t = useT();
   const { business, branch, can } = useDash();
   const [saving, setSaving] = useState(false);
+  const { hash } = useLocation();
+  // Deep links such as the go-live checklist's "Opening hours" land on that section.
+  useEffect(() => { if (hash) document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView({ block: 'start' }); }, [hash]);
   if (!can('settings')) return <EmptyState icon="shield" title={t('error.forbidden')} />;
   return (
     <div className="sx-page">

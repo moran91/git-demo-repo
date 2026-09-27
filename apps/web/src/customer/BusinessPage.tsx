@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router';
-import { availableFulfillmentModes, formatPhoneDisplay, minutesToHHMM, type Category, type Product, toLocal } from '@qareeb/shared';
+import { availableFulfillmentModes, formatPhoneDisplay, type Category, type Product } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
 import { useCollection, useDoc, orderBy, where, limit } from '@/lib/queries';
-import { Badge, Skeleton, EmptyState, Alert, IconButton, toast } from '@/design/components';
+import { Badge, Skeleton, EmptyState, Alert, IconButton, Presence, toast } from '@/design/components';
 import { Icon } from '@/design/Icon';
 import { discoveryStore } from '@/lib/city';
 import { cartStore } from '@/lib/cart';
-import { money } from '@/lib/format';
+import { clockIn, money } from '@/lib/format';
 import { telHref } from '@/lib/format';
 import { ErrorView } from '@/app/Shell';
 import { useCity, useCombos, useFavorites, useOpenState, usePromotions, type PublicBranch, type PublicBusiness } from './hooks';
@@ -122,12 +122,13 @@ export function BusinessPage() {
             <StorageImage path={biz.coverPath} size="display" alt="" wide priority fallbackLabel={t('discovery.imageFallback')} />
           </div>
         ) : null}
-        <div className="row row--between row--nowrap" style={{ alignItems: 'flex-start' }}>
-          <div className="stack--sm stack" style={{ minWidth: 0, flex: '1 1 0' }}>
+        {/* The heart follows the name block instead of sitting at the far edge, where on a wide screen it read as unrelated. */}
+        <div className="row row--nowrap" style={{ alignItems: 'flex-start', gap: 'var(--space-4)' }}>
+          <div className="stack--sm stack" style={{ minWidth: 0, flex: '0 1 auto' }}>
             <h1 className="wrap-anywhere" lang={biz.defaultLocale}>{name}</h1>
             {biz.description ? <p className="muted wrap-anywhere">{L(biz.description, biz.defaultLocale)}</p> : null}
             <div className="row">
-              {branch.ordersPaused ? <Badge tone="accent" icon="clock">{t('common.paused')}</Badge> : open.open ? <Badge tone="success" icon="check">{t('business.openNow')}{open.closesInMin !== undefined && open.closesInMin < 1440 ? ` · ${t('discovery.closesAt', { time: minutesToHHMM(toLocal(new Date()).minutes + open.closesInMin).replace(/^0/, "") })}` : ''}</Badge> : <Badge tone="muted" icon="clock">{t('business.closedNow')}{open.opensInMin !== undefined ? ` · ${t('discovery.opensAt', { time: minutesToHHMM(toLocal(new Date()).minutes + open.opensInMin).replace(/^0/, "") })}` : ''}</Badge>}
+              {branch.ordersPaused ? <Badge tone="accent" icon="clock">{t('common.paused')}</Badge> : open.open ? <Badge tone="success" icon="check">{t('business.openNow')}{open.closesInMin !== undefined && open.closesInMin < 1440 ? ` · ${t('discovery.closesAt', { time: clockIn(open.closesInMin) })}` : ''}</Badge> : <Badge tone="muted" icon="clock">{t('business.closedNow')}{open.opensInMin !== undefined ? ` · ${t('discovery.opensAt', { time: clockIn(open.opensInMin) })}` : ''}</Badge>}
               {L(branch.locationDescription, biz.defaultLocale) ? <span className="muted icon-text"><Icon name="pin" size={16} /> {L(branch.locationDescription, biz.defaultLocale)}</span> : null}
               <a className="biz-phone" href={telHref(branch.phone)} aria-label={`${t('business.callBusiness')} ${formatPhoneDisplay(branch.phone)}`}><span className="biz-phone__icon"><Icon name="phone" size={16} /></span><bdi className="num">{formatPhoneDisplay(branch.phone)}</bdi></a>
             </div>
@@ -179,14 +180,14 @@ export function BusinessPage() {
               return (
                 <article
                   key={p.id}
-                  className={`product ${unavailable ? 'product--unavailable' : ''} ${!(unavailable || !orderable || modeMismatch) ? 'product--clickable' : ''}`}
+                  className={`product ${p.imagePath ? '' : 'product--noimg'} ${unavailable ? 'product--unavailable' : ''} ${!(unavailable || !orderable || modeMismatch) ? 'product--clickable' : ''}`}
                   onClick={(e) => { if (unavailable || !orderable || modeMismatch) return; if ((e.target as HTMLElement).closest('button, a')) return; setActive(p); }}
                   onKeyDown={(e) => { if (e.target !== e.currentTarget) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (!(unavailable || !orderable || modeMismatch)) setActive(p); } }}
                   tabIndex={!(unavailable || !orderable || modeMismatch) ? 0 : undefined}
                   role={!(unavailable || !orderable || modeMismatch) ? 'button' : undefined}
                   aria-label={!(unavailable || !orderable || modeMismatch) ? L(p.name, biz.defaultLocale) : undefined}
                 >
-                  <StorageImage path={p.imagePath} alt={t('product.photoAlt', { name: L(p.name, biz.defaultLocale) })} square className="product__img" fallbackLabel={t('discovery.imageFallback')} onClick={() => { if (!(unavailable || !orderable || modeMismatch)) setActive(p); else if (p.imagePath) setPhoto({ path: p.imagePath, alt: t('product.photoAlt', { name: L(p.name, biz.defaultLocale) }) }); }} />
+                  {p.imagePath ? <StorageImage path={p.imagePath} alt={t('product.photoAlt', { name: L(p.name, biz.defaultLocale) })} square className="product__img" fallbackLabel={t('discovery.imageFallback')} onClick={() => { if (!(unavailable || !orderable || modeMismatch)) setActive(p); else if (p.imagePath) setPhoto({ path: p.imagePath, alt: t('product.photoAlt', { name: L(p.name, biz.defaultLocale) }) }); }} /> : null}
                   <div className="product__body">
                     {p.mostOrdered ? <span className="most-ordered">{t('product.mostOrdered')}</span> : null}
                     <h3 className="wrap-anywhere">{L(p.name, biz.defaultLocale)}</h3>
@@ -212,16 +213,16 @@ export function BusinessPage() {
           </div>
         </section>
       ))}
-      {active ? <ProductSheet product={active} business={biz} branch={branch} mode={cartMode} cityId={prefs.cityId} onClose={() => setActive(null)} /> : null}
+      <Presence value={active}>{(p) => <ProductSheet product={p} business={biz} branch={branch} mode={cartMode} cityId={prefs.cityId} onClose={() => setActive(null)} />}</Presence>
       {photo ? <PhotoLightbox path={photo.path} alt={photo.alt} onClose={() => setPhoto(null)} /> : null}
-      {activePromo ? <PromoSheet promotion={activePromo} products={featuredOf(activePromo)} defaultLocale={biz.defaultLocale} actionOf={promoAction} onClose={() => setActivePromo(null)} onProduct={(fp) => {
+      <Presence value={activePromo}>{(promo) => <PromoSheet promotion={promo} products={featuredOf(promo)} defaultLocale={biz.defaultLocale} actionOf={promoAction} onClose={() => setActivePromo(null)} onProduct={(fp) => {
         const full = products.data.find((x) => x.id === fp.id);
         const action = promoAction(fp);
         if (!full || !action) return;
         setActivePromo(null);
         if (action === 'add') setActive(full); else setPhoto({ path: full.imagePath!, alt: t('product.photoAlt', { name: L(full.name, biz.defaultLocale) }) });
-      }} /> : null}
-      {activeCombo ? <ComboSheet combo={activeCombo} products={products.data} business={biz} branch={branch} mode={cartMode} cityId={prefs.cityId} onClose={() => setActiveCombo(null)} /> : null}
+      }} />}</Presence>
+      <Presence value={activeCombo}>{(combo) => <ComboSheet combo={combo} products={products.data} business={biz} branch={branch} mode={cartMode} cityId={prefs.cityId} onClose={() => setActiveCombo(null)} />}</Presence>
     </div>
   );
 }

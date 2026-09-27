@@ -62,7 +62,7 @@ export function CartPage() {
           const prob = problemFor(l.lineId);
           return (
             <li key={l.lineId} className="list__item cart-line">
-              <StorageImage path={meta?.imagePath} alt={t('product.photoAlt', { name: L(meta?.name ?? {}, dl) })} square className="cart-line__img" fallbackLabel={t('discovery.imageFallback')} onClick={() => meta?.imagePath && setPhoto({ path: meta.imagePath, alt: t('product.photoAlt', { name: L(meta.name, dl) }) })} />
+              {meta?.imagePath ? <StorageImage path={meta?.imagePath} alt={t('product.photoAlt', { name: L(meta?.name ?? {}, dl) })} square className="cart-line__img" fallbackLabel={t('discovery.imageFallback')} onClick={() => meta?.imagePath && setPhoto({ path: meta.imagePath, alt: t('product.photoAlt', { name: L(meta.name, dl) }) })} /> : null}
               <div className="cart-line__body">
                 <div className="cart-line__head">
                   <strong className="wrap-anywhere">{meta?.isCombo ? <span className="badge badge--accent" style={{ marginInlineEnd: 6 }}>{t('deals.combo')}</span> : null}{L(meta?.name ?? {}, dl)}{meta?.variantName ? ` · ${L(meta.variantName, dl)}` : ''}</strong>

@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { admin, asEmail, expectCode, IDS, USERS, type Client } from './harness.js';
+import { EMU } from './emu.js';
 
 /** Promotions: limited-time cards of a branch, projected to publicBranches/{br}/promotions (active only). */
 let owner1: Client;
@@ -40,7 +41,7 @@ describe('promotions', () => {
     // Banner: an object uploaded under the promotion's prefix is recorded and projected; null clears it.
     const imagePath = `businesses/${businessId}/branches/${branchId}/promotions/${promotion.id}/banner.png`;
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
-    const up = await fetch(`http://127.0.0.1:9199/upload/storage/v1/b/qareeb-dev.firebasestorage.app/o?uploadType=media&name=${encodeURIComponent(imagePath)}`, { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: png });
+    const up = await fetch(`http://127.0.0.1:${EMU.storage}/upload/storage/v1/b/qareeb-dev.firebasestorage.app/o?uploadType=media&name=${encodeURIComponent(imagePath)}`, { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: png });
     expect(up.ok).toBe(true);
     expect(await expectCode(owner1.call('setPromotionImage', { businessId, branchId, promotionId: promotion.id, path: `${imagePath}.missing` }))).toBe('invalid_argument');
     await step('set image', owner1.call('setPromotionImage', { businessId, branchId, promotionId: promotion.id, path: imagePath }));

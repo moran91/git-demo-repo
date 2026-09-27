@@ -137,13 +137,13 @@ export function OrderPage() {
                 {l.modifiers.length ? <span className="order-line__mods"> {l.modifiers.map((m) => L(m.optionName) + placementSuffix(m.placement, t)).join(', ')}</span> : null}
                 {l.note ? <span className="muted"> “{l.note}”</span> : null}
               </span>
-              <bdi className="num">{l.removed ? '' : money(l.lineTotalAgorot, locale)}</bdi>
+              <bdi className="money">{l.removed ? '' : money(l.lineTotalAgorot, locale)}</bdi>
             </li>
           ))}
         </ul>
       </section>
       <Summary totals={o.totals} mode={o.mode} cashReceived={cashPaidAgorot} rejected={o.status === 'rejected'} />
-      {revised ? <div className="muted">{t('orders.original')} {t('common.total')}: <bdi className="num">{money(o.originalTotals.cashDueAgorot, locale)}</bdi></div> : null}
+      {revised ? <div className="muted">{t('orders.original')} {t('common.total')}: <bdi className="money">{money(o.originalTotals.cashDueAgorot, locale)}</bdi></div> : null}
       {o.loyalty && o.loyalty.pointsReserved > 0 ? <div className="muted">{t('orders.loyaltyReserved')}: {o.loyalty.pointsReserved}</div> : null}
       {events.data.some((e) => e.type === 'cash_recorded') ? <div className="muted">{t('orders.loyaltyEarned')}: {(events.data.find((e) => e.type === 'cash_recorded')?.after as { pointsEarned?: number } | undefined)?.pointsEarned ?? 0}</div> : null}
     </div>

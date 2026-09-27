@@ -2,6 +2,7 @@ import { initializeApp, deleteApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, connectAuthEmulator, signInWithEmailAndPassword, signInWithCustomToken, signOut, type Auth } from 'firebase/auth';
 import { getFunctions, connectFunctionsEmulator, httpsCallable, type Functions } from 'firebase/functions';
 import { getFirestore, connectFirestoreEmulator, type Firestore } from 'firebase/firestore';
+import { EMU } from './emu.js';
 import { initializeApp as adminInit, getApps } from 'firebase-admin/app';
 import { getAuth as adminAuth } from 'firebase-admin/auth';
 import { getFirestore as adminFirestore } from 'firebase-admin/firestore';
@@ -35,11 +36,11 @@ let n = 0;
 export function makeClient(): Client {
   const app = initializeApp({ projectId: PROJECT, apiKey: 'fake-api-key', authDomain: 'localhost' }, `client-${++n}-${randomUUID()}`);
   const auth = getAuth(app);
-  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+  connectAuthEmulator(auth, `http://127.0.0.1:${EMU.auth}`, { disableWarnings: true });
   const fns = getFunctions(app, 'me-west1');
-  connectFunctionsEmulator(fns, '127.0.0.1', 5001);
+  connectFunctionsEmulator(fns, '127.0.0.1', EMU.functions);
   const db = getFirestore(app);
-  connectFirestoreEmulator(db, '127.0.0.1', 8080);
+  connectFirestoreEmulator(db, '127.0.0.1', EMU.firestore);
   return {
     app, auth, fns, db,
     async call<T>(name: string, data?: unknown): Promise<T> {

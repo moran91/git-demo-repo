@@ -13,3 +13,6 @@ export * from './links.js';
 export * from './fulfillment.js';
 export * from './receipt/index.js';
 export * from './location.js';
+export * from './dishIndex.js';
+export * from './search/index.js';
+export * from './translation.js';

@@ -1,27 +1,48 @@
+import { useMemo } from 'react';
+import { evaluateOpen } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
 import { discoveryStore } from '@/lib/city';
 import { Segmented, Skeleton, EmptyState, Button } from '@/design/components';
 import { ErrorView } from '@/app/Shell';
-import { useCity, useDiscovery } from './hooks';
-import { BusinessCard } from './BusinessCard';
+import { useCity, useDiscovery, useNow, type PublicBranch } from './hooks';
+import { PlaceRow } from './BusinessCard';
 import { cityPickerStore } from './CityControl';
+import { StoriesBar } from './StoriesBar';
+import { CravingsHome } from './CravingsHome';
 
+/**
+ * Customer home, food first: stories on a green band, then "what do I feel like eating?" (search and
+ * dish-type chips across every restaurant in the city), then the places themselves.
+ */
 export function DiscoveryPage() {
   const t = useT();
   const { L } = useI18n();
   const prefs = discoveryStore.use();
   const city = useCity(prefs.cityId);
-  const { data, loading, error } = useDiscovery(prefs.cityId, prefs.kind);
+  // Dish search always covers restaurants; the places list follows the restaurants/supermarkets switch.
+  const restaurants = useDiscovery(prefs.cityId, 'restaurant');
+  const markets = useDiscovery(prefs.cityId, 'supermarket');
+  const { data, loading, error } = prefs.kind === 'restaurant' ? restaurants : markets;
   const cityName = city.data ? L(city.data.name) : '…';
+  const now = useNow();
+  const branches = useMemo(() => sortOpenFirst(data, now), [data, now]);
+  const multiBranch = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const b of data) counts.set(b.businessId, (counts.get(b.businessId) ?? 0) + 1);
+    return counts;
+  }, [data]);
 
   return (
-    <div className="stack--lg stack">
-      <div className="hero">
-        <h1>{t('brand.tagline')}</h1>
-        <p>{t('brand.subtitle')}</p>
+    <div className="home">
+      <div className="crave-band">
+        <StoriesBar cityId={prefs.cityId} />
       </div>
-      <div className="controls">
-        <div>
+      {/* The page title stays for screen readers and the document outline; the band opens the page visually. */}
+      <h1 className="visually-hidden">{t('brand.tagline')}</h1>
+      <CravingsHome restaurants={restaurants.data} cityId={prefs.cityId} now={now} />
+      <section className="places" aria-labelledby="places">
+        <div className="discovery-head">
+          <h2 id="places">{t('cravings.places')}</h2>
           <Segmented
             label={t('discovery.kind')}
             value={prefs.kind}
@@ -32,26 +53,34 @@ export function DiscoveryPage() {
             ]}
           />
         </div>
-      </div>
-      <section aria-labelledby="around">
-        <div className="section-title"><h2 id="around">{t('discovery.around')}</h2></div>
         {error ? <ErrorView message={t('common.errorGeneric')} /> : null}
         {loading ? (
-          <div className="grid-cards" aria-busy="true">
+          <ul className="place-list" aria-busy="true">
             {[0, 1, 2].map((i) => (
-              <div key={i} className="biz-card"><Skeleton height={0} style={{ aspectRatio: '16/9', borderRadius: 0 }} /><div className="biz-card__body"><Skeleton height={20} width="60%" /><Skeleton height={14} width="80%" /></div></div>
+              <li key={i} className="place-row">
+                <span className="place-row__main">
+                  <Skeleton height={64} width={64} radius={14} />
+                  <span className="place-row__text"><Skeleton height={18} width="55%" /><Skeleton height={14} width="75%" /></span>
+                </span>
+              </li>
             ))}
-          </div>
+          </ul>
         ) : data.length === 0 && !error ? (
           <EmptyState icon={prefs.kind === 'restaurant' ? 'utensils' : 'basket'} title={t('discovery.empty', { city: cityName })} body={t('discovery.emptyHint')} action={<Button variant="secondary" onClick={() => cityPickerStore.set({ open: true })}>{t('discovery.changeCity')}</Button>} />
         ) : (
-          <div className="grid-cards">
-            {data.map((b) => (
-              <BusinessCard key={b.id} branch={b} cityId={prefs.cityId} />
+          <ul className="place-list">
+            {branches.map((b) => (
+              <PlaceRow key={b.id} branch={b} cityId={prefs.cityId} showBranch={(multiBranch.get(b.businessId) ?? 0) > 1} />
             ))}
-          </div>
+          </ul>
         )}
       </section>
     </div>
   );
+}
+
+/** Orderable now first, then paused, then closed; the query order is kept within each group. */
+function sortOpenFirst(list: PublicBranch[], now: Date): PublicBranch[] {
+  const rank = (b: PublicBranch) => (!evaluateOpen(now, b.hours, b.hoursOverrides ?? []).open ? 2 : b.ordersPaused ? 1 : 0);
+  return list.map((b, i) => ({ b, i, r: rank(b) })).sort((x, y) => x.r - y.r || x.i - y.i).map((x) => x.b);
 }

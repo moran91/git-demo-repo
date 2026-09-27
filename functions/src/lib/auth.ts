@@ -2,6 +2,7 @@ import type { CallableRequest } from 'firebase-functions/v2/https';
 import type { Membership, MembershipRole, UserProfile } from '@qareeb/shared';
 import { col, db, type Tx } from './firebase.js';
 import { fail } from './errors.js';
+import { bindCaller, markAdminScope } from './adminAudit.js';
 
 export interface Caller {
   uid: string;
@@ -22,7 +23,9 @@ export async function requireCaller(req: CallableRequest<unknown>, tx?: Tx): Pro
   const profile = snap.data() as UserProfile;
   if (profile.suspended) fail('suspended');
   const isAdmin = profile.isAdmin === true && req.auth.token.admin === true;
-  return { uid: req.auth.uid, token: req.auth.token as Caller['token'], profile, isAdmin };
+  const caller: Caller = { uid: req.auth.uid, token: req.auth.token as Caller['token'], profile, isAdmin };
+  bindCaller(caller, req);
+  return caller;
 }
 
 export function requireAdmin(c: Caller): void {
@@ -60,7 +63,12 @@ export async function requireMembership(
   branchId?: string,
   tx?: Tx,
 ): Promise<{ role: MembershipRole | 'admin'; membership: Membership | null }> {
-  if (c.isAdmin) return { role: 'admin', membership: null };
+  if (c.isAdmin) {
+    // An admin who also belongs to the business is acting as that member, not intervening from
+    // outside: only admins without a membership here get the `admin.*` audit row. Power is unchanged.
+    if (!(await getMembership(c.uid, businessId, tx))) markAdminScope(c, { uid: c.uid, businessId, branchId });
+    return { role: 'admin', membership: null };
+  }
   const m = await getMembership(c.uid, businessId, tx);
   if (!m || !roles.includes(m.role)) fail('forbidden', { reason: 'membership' });
   if (branchId && !membershipCoversBranch(m, branchId)) fail('forbidden', { reason: 'branch' });

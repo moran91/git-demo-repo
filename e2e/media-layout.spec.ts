@@ -15,7 +15,7 @@ async function checkMedia(page: Page) {
   }));
   for (const box of boxes) {
     expect(box.width).toBeGreaterThan(0);
-    if (box.kind.includes('dslide')) expect(box.height).toBe(box.kind.includes('dslide--band') ? 212 : 164);
+    if (box.kind.includes('dslide')) expect(box.height).toBe(box.kind.includes('dslide--band') ? 212 : 176);
     if (box.kind.includes('plate')) {
       expect(Math.abs(box.width - box.height)).toBeLessThan(1);
       expect(box.width).toBeGreaterThan(40);

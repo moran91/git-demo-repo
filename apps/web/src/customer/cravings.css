@@ -1,0 +1,191 @@
+/* ---------- Home, food first (mockup 9) ----------
+ * One bold move: a big "what do you feel like eating?" field lifted over the green band on a butter
+ * offset. Everything under it stays quiet: round photo chips, plain dish rows, compact place rows. */
+
+.home { display: flex; flex-direction: column; }
+
+/* Green band: runs edge to edge under the top bar and carries the stories in light type. */
+.crave-band {
+  margin-inline: calc(-1 * var(--gutter));
+  margin-top: calc(-1 * var(--space-4));
+  padding: var(--space-3) var(--gutter) calc(var(--space-8) + var(--space-2));
+  background: var(--color-band);
+  color: var(--color-on-band);
+}
+.crave-band .stories { margin-inline: calc(-1 * var(--gutter)); }
+.crave-band .story-circle,
+.crave-band .story-circle:not(.story-circle--fresh) .story-circle__name { color: var(--color-on-band); }
+.crave-band .story-circle:not(.story-circle--fresh) .story-circle__name { opacity: 0.8; }
+.crave-band .story-circle:focus-visible { outline-color: var(--color-on-band); }
+
+.crave { display: flex; flex-direction: column; }
+
+/* The search field overlaps the band's lower edge. */
+.crave-search { position: relative; z-index: 1; margin-top: calc(-1 * (var(--space-8) - var(--space-1))); }
+.crave-search__box {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 64px;
+  padding-inline: var(--space-4) var(--space-2);
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 2px solid var(--color-text);
+  border-radius: 20px;
+  box-shadow: 0 6px 0 var(--color-crave-lift);
+  cursor: text;
+}
+.crave-search__box:focus-within { border-color: var(--color-primary); }
+.crave-search__box > svg { flex: none; }
+.crave-search__box input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 22px;
+  font-weight: 700;
+  outline: none;
+  padding: 0;
+}
+.crave-search__box input::placeholder { color: var(--color-text); opacity: 0.8; }
+.crave-search__box input::-webkit-search-cancel-button { display: none; }
+.crave-search__clear {
+  flex: none;
+  width: var(--touch-min);
+  height: var(--touch-min);
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-soft);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+/* Dish-type chips: round photos, the chosen one ringed in the brand green. */
+.crave-chips {
+  display: flex;
+  gap: var(--space-3);
+  overflow-x: auto;
+  margin-inline: calc(-1 * var(--gutter));
+  padding: var(--space-6) var(--gutter) var(--space-2);
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.crave-chips::-webkit-scrollbar { display: none; }
+.crave-chip {
+  flex: none;
+  width: 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--text-secondary);
+  font-weight: 500;
+  line-height: 1.25;
+  text-align: center;
+  cursor: pointer;
+}
+.crave-chip__disc {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--color-soft);
+  box-shadow: 0 0 0 1px var(--color-border);
+  transition: box-shadow var(--duration) var(--ease-out);
+}
+.crave-chip__disc .img-frame { width: 100%; height: 100%; border-radius: 50%; }
+.crave-chip__mark { font-size: 26px; font-weight: 700; color: var(--color-primary); }
+.crave-chip[aria-pressed='true'] { color: var(--color-text); font-weight: 700; }
+.crave-chip[aria-pressed='true'] .crave-chip__disc { box-shadow: 0 0 0 3px var(--color-bg), 0 0 0 6px var(--color-primary); }
+.crave-chip:focus-visible { outline: none; }
+.crave-chip:focus-visible .crave-chip__disc { box-shadow: 0 0 0 3px var(--color-bg), 0 0 0 6px var(--color-focus); }
+
+/* Dish results */
+.crave-results { padding-top: var(--space-2); }
+.crave-title { font-size: var(--text-heading); margin: var(--space-4) 0 var(--space-1); }
+.crave-sub { font-size: var(--text-body); color: var(--color-text-muted); margin: var(--space-4) 0 0; }
+.crave-empty { color: var(--color-text-muted); margin: var(--space-4) 0; max-width: 60ch; }
+.crave-for { color: var(--color-text-muted); margin: var(--space-3) 0 0; }
+/* A tint, not bold: a weight change mid-word breaks Arabic letter joining. */
+.crave-dish__name mark { background: var(--color-accent-bg); color: inherit; border-radius: 3px; }
+.crave-list { list-style: none; margin: 0; padding: 0; }
+.crave-dish {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding-block: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+.crave-dish:last-child { border-bottom: 0; }
+.crave-dish__img .img-frame { width: 80px; border-radius: 16px; }
+.crave-dish__img .img-frame__mark { font-size: 32px; }
+.crave-dish__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.crave-dish__name { font-size: 17px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+.crave-dish__place { display: flex; align-items: center; gap: 6px; font-size: var(--text-secondary); color: var(--color-text-muted); }
+.crave-dish__logo.img-frame { width: 20px; height: 20px; flex: none; border-radius: 50%; }
+.crave-dish__price { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.crave-dish__add {
+  width: var(--touch-min);
+  height: var(--touch-min);
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  cursor: pointer;
+  transition: transform var(--duration-micro) var(--ease-out), background var(--duration) var(--ease-out);
+}
+.crave-dish__add:hover { background: var(--color-primary-hover); }
+.crave-dish__add:active { transform: scale(0.92); }
+.crave-dish__add[aria-busy='true'] { opacity: 0.6; }
+.crave-dish__when {
+  min-height: var(--touch-min);
+  display: inline-flex;
+  align-items: center;
+  padding-inline: var(--space-3);
+  border-radius: 999px;
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text-muted);
+  font-size: var(--text-secondary);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.crave-list--closed .crave-dish__img .img-frame { filter: grayscale(1); opacity: 0.7; }
+
+/* Places */
+.places { margin-top: var(--space-6); }
+.places .discovery-head h2 { font-size: var(--text-heading); }
+.place-list { list-style: none; margin: 0; padding: 0; }
+.place-row { display: flex; align-items: center; gap: var(--space-2); padding-block: var(--space-2); }
+.place-row + .place-row { border-top: 1px solid var(--color-border); }
+.place-row__main { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--space-3); color: inherit; text-decoration: none; min-height: 72px; }
+.place-row__img { flex: none; width: 64px; }
+.place-row__img .img-frame { width: 64px; border-radius: 14px; }
+.place-row__img .img-frame__mark { font-size: 28px; }
+.place-row--closed .place-row__img .img-frame { filter: grayscale(1); opacity: 0.6; }
+.place-row__text { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.place-row__name { font-size: var(--text-title); font-weight: 700; line-height: 1.3; }
+.place-row__meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); font-size: var(--text-secondary); color: var(--color-text-muted); }
+.place-row__main:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; border-radius: var(--radius-control); }
+
+@media (min-width: 900px) {
+  .crave, .places { width: 100%; max-width: 760px; margin-inline: auto; }
+  .crave-chips { margin-inline: 0; padding-inline: 0; flex-wrap: wrap; overflow: visible; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .crave-chip__disc, .crave-dish__add { transition: none; }
+}

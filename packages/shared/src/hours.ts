@@ -156,6 +156,12 @@ export function validateInterval(iv: OpeningInterval): boolean {
 
 export const EMPTY_WEEK: WeeklyHours = { '0': [], '1': [], '2': [], '3': [], '4': [], '5': [], '6': [] };
 
+/** A new branch starts open 10:00–22:00 every day, so it can take orders before the owner edits hours. */
+export function defaultWeek(): WeeklyHours {
+  const day = () => [{ startMin: 600, endMin: 1320 }];
+  return { '0': day(), '1': day(), '2': day(), '3': day(), '4': day(), '5': day(), '6': day() };
+}
+
 /** Format an ISO instant for operational display in Asia/Jerusalem. */
 export function formatLocalDateTime(iso: string | Date, locale: 'he' | 'ar' | 'en' = 'he'): string {
   const d = typeof iso === 'string' ? new Date(iso) : iso;

@@ -44,14 +44,15 @@ export function ExtrasLibraryPage() {
   const name = (g: SharedModifierGroup) => L(g.name, business.defaultLocale);
   return (
     <div className="stack catalog">
+      {/* With no groups yet the empty state carries the one "new group" action, so the title does not repeat it. */}
       <PageTitle title={t('catalog.library')} back="../catalog">
-        <Button icon="plus" onClick={() => setEdit({ draft: newGroupDraft() })}>{t('catalog.newSharedGroup')}</Button>
+        {groups.data.length > 0 ? <Button icon="plus" onClick={() => setEdit({ draft: newGroupDraft() })}>{t('catalog.newSharedGroup')}</Button> : null}
       </PageTitle>
       <p className="muted">{t('catalog.libraryHint')}</p>
-      <div className="chips catalog-chips" role="group" aria-label={t('catalog.archived')}>
+      {groups.data.length > 0 ? <div className="chips catalog-chips" role="group" aria-label={t('catalog.archived')}>
         <button type="button" className="chip" aria-pressed={!showArchived} onClick={() => setShowArchived(false)}>{t('deals.allCategories')}</button>
         <button type="button" className="chip" aria-pressed={showArchived} onClick={() => setShowArchived(true)}>{t('catalog.archived')}</button>
-      </div>
+      </div> : null}
       {groups.loading ? <Skeleton height={200} /> : visible.length === 0 ? <EmptyState icon="tag" title={t('catalog.libraryEmpty')} action={<Button icon="plus" onClick={() => setEdit({ draft: newGroupDraft() })}>{t('catalog.newSharedGroup')}</Button>} /> : (
         <section className="card ccat" aria-label={t('catalog.library')}>
           <ul className="ccat__list">

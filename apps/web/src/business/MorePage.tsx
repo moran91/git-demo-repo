@@ -6,14 +6,15 @@ import { Badge, Button, toast } from '@/design/components';
 import { LanguageSelect } from '@/app/Shell';
 import { errorKey } from '@/lib/errors';
 import { useConfirmNavigation } from './BusinessExperience';
-import { BranchChip, BusinessSwitcher, PageTitle, useDash, useNavSections } from './shell';
+import { BranchChip, BusinessSwitcher, PageTitle, useDash, useNavSections, useSwitchableBusinesses } from './shell';
 
 /** Phone "More" tab: identity, the management links the sidebar shows on desktop, language, sign out. */
 export function MorePage() {
   const t = useT();
   const { L } = useI18n();
   const { business, branch, branches, role } = useDash();
-  const { memberships, signOut } = useAuth();
+  const { signOut } = useAuth();
+  const { businesses: switchable } = useSwitchableBusinesses();
   const confirmNavigation = useConfirmNavigation();
   const sections = useNavSections().filter((s) => s.id === 'branch' || s.id === 'business');
   const branchName = L(branch.name, business.defaultLocale);
@@ -48,7 +49,7 @@ export function MorePage() {
         <h2 id="more-lang" className="more__group-title">{t('common.language')}</h2>
         <div className="more__pad"><LanguageSelect /></div>
       </section>
-      {memberships.length > 1 ? (
+      {switchable.length > 1 ? (
         <section className="card more__group" aria-labelledby="more-biz">
           <h2 id="more-biz" className="more__group-title">{t('dash.switchBusiness')}</h2>
           <div className="more__pad"><BusinessSwitcher currentBusinessId={business.id} /></div>

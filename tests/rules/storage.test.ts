@@ -31,8 +31,8 @@ const meta = { contentType: 'image/png' };
 beforeAll(async () => {
   env = await initializeTestEnvironment({
     projectId: PROJECT,
-    firestore: { rules: fs.readFileSync(path.resolve(__dirname, '../../firestore.rules'), 'utf8'), host: '127.0.0.1', port: 8080 },
-    storage: { rules: fs.readFileSync(path.resolve(__dirname, '../../storage.rules'), 'utf8'), host: '127.0.0.1', port: 9199 },
+    firestore: { rules: fs.readFileSync(path.resolve(__dirname, '../../firestore.rules'), 'utf8'), host: '127.0.0.1', port: 8080 + (Number(process.env.EMU_PORT_OFFSET ?? 0) || 0) },
+    storage: { rules: fs.readFileSync(path.resolve(__dirname, '../../storage.rules'), 'utf8'), host: '127.0.0.1', port: 9199 + (Number(process.env.EMU_PORT_OFFSET ?? 0) || 0) },
   });
   await env.clearFirestore();
   await env.clearStorage();
@@ -86,6 +86,17 @@ describe('storage rules', () => {
     const s = env.authenticatedContext('owner1');
     await assertFails(uploadBytes(ref(s.storage(), 'businesses/biz1/branches/brA/products/p1/a.pdf'), png, { contentType: 'application/pdf' }));
     await assertFails(uploadBytes(ref(s.storage(), 'businesses/biz1/branches/brA/products/p1/big.png'), new Uint8Array(5 * 1024 * 1024 + 1), meta));
+  });
+
+  // The emulator cannot resolve the membership lookup (see the budget note above), so the "editor may
+  // upload" half is asserted statically: the posts block grants exactly what the promotions block does.
+  it('explore-post photos: same grant as promotion banners; guests and non-images refused', async () => {
+    const src = fs.readFileSync(path.resolve(__dirname, '../../storage.rules'), 'utf8');
+    const grant = (seg: string) => src.split(`/branches/{branchId}/${seg}/`)[1]?.split('}\n')[0]?.split('\n').slice(1, 4).join('\n');
+    expect(grant('posts')).toBeTruthy();
+    expect(grant('posts')).toBe(grant('promotions'));
+    await assertFails(uploadBytes(ref(env.unauthenticatedContext().storage(), 'businesses/biz1/branches/brA/posts/post1/b.png'), png, meta));
+    await assertFails(uploadBytes(ref(env.authenticatedContext('owner1').storage(), 'businesses/biz1/branches/brA/posts/post1/c.pdf'), png, { contentType: 'application/pdf' }));
   });
 
   it('closes every path outside the tenant layout, including branding files not named logo/cover', async () => {

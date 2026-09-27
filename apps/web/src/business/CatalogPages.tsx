@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ref as sref, uploadBytes } from 'firebase/storage';
-import { hasAnyTranslation, makeId, productInputSchema, type Category, type Localized, type ModifierGroup, type Product, type ProductInput, type SharedModifierGroup } from '@qareeb/shared';
+import { DISH_TYPES, MAX_STORY_ITEMS, hasAnyTranslation, makeId, productInputSchema, type Category, type Localized, type ModifierGroup, type Product, type ProductInput, type SharedModifierGroup } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
 import { storage } from '@/lib/firebase';
 import { useCollection, orderBy, limit } from '@/lib/queries';
@@ -17,7 +17,7 @@ import { LangSwitch, LocalizedInput, initialLang, missingLangs, type Loc } from 
 import { ModifierGroupFields, agorotInput, effectiveMin, newGroupDraft, parseAgorot } from './ModifierGroupFields';
 import { EditLines, MoneyInput } from './EditLines';
 import { SharedGroupDialog } from './ExtrasLibraryPage';
-import { ActionSheet, LedgerRow, Switch, type SheetAction } from './CatalogControls';
+import { ActionSheet, LedgerRow, Switch, storyIssue, type SheetAction } from './CatalogControls';
 import './catalog.css';
 
 export { LocalizedInput };
@@ -59,13 +59,20 @@ export function CopyDialog({ productId, onClose }: { productId?: string; onClose
 }
 
 type Draft = ProductInput & { imagePath?: string };
+/** The machine-written text of a field as loaded (languages listed in `autoTranslated`), for the editor's tag. */
+function machineTextOf(p: Product | undefined, field: 'name' | 'description'): Localized | undefined {
+  const mark = p?.autoTranslated?.[field];
+  if (!p || !mark) return undefined;
+  return Object.fromEntries(Object.keys(mark).map((l) => [l, p[field][l as keyof Localized]]));
+}
 function draftFrom(p: Product | undefined, categoryId: string): Draft {
-  if (!p) return { categoryId, name: {}, description: {}, dietaryText: {}, pricingMode: 'unit', priceAgorot: 0, unitLabel: {}, quantityStep: 1, minQuantity: 1, variants: [], modifierGroups: [], available: true, trackInventory: false, stockQty: 0, weightStepGrams: 100, minWeightGrams: 100, mostOrdered: false };
+  if (!p) return { categoryId, name: {}, description: {}, dietaryText: {}, pricingMode: 'unit', priceAgorot: 0, unitLabel: {}, quantityStep: 1, minQuantity: 1, variants: [], modifierGroups: [], available: true, trackInventory: false, stockQty: 0, weightStepGrams: 100, minWeightGrams: 100, mostOrdered: false, inStories: false, dishType: 'none' };
   // Callable responses encode omitted optional values as null; Firestore snapshots omit them.
   // Normalize both sources, including variant/extra fields, before editing and validating.
   const normalized = JSON.parse(JSON.stringify(p, (_key, value) => value === null ? undefined : value)) as Product;
-  const { id: _i, branchId: _b, businessId: _bz, archived: _a, createdAt: _c, updatedAt: _u, imagePath, sortOrder, ...rest } = normalized;
-  return { ...rest, imagePath, sortOrder };
+  // `autoTranslated` is server-owned (the save schema is strict); the editor reads it from `initial`.
+  const { id: _i, branchId: _b, businessId: _bz, archived: _a, createdAt: _c, updatedAt: _u, autoTranslated: _t, imagePath, sortOrder, ...rest } = normalized;
+  return { ...rest, dishType: rest.dishType ?? 'none', imagePath, sortOrder };
 }
 
 type GroupIn = ProductInput['modifierGroups'][number];
@@ -155,7 +162,7 @@ export function ProductEditor({ initial, categoryId, categories, onClose }: { in
       const res = await call<{ product: Product }>('saveProduct', { businessId: business.id, branchId: branch.id, productId, product: { ...product, variants: product.variants.map((v) => ({ ...v, id: v.id || makeId(8) })), modifierGroups: product.modifierGroups.map((g) => ({ ...g, id: g.id || makeId(8), options: g.options.map((o) => ({ ...o, id: o.id || makeId(8) })) })) } });
       saved = res.product;
     } catch (e) {
-      setError(t('catalog.saveFailed') + ' ' + t(errorKey(e)));
+      setError(storyIssue(e) ? t('catalog.storiesLimit', { max: MAX_STORY_ITEMS }) : t('catalog.saveFailed') + ' ' + t(errorKey(e)));
       setBusy(false);
       return;
     }
@@ -222,8 +229,14 @@ export function ProductEditor({ initial, categoryId, categories, onClose }: { in
           {hasPhoto ? <IconButton icon="x" size={16} label={t('catalog.removePhoto')} className="pe-hero__remove" onClick={() => void removePhoto()} /> : null}
         </div>
         <div className="pe-hero__fields" ref={heroRef}>
-          <LocalizedInput lang={lang} label={t('common.name')} value={d.name} required onChange={(name) => set({ name })} />
+          <LocalizedInput lang={lang} label={t('common.name')} value={d.name} required onChange={(name) => set({ name })} machineText={machineTextOf(initial, 'name')} />
           <Select label={t('catalog.category')} value={d.categoryId} onChange={(e) => set({ categoryId: e.target.value })}>{categories.map((c) => <option key={c.id} value={c.id}>{L(c.name, business.defaultLocale)}</option>)}</Select>
+          {!supermarket ? (
+            <Select label={t('dishType.label')} value={d.dishType ?? 'none'} onChange={(e) => set({ dishType: e.target.value as Draft['dishType'] })}>
+              <option value="none">{t('dishType.none')}</option>
+              {DISH_TYPES.map((dt) => <option key={dt} value={dt}>{t(`dishType.${dt}`)}</option>)}
+            </Select>
+          ) : null}
           {d.variants.length === 0 ? <TextInput label={weight ? t('catalog.pricePerKg') : t('catalog.basePrice')} type="number" inputMode="decimal" min={0} step="0.1" ltr value={agorotInput(d.priceAgorot)} onChange={(e) => set({ priceAgorot: parseAgorot(e.target.value) })} /> : null}
         </div>
       </div>
@@ -231,10 +244,11 @@ export function ProductEditor({ initial, categoryId, categories, onClose }: { in
       <div className="kvrow-list pe-toggles">
         <LedgerRow label={t('catalog.available')}><Switch checked={d.available} label={t('catalog.available')} onChange={(available) => set({ available })} /></LedgerRow>
         <LedgerRow label={t('product.mostOrdered')}><Switch checked={!!d.mostOrdered} label={t('product.mostOrdered')} onChange={(mostOrdered) => set({ mostOrdered })} /></LedgerRow>
+        <LedgerRow label={t('catalog.inStories')} hint={hasPhoto ? undefined : t('catalog.storiesNeedsPhoto')}><Switch checked={!!d.inStories} disabled={!hasPhoto && !d.inStories} label={t('catalog.inStories')} onChange={(inStories) => set({ inStories })} /></LedgerRow>
       </div>
       {supermarket ? pricing : null}
       <section className="pe-sec">
-        <LocalizedInput lang={lang} label={t('catalog.descHe').replace(/ \(.*\)/, '')} value={d.description} multiline onChange={(description) => set({ description })} />
+        <LocalizedInput lang={lang} label={t('catalog.descHe').replace(/ \(.*\)/, '')} value={d.description} multiline onChange={(description) => set({ description })} machineText={machineTextOf(initial, 'description')} />
       </section>
       {!weight ? (
         <section className="pe-sec">

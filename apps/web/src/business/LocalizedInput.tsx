@@ -54,7 +54,7 @@ export function LangSwitch({ value, onChange, missing = [] }: { value: Loc; onCh
  *  Default: compact rows (language tag beside the control). `tabbed`: one control with a he/ar/en
  *  tab strip in the legend, so a form with several localized fields fits on a phone screen. The
  *  control ids (`<id>-<lang>`) and accessible names (`<label> <language>`) are the same in both modes. */
-export function LocalizedInput({ label, value, onChange, required, multiline, error, tabbed, lang, bare, onKeyDown }: { label: string; value: Localized; onChange: (v: Localized) => void; required?: boolean; multiline?: boolean; error?: string; tabbed?: boolean; /** Controlled: show only this language (the form has one `LangSwitch`). */ lang?: Loc; /** With `lang`: the control alone, labelled by `aria-label` (table-like rows). */ bare?: boolean; onKeyDown?: React.KeyboardEventHandler<HTMLInputElement | HTMLTextAreaElement> }) {
+export function LocalizedInput({ label, value, onChange, required, multiline, error, tabbed, lang, bare, onKeyDown, machineText }: { label: string; value: Localized; onChange: (v: Localized) => void; required?: boolean; multiline?: boolean; error?: string; tabbed?: boolean; /** Controlled: show only this language (the form has one `LangSwitch`). */ lang?: Loc; /** With `lang`: the control alone, labelled by `aria-label` (table-like rows). */ bare?: boolean; onKeyDown?: React.KeyboardEventHandler<HTMLInputElement | HTMLTextAreaElement>; /** Machine-translated text per language as loaded; tagged while the field still shows it. */ machineText?: Localized }) {
   const t = useT();
   const id = useId();
   const { locale, dir } = useI18n();
@@ -72,7 +72,7 @@ export function LocalizedInput({ label, value, onChange, required, multiline, er
     if (bare) return control(lang);
     return (
       <div className={`field localized localized--single ${error ? 'localized--invalid' : ''}`}>
-        <label className="field__label" htmlFor={`${id}-${lang}`}>{label}{required ? null : <span className="field__optional">({t('common.optional')})</span>}</label>
+        <label className="field__label" htmlFor={`${id}-${lang}`}>{label}{required ? null : <span className="field__optional">({t('common.optional')})</span>}{machineText?.[lang] && machineText[lang] === value[lang] ? <span className="badge badge--muted localized__auto">{t('translate.auto')}</span> : null}</label>
         {control(lang)}
         {error ? <div id={errId} className="field__error" role="alert"><Icon name="alert" size={14} /> {error}</div> : null}
       </div>

@@ -1,11 +1,12 @@
 import { onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { z } from 'zod';
-import { MAX_PROMOTIONS, categoryInputSchema, cleanLocalized, comboInputSchema, idSchema, productInputSchema, promotionInputSchema, sharedModifierGroupInputSchema, makeId, type Branch, type Business, type Category, type Combo, type ModifierGroup, type Product, type Promotion, type SharedModifierGroup } from '@qareeb/shared';
+import { MAX_PROMOTIONS, MAX_STORY_ITEMS, categoryInputSchema, cleanLocalized, reconcileAuto, textFields, comboInputSchema, idSchema, productInputSchema, promotionInputSchema, sharedModifierGroupInputSchema, makeId, type Branch, type Business, type Category, type Combo, type ModifierGroup, type Product, type Promotion, type SharedModifierGroup } from '@qareeb/shared';
 import { REGION, col, db, nowIso, storage, commitInChunks } from '../lib/firebase.js';
 import { handled, fail } from '../lib/errors.js';
 import { parse } from '../lib/validate.js';
 import { requireCaller, requireMembership } from '../lib/auth.js';
-import { isPubliclyVisible, projectCategoryInTx, projectComboInTx, projectProductInTx, projectPromotionInTx, reprojectCatalog, toPublicProduct } from '../lib/projections.js';
+import { enqueueTranslationInTx } from './translation.js';
+import { isPubliclyVisible, projectCategoryInTx, projectComboInTx, projectDishIndexEntry, projectProductInTx, projectPromotionInTx, reprojectCatalog, toPublicProduct } from '../lib/projections.js';
 import { writeAudit } from '../lib/audit.js';
 import { deleteImageWithVariants } from '../lib/images.js';
 
@@ -28,15 +29,20 @@ export const saveCategory = onCall(opts, handled(async (req: CallableRequest<unk
     const existing = await tx.get(ref);
     if (input.categoryId && !existing.exists) fail('not_found');
     const all = await tx.get(col.categories(input.businessId, input.branchId));
+    const prev = existing.data() as Category | undefined;
     const cat: Category = {
       id: ref.id,
       branchId: input.branchId,
       name: cleanLocalized(input.category.name),
-      sortOrder: input.category.sortOrder ?? (existing.data() as Category | undefined)?.sortOrder ?? all.size,
-      archived: (existing.data() as Category | undefined)?.archived ?? false,
+      sortOrder: input.category.sortOrder ?? prev?.sortOrder ?? all.size,
+      archived: prev?.archived ?? false,
     };
+    // Machine-written languages the owner left untouched stay machine-written; see translation.ts.
+    const auto = reconcileAuto(prev ? textFields('category', prev) : [], prev?.autoTranslated ?? {}, textFields('category', cat));
+    if (Object.keys(auto).length) cat.autoTranslated = auto;
     tx.set(ref, cat);
     projectCategoryInTx(tx, ctx.business, ctx.branch, cat);
+    enqueueTranslationInTx(tx, ref, 'category', ctx.business, ctx.branch, cat);
     return cat;
   });
   return { category };
@@ -136,6 +142,10 @@ function buildProduct(existing: Product | undefined, input: z.infer<typeof produ
     // Stock is only changed through adjustStock (audited) once tracking exists, except initial set.
     stockQty: input.trackInventory ? (existing?.trackInventory ? existing.stockQty ?? input.stockQty ?? 0 : input.stockQty ?? 0) : undefined,
     mostOrdered: input.mostOrdered ?? false,
+    // An older client that does not send the field keeps what the product had.
+    inStories: input.inStories ?? existing?.inStories ?? false,
+    // Omitted keeps the current type (older clients); 'none' clears it.
+    ...(input.dishType === 'none' ? {} : (input.dishType ?? existing?.dishType) ? { dishType: input.dishType ?? existing?.dishType } : {}),
     archived: existing?.archived ?? false,
     sortOrder: input.sortOrder ?? existing?.sortOrder ?? defaultSortOrder,
     createdAt: existing?.createdAt ?? now,
@@ -168,8 +178,13 @@ export const saveProduct = onCall(opts, handled(async (req: CallableRequest<unkn
     const shared = new Map(sharedSnaps.filter((s) => s.exists).map((s) => [s.id, s.data() as SharedModifierGroup]));
     const now = nowIso();
     const p = buildProduct(existing, input.product, { id: ref.id, branchId: input.branchId, businessId: input.businessId }, now, shared, nextSortOrder);
+    if (p.inStories && !existing?.inStories) await assertStoryRoom(tx, input.businessId, input.branchId, ref.id);
+    // Machine-written languages the owner left untouched stay machine-written; see translation.ts.
+    const auto = reconcileAuto(existing ? textFields('product', existing) : [], existing?.autoTranslated ?? {}, textFields('product', p));
+    if (Object.keys(auto).length) p.autoTranslated = auto;
     tx.set(ref, p);
     projectProductInTx(tx, ctx.business, ctx.branch, p);
+    enqueueTranslationInTx(tx, ref, 'product', ctx.business, ctx.branch, p);
     return p;
   });
   return { product };
@@ -339,7 +354,7 @@ export const copyToBranch = onCall(opts, handled(async (req: CallableRequest<unk
     // Library links are branch-scoped; the copy keeps the current content as independent groups.
     const modifierGroups = p.modifierGroups.map(({ sharedGroupId: _s, ...g }) => g);
     const variants = p.variants.map((v) => ({ ...v, stockQty: p.trackInventory ? 0 : undefined }));
-    const next = { ...p, id: ref.id, branchId: input.toBranchId, categoryId, modifierGroups, variants, sortOrder: productSort++, imagePath: undefined, stockQty: p.trackInventory ? 0 : undefined, createdAt: now, updatedAt: now } satisfies Product;
+    const next = { ...p, id: ref.id, branchId: input.toBranchId, categoryId, modifierGroups, variants, sortOrder: productSort++, imagePath: undefined, inStories: false, stockQty: p.trackInventory ? 0 : undefined, createdAt: now, updatedAt: now } satisfies Product;
     ops.push((b) => b.set(ref, next));
     copied++;
   }
@@ -351,21 +366,24 @@ export const copyToBranch = onCall(opts, handled(async (req: CallableRequest<unk
 // ---------- shared extras library ----------
 
 /** Rewrites the materialised copy in every product linked to `group`; returns how many were updated. */
-async function syncLinkedProducts(businessId: string, branchId: string, group: SharedModifierGroup): Promise<number> {
+export async function syncLinkedProducts(businessId: string, branchId: string, group: SharedModifierGroup): Promise<number> {
   const [bSnap, brSnap, prods] = await Promise.all([col.business(businessId).get(), col.branch(businessId, branchId).get(), col.products(businessId, branchId).get()]);
   if (!bSnap.exists || !brSnap.exists) return 0;
   const visible = isPubliclyVisible(bSnap.data() as Business, brSnap.data() as Branch);
   const now = nowIso();
+  const business = bSnap.data() as Business;
+  const branch = brSnap.data() as Branch;
   const linked = prods.docs.map((d) => d.data() as Product).filter((p) => p.modifierGroups.some((g) => g.sharedGroupId === group.id));
-  // 2 writes per product (private + public); stay under the 500-op batch limit.
-  for (let i = 0; i < linked.length; i += 200) {
+  // 3 writes per product (private + public + dish index entry); stay under the 500-op batch limit.
+  for (let i = 0; i < linked.length; i += 150) {
     const batch = db.batch();
-    for (const p of linked.slice(i, i + 200)) {
+    for (const p of linked.slice(i, i + 150)) {
       const next: Product = { ...p, modifierGroups: p.modifierGroups.map((g) => (g.sharedGroupId === group.id ? materializeShared(g, group) : g)), updatedAt: now };
       batch.set(col.products(businessId, branchId).doc(p.id), next);
       const pub = col.publicProducts(branchId).doc(p.id);
       if (visible && !next.archived) batch.set(pub, toPublicProduct(next));
       else batch.delete(pub);
+      projectDishIndexEntry(batch, business, branch, next);
     }
     await batch.commit();
   }
@@ -378,7 +396,7 @@ export const saveSharedModifierGroup = onCall(opts, handled(async (req: Callable
   await requireMembership(c, input.businessId, [...CATALOG_ROLES], input.branchId);
   const ref = input.groupId ? col.modifierGroups(input.businessId, input.branchId).doc(input.groupId) : col.modifierGroups(input.businessId, input.branchId).doc();
   const group = await db.runTransaction(async (tx) => {
-    await loadContext(tx, input.businessId, input.branchId);
+    const ctx = await loadContext(tx, input.businessId, input.branchId);
     const existingSnap = await tx.get(ref);
     if (input.groupId && !existingSnap.exists) fail('not_found');
     let nextSortOrder = 0;
@@ -406,7 +424,10 @@ export const saveSharedModifierGroup = onCall(opts, handled(async (req: Callable
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
+    const auto = reconcileAuto(existing ? textFields('group', existing) : [], existing?.autoTranslated ?? {}, textFields('group', g));
+    if (Object.keys(auto).length) g.autoTranslated = auto;
     tx.set(ref, g);
+    enqueueTranslationInTx(tx, ref, 'group', ctx.business, ctx.branch, g);
     return g;
   });
   // Fan-out happens after the library write so a product saved concurrently re-reads the new version.
@@ -434,6 +455,33 @@ export const setSharedModifierGroupArchived = onCall(opts, handled(async (req: C
   });
   return { ok: true };
 }));
+/** Refuses a branch's next story item once `MAX_STORY_ITEMS` are featured (reads must precede writes). */
+async function assertStoryRoom(tx: FirebaseFirestore.Transaction, businessId: string, branchId: string, productId: string): Promise<void> {
+  const featured = await tx.get(col.products(businessId, branchId).where('inStories', '==', true).limit(MAX_STORY_ITEMS + 1));
+  if (featured.docs.filter((d) => d.id !== productId && !(d.data() as Product).archived).length >= MAX_STORY_ITEMS) {
+    fail('invalid_argument', { issues: [{ path: 'inStories', message: 'too_many_story_items' }] });
+  }
+}
+
+/** Features a menu item in the branch's stories, or takes it out (owners and managers of the branch). */
+export const setProductInStories = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
+  const c = await requireCaller(req);
+  const input = parse(z.object({ businessId: idSchema, branchId: idSchema, productId: idSchema, inStories: z.boolean() }).strict(), req.data);
+  await requireMembership(c, input.businessId, [...CATALOG_ROLES], input.branchId);
+  await db.runTransaction(async (tx) => {
+    const ctx = await loadContext(tx, input.businessId, input.branchId);
+    const ref = col.products(input.businessId, input.branchId).doc(input.productId);
+    const snap = await tx.get(ref);
+    if (!snap.exists) fail('not_found');
+    const current = snap.data() as Product;
+    if (input.inStories && !current.inStories) await assertStoryRoom(tx, input.businessId, input.branchId, input.productId);
+    const p = { ...current, inStories: input.inStories, updatedAt: nowIso() };
+    tx.set(ref, p);
+    projectProductInTx(tx, ctx.business, ctx.branch, p);
+  });
+  return { ok: true };
+}));
+
 /** Owner-controlled "Most ordered" highlight (owners and managers of the branch). */
 export const setProductMostOrdered = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
   const c = await requireCaller(req);

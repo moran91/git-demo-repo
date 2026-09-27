@@ -125,7 +125,7 @@ async function main() {
   ];
   const rProducts = (branchId: string): Product[] => [
     {
-      id: 'p-shawarma', branchId, businessId: restaurant.id, categoryId: 'c-mains',
+      id: 'p-shawarma', branchId, businessId: restaurant.id, categoryId: 'c-mains', dishType: 'shawarma',
       name: { he: 'שווארמה', ar: 'شاورما', en: 'Shawarma' }, description: { he: 'שווארמת הודו עם סלטים וטחינה', ar: 'شاورما حبش مع سلطات وطحينة', en: 'Turkey shawarma with salads and tahini' }, dietaryText: { ar: 'يحتوي على سمسم وغلوتين', en: 'Contains sesame and gluten' },
       pricingMode: 'unit', priceAgorot: 3500, unitLabel: {}, quantityStep: 1, minQuantity: 1,
       variants: [], available: true, trackInventory: false, mostOrdered: true, archived: false, sortOrder: 0, createdAt: now, updatedAt: now,
@@ -144,7 +144,7 @@ async function main() {
       ],
     },
     {
-      id: 'p-falafel', branchId, businessId: restaurant.id, categoryId: 'c-mains',
+      id: 'p-falafel', branchId, businessId: restaurant.id, categoryId: 'c-mains', dishType: 'mains',
       name: { he: 'מנת פלאפל', ar: 'صحن فلافل', en: 'Falafel plate' }, description: { ar: 'فلافل طازج مع حمص وسلطة' }, dietaryText: { ar: 'نباتي' },
       pricingMode: 'unit', priceAgorot: 2800, unitLabel: {}, quantityStep: 1, minQuantity: 1,
       variants: [
@@ -154,19 +154,19 @@ async function main() {
       modifierGroups: [], available: true, trackInventory: false, archived: false, sortOrder: 1, createdAt: now, updatedAt: now,
     },
     {
-      id: 'p-fries', branchId, businessId: restaurant.id, categoryId: 'c-sides',
+      id: 'p-fries', branchId, businessId: restaurant.id, categoryId: 'c-sides', dishType: 'snacks',
       name: { he: 'צ׳יפס', ar: 'بطاطا مقلية', en: 'Fries' }, description: {}, dietaryText: {},
       pricingMode: 'unit', priceAgorot: 1200, unitLabel: {}, quantityStep: 1, minQuantity: 1, variants: [], modifierGroups: [],
       available: true, trackInventory: false, archived: false, sortOrder: 0, createdAt: now, updatedAt: now,
     },
     {
-      id: 'p-cola', branchId, businessId: restaurant.id, categoryId: 'c-drinks',
+      id: 'p-cola', branchId, businessId: restaurant.id, categoryId: 'c-drinks', dishType: 'drinks',
       name: { he: 'קולה 330 מ״ל', ar: 'كولا 330 مل', en: 'Cola 330ml' }, description: {}, dietaryText: {},
       pricingMode: 'unit', priceAgorot: 800, unitLabel: { he: 'פחית', ar: 'علبة', en: 'can' }, quantityStep: 1, minQuantity: 1, variants: [], modifierGroups: [],
       available: true, trackInventory: true, stockQty: 24, archived: false, sortOrder: 0, createdAt: now, updatedAt: now,
     },
     {
-      id: 'p-knafeh', branchId, businessId: restaurant.id, categoryId: 'c-sides',
+      id: 'p-knafeh', branchId, businessId: restaurant.id, categoryId: 'c-sides', dishType: 'desserts',
       name: { ar: 'كنافة نابلسية' }, description: { ar: 'قطعة كنافة ساخنة' }, dietaryText: { ar: 'يحتوي على حليب وقمح' },
       pricingMode: 'unit', priceAgorot: 1800, unitLabel: {}, quantityStep: 1, minQuantity: 1, variants: [], modifierGroups: [],
       available: branchId === SEED.ids.branchA, trackInventory: false, archived: false, sortOrder: 1, createdAt: now, updatedAt: now,

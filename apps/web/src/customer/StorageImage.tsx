@@ -9,7 +9,7 @@ import { Icon } from '@/design/Icon';
  * the browser fetches it immediately. A missing compressed variant surfaces as an `error` event; the
  * element then retries with the original, and only a failure of that shows the placeholder.
  */
-export function StorageImage({ path, alt, size = 'thumb', square, wide, fallbackLabel, className = '', onClick, zoomLabel, priority }: { path?: string | null; alt: string; size?: ImageSize; square?: boolean; wide?: boolean; fallbackLabel: string; className?: string; /** Makes the frame a button (used to open the enlarged photo). Ignored when there is no image. */ onClick?: () => void; zoomLabel?: string; /** Above-the-fold hero: eager + high fetch priority instead of lazy. */ priority?: boolean }) {
+export function StorageImage({ path, alt, size = 'thumb', square, wide, fallbackLabel, fallbackMark, className = '', onClick, zoomLabel, priority }: { path?: string | null; alt: string; size?: ImageSize; square?: boolean; wide?: boolean; fallbackLabel: string; /** Name whose first letter stands in for a missing photo (instead of the generic image icon). */ fallbackMark?: string; className?: string; /** Makes the frame a button (used to open the enlarged photo). Ignored when there is no image. */ onClick?: () => void; zoomLabel?: string; /** Above-the-fold hero: eager + high fetch priority instead of lazy. */ priority?: boolean }) {
   const sources = useMemo(() => imageSources(path, size), [path, size]);
   // Keyed by the variant URL so a new path resets the fallback state without an effect.
   const [state, setState] = useState<{ key: string; src: string; failed: boolean }>({ key: '', src: '', failed: false });
@@ -28,8 +28,8 @@ export function StorageImage({ path, alt, size = 'thumb', square, wide, fallback
   const shape = square ? 'img-frame--square' : wide ? 'img-frame--wide' : '';
   if (!sources || !current || current.failed) {
     return (
-      <div className={`img-frame ${shape} ${className}`} role="img" aria-label={fallbackLabel}>
-        <Icon name="image" size={28} />
+      <div className={`img-frame ${fallbackMark ? 'img-frame--mark' : ''} ${shape} ${className}`} role="img" aria-label={fallbackLabel}>
+        {fallbackMark ? <span className="img-frame__mark" aria-hidden="true">{Array.from(fallbackMark.trim())[0]}</span> : <Icon name="image" size={28} />}
       </div>
     );
   }

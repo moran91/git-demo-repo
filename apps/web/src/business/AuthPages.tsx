@@ -6,13 +6,17 @@ import { auth } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth';
 import { Button, TextInput, Alert, Checkbox, Skeleton } from '@/design/components';
 import { LanguageSelect } from '@/app/Shell';
+import { BrandMark } from '@/design/Icon';
+import { BRAND } from '@qareeb/shared';
 import { call } from '@/lib/api';
 import { errorKey } from '@/lib/errors';
 
 function AuthFrame({ title, body, children }: { title: string; body?: string; children: React.ReactNode }) {
+  const t = useT();
   return (
     <main className="page stack auth-card">
-      <div className="row row--between"><h1>{title}</h1><LanguageSelect compact /></div>
+      <div className="auth-card__top"><Link to="/" className="brand"><BrandMark size={28} label={t('brand.logoLabel')} /><span className="brand__word">{BRAND.wordmark}</span></Link><LanguageSelect compact /></div>
+      <h1>{title}</h1>
       {body ? <p className="muted">{body}</p> : null}
       {children}
     </main>
@@ -43,7 +47,7 @@ export function EmailSignInPage() {
         <PasswordInput label={t('auth.password')} value={password} onChange={setPassword} />
         {error ? <Alert tone="danger">{error}</Alert> : null}
         <Button type="submit" block loading={busy}>{t('common.signIn')}</Button>
-        <div className="row row--between"><Link to="/business/reset">{t('auth.forgot')}</Link><Link to="/business/register">{t('auth.noAccount')}</Link></div>
+        <div className="row row--between"><Link className="auth-link" to="/business/reset">{t('auth.forgot')}</Link><Link className="auth-link" to="/business/register">{t('auth.noAccount')}</Link></div>
       </form>
       <Link to="/" className="btn btn--ghost">{t('common.goHome')}</Link>
     </AuthFrame>
@@ -67,7 +71,7 @@ export function OwnerRegisterPage() {
         <PasswordInput label={t('auth.password')} creating value={password} onChange={setPassword} />
         {error ? <Alert tone="danger">{error}</Alert> : null}
         <Button type="submit" block loading={busy}>{t('auth.createAccount')}</Button>
-        <Link to="/business/signin">{t('auth.haveAccount')}</Link>
+        <Link className="auth-link" to="/business/signin">{t('auth.haveAccount')}</Link>
       </form>
     </AuthFrame>
   );
@@ -87,7 +91,7 @@ export function ResetPasswordPage() {
         {sent ? <Alert tone="success">{t('auth.resetSent')}</Alert> : null}
         {error ? <Alert tone="danger">{error}</Alert> : null}
         <Button type="submit" block loading={busy}>{t('auth.sendReset')}</Button>
-        <Link to="/business/signin">{t('common.back')}</Link>
+        <Link className="auth-link" to="/business/signin">{t('common.back')}</Link>
       </form>
     </AuthFrame>
   );

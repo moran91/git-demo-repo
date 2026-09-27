@@ -202,7 +202,7 @@ export const setOrdersPaused = onCall(opts, handled(async (req: CallableRequest<
 
 /** ---------- Memberships & invitations ---------- */
 
-function hashToken(token: string): string {
+export function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
@@ -236,12 +236,12 @@ export async function createInvitation(params: Omit<InvitationDoc, 'id' | 'token
     createdAt: now.toISOString(),
   };
   await ref.set(doc);
-  const link = `${APP_ORIGIN}/business/invite/${ref.id}?token=${token}`;
-  // Email delivery: Firebase Auth password-reset emails are used for password setup on acceptance.
-  // The invitation link itself is delivered by the platform's transactional email in production;
-  // in the emulator it is logged so testers can open it.
-  console.info(`[invitation] ${doc.email} → ${link}`);
-  return { id: ref.id, link };
+  // No email is sent: the link goes back to the inviter, who delivers it (copy / WhatsApp).
+  return { id: ref.id, link: invitationLink(ref.id, token) };
+}
+
+export function invitationLink(id: string, token: string): string {
+  return `${APP_ORIGIN}/business/invite/${id}?token=${token}`;
 }
 
 /** Owner invites a manager or staff member by email, with branch limits. */
@@ -277,7 +277,7 @@ export const inviteMember = onCall(opts, handled(async (req: CallableRequest<unk
     return { mode: 'granted', uid: existingUid };
   }
   const inv = await createInvitation({ email, businessId: input.businessId, role: input.role, allBranches: input.allBranches, branchIds: input.branchIds, invitedBy: c.uid });
-  return { mode: 'invited', invitationId: inv.id, ...(process.env.FUNCTIONS_EMULATOR ? { link: inv.link } : {}) };
+  return { mode: 'invited', invitationId: inv.id, link: inv.link };
 }));
 
 /** Public (unauthenticated) lookup so the invite page can show the business name before sign-up. */
@@ -308,8 +308,12 @@ export const acceptInvitation = onCall(opts, handled(async (req: CallableRequest
     if (inv.status !== 'pending' || inv.tokenHash !== hashToken(token) || inv.expiresAt < nowIso()) fail('not_found');
     if ((c.token.email ?? '').toLowerCase() !== inv.email) fail('forbidden', { reason: 'email_mismatch' });
     if (c.profile.isAdmin) fail('forbidden', { reason: 'admin_cannot_accept' });
+    // A business the admin created with the invitation has no owner until it is accepted.
+    const bizRef = inv.businessId && inv.role === 'owner' ? col.business(inv.businessId) : null;
+    const biz = bizRef ? ((await tx.get(bizRef)).data() as Business | undefined) : undefined;
     const now = nowIso();
     tx.update(ref, { status: 'accepted', acceptedAt: now, acceptedUid: c.uid });
+    if (bizRef && biz && !biz.ownerUid) tx.update(bizRef, { ownerUid: c.uid, updatedAt: now });
     if (inv.businessId) {
       const m: Membership = { id: `${c.uid}_${inv.businessId}`, uid: c.uid, businessId: inv.businessId, role: inv.role, allBranches: inv.allBranches, branchIds: inv.branchIds, active: true, invitedBy: inv.invitedBy, createdAt: now, updatedAt: now };
       tx.set(col.membership(c.uid, inv.businessId), m);
