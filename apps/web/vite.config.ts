@@ -31,10 +31,11 @@ export default defineConfig({
       },
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,woff2,svg,png,webmanifest}'],
-        // The HEIC decoder is a ~2 MB chunk loaded only when a HEIC file is picked, and the on-device
-        // segmentation runtime (~0.5 MB) only when an owner generates a promo image; precaching either
-        // would push it to every customer on install.
-        globIgnores: ['**/libheif-*.js'],
+        // The HEIC decoder (~2 MB, loaded only when a HEIC file is picked) and the on-device studio
+        // background runtime (Transformers.js, loaded only when an owner asks for it) must not be
+        // precached: that would push them to every customer on install. The model files themselves
+        // (public/models, public/ort: .onnx/.json/.wasm/.mjs) are outside globPatterns.
+        globIgnores: ['**/libheif-*.js', '**/transformers-*.js'],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
       },
       devOptions: { enabled: false },
@@ -50,6 +51,7 @@ export default defineConfig({
         manualChunks(id: string) {
           if (id.includes('node_modules/@firebase') || id.includes('node_modules/firebase')) return 'firebase';
           if (id.includes('node_modules/libheif-js')) return 'libheif';
+          if (id.includes('node_modules/@huggingface/transformers') || id.includes('node_modules/onnxruntime')) return 'transformers';
           if (id.includes('node_modules/react') || id.includes('node_modules/scheduler')) return 'react';
           return undefined;
         },

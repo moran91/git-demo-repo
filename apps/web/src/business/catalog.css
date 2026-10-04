@@ -230,3 +230,113 @@
 .pe-status--dirty { color: var(--color-accent-text); }
 .pe-actions { flex-direction: row; flex-wrap: wrap; gap: var(--space-2); }
 .pe-actions > .btn { flex: 1 1 160px; }
+
+/* Studio background progress (PhotoEditorDialog). The photo is the progress indicator:
+   the Morano cream closes in from its edges as --p goes 0 → 1, leaving the dish lit in the middle. */
+@property --p { syntax: '<number>'; inherits: true; initial-value: 0; }
+.pe-hero__media { display: grid; gap: var(--space-2); justify-items: center; align-content: start; }
+.pe-studio-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 10px; border: 0; border-radius: 999px; background: var(--color-soft); color: var(--color-primary); font: inherit; font-size: var(--text-caption); font-weight: 600; cursor: pointer; white-space: nowrap; }
+.pe-studio-btn:hover { background: color-mix(in srgb, var(--color-soft), var(--color-primary) 8%); }
+.pe-studio-btn:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+
+.studio-work__light {
+  position: absolute; inset: 0; background: #F5EBE0; opacity: 0.88;
+  -webkit-mask-image: radial-gradient(circle at 50% 54%, transparent calc((75 - var(--p) * 37) * 1%), #000 calc((93 - var(--p) * 37) * 1%));
+  mask-image: radial-gradient(circle at 50% 54%, transparent calc((75 - var(--p) * 37) * 1%), #000 calc((93 - var(--p) * 37) * 1%));
+}
+.studio-work__pct {
+  position: absolute; inset-inline: 0; inset-block-end: var(--space-4); text-align: center;
+  font-size: var(--text-headline-lg); font-weight: 700; line-height: 1; color: var(--color-primary);
+  font-variant-numeric: tabular-nums; text-shadow: 0 1px 0 rgba(255, 254, 250, 0.9), 0 0 18px rgba(245, 235, 224, 0.9);
+}
+.studio-status { display: grid; gap: var(--space-2); margin-block-start: var(--space-3); font-size: var(--text-secondary); color: var(--color-text-muted); }
+.studio-status__why { font-size: var(--text-badge); color: var(--color-text-muted); overflow-wrap: anywhere; direction: ltr; text-align: start; }
+.studio-status__bar { height: 4px; border-radius: 2px; background: var(--color-border); overflow: hidden; }
+.studio-status__bar > i { display: block; height: 100%; background: var(--color-primary); transition: inline-size 400ms var(--ease); }
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-status__bar > i { transition: none; }
+}
+
+/* Photo editor (PhotoEditorDialog). The square frame is the control in crop mode; a thirds grid shows
+   only while the photo is being moved, so the composition guide never competes with the photo. */
+.ped { display: grid; gap: var(--space-3); }
+.ped__frame { position: relative; aspect-ratio: 1; border-radius: var(--radius-card); overflow: hidden; background: #F5EBE0; touch-action: none; user-select: none; -webkit-user-select: none; }
+.ped__frame--crop { cursor: grab; }
+.ped__frame--crop.is-dragging { cursor: grabbing; }
+.ped__img { position: absolute; left: 50%; top: 50%; max-width: none; transform-origin: 50% 50%; will-change: transform; pointer-events: none; }
+.ped__raw { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.ped__tint { position: absolute; inset: 0; mix-blend-mode: soft-light; pointer-events: none; }
+.ped__grid {
+  position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity var(--duration) var(--ease);
+  background-image:
+    linear-gradient(to right, transparent calc(33.333% - 0.5px), rgba(255, 254, 250, 0.85) calc(33.333% - 0.5px) calc(33.333% + 0.5px), transparent calc(33.333% + 0.5px) calc(66.666% - 0.5px), rgba(255, 254, 250, 0.85) calc(66.666% - 0.5px) calc(66.666% + 0.5px), transparent calc(66.666% + 0.5px)),
+    linear-gradient(to bottom, transparent calc(33.333% - 0.5px), rgba(255, 254, 250, 0.85) calc(33.333% - 0.5px) calc(33.333% + 0.5px), transparent calc(33.333% + 0.5px) calc(66.666% - 0.5px), rgba(255, 254, 250, 0.85) calc(66.666% - 0.5px) calc(66.666% + 0.5px), transparent calc(66.666% + 0.5px));
+  box-shadow: inset 0 0 0 1px rgba(255, 254, 250, 0.6);
+}
+.ped__frame.is-dragging .ped__grid { opacity: 1; }
+.ped__frame .studio-work__light { transition: --p 400ms var(--ease); }
+.ped__bar { display: flex; justify-content: space-between; gap: var(--space-2); min-height: 36px; }
+.ped__peek, .ped__reset { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--color-soft); color: var(--color-primary); font: inherit; font-size: var(--text-caption); font-weight: 600; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }
+.ped__reset { background: transparent; color: var(--color-text-muted); }
+.ped__peek:disabled { opacity: 0.45; cursor: default; }
+.ped__peek:focus-visible, .ped__reset:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.ped__panel { display: grid; gap: var(--space-3); min-height: 132px; align-content: start; }
+.ped__row { display: flex; gap: var(--space-2); align-items: center; }
+.ped__row--spread { justify-content: space-between; }
+.ped__note { display: inline-flex; align-items: center; gap: 6px; color: var(--color-success-text); font-size: var(--text-secondary); }
+.ped__bg { display: grid; gap: var(--space-3); justify-items: start; }
+.ped__error { margin: 0; color: var(--color-danger-text); font-size: var(--text-secondary); }
+.ped__error small { display: block; direction: ltr; text-align: start; color: var(--color-text-muted); overflow-wrap: anywhere; }
+
+.ped-slider { display: grid; gap: 6px; }
+.ped-slider__head { display: flex; justify-content: space-between; font-size: var(--text-secondary); color: var(--color-text); }
+.ped-slider__head output { color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+/* Values always read low → high left to right, so the fill and the +/- signs agree in RTL too. */
+.ped-slider input[type='range'] {
+  direction: ltr; width: 100%; height: 28px; margin: 0; background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer;
+}
+.ped-slider input[type='range']::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 2px;
+  background: linear-gradient(to right, var(--color-border) var(--from), var(--color-primary) var(--from) var(--to), var(--color-border) var(--to));
+}
+.ped-slider input[type='range']::-moz-range-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--color-border) var(--from), var(--color-primary) var(--from) var(--to), var(--color-border) var(--to)); }
+.ped-slider input[type='range']::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; margin-top: -9px; border-radius: 50%; background: var(--color-surface); border: 2px solid var(--color-primary); box-shadow: 0 1px 4px rgba(25, 62, 45, 0.2); }
+.ped-slider input[type='range']::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--color-surface); border: 2px solid var(--color-primary); }
+.ped-slider input[type='range']:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; border-radius: 4px; }
+.ped-slider input[type='range']:disabled { opacity: 0.5; cursor: default; }
+@media (prefers-reduced-motion: reduce) { .ped__grid, .ped__frame .studio-work__light { transition: none; } }
+
+/* Studio background: one unmistakable button under the photo, in every tab. Its own fill is the
+   progress while it works; once applied it turns into a confirmation with a way back. */
+.ped-studio__wrap { display: grid; gap: var(--space-2); }
+.ped-studio { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: 52px; padding: 0 var(--space-4); border-radius: var(--radius-control); font: inherit; font-weight: 700; font-size: var(--text-control); }
+.ped-studio__label { display: inline-flex; align-items: center; gap: var(--space-2); }
+.ped-studio--go { width: 100%; justify-content: center; border: 0; background: var(--color-primary); color: var(--color-on-primary); cursor: pointer; box-shadow: 0 6px 18px rgba(32, 88, 59, 0.22); }
+.ped-studio--go:hover { background: var(--color-primary-hover); }
+.ped-studio--go:disabled { opacity: 0.55; cursor: default; box-shadow: none; }
+.ped-studio--go:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 3px; }
+.ped-studio--working {
+  color: var(--color-primary); border: 1.5px solid var(--color-primary);
+  background: linear-gradient(to var(--fill-dir, right), var(--color-soft) var(--pct), var(--color-surface) var(--pct));
+}
+.ped-studio--working:dir(rtl) { --fill-dir: left; }
+.ped-studio__meta { font-weight: 500; font-size: var(--text-caption); color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+.ped-studio--on { background: var(--color-success-bg); color: var(--color-success-text); }
+.ped-studio__off { border: 0; background: transparent; color: var(--color-text-muted); font: inherit; font-size: var(--text-caption); font-weight: 600; text-decoration: underline; cursor: pointer; min-height: 36px; }
+.ped-studio__off:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+
+/* Remove mode: the whole photo with a marking layer; tap picks an object, the brush paints. */
+.ped__frame--erase { touch-action: none; }
+.ped__frame--tap { cursor: pointer; }
+.ped__frame--brush { cursor: crosshair; }
+.ped__fit, .ped__marks { position: absolute; pointer-events: none; }
+.ped__marks { opacity: 0.5; mix-blend-mode: multiply; }
+.ped__busy { position: absolute; inset-inline: 0; inset-block-end: var(--space-3); margin-inline: auto; width: max-content; display: inline-flex; align-items: center; gap: var(--space-2); padding: 6px 12px; border-radius: 999px; background: rgba(255, 254, 250, 0.94); color: var(--color-primary); font-size: var(--text-caption); font-weight: 600; box-shadow: var(--shadow-card, 0 2px 8px rgba(25, 62, 45, 0.15)); }
+.ped-erase { display: grid; gap: var(--space-3); }
+.ped-erase__sizes { display: flex; gap: var(--space-2); }
+.ped-erase__size { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; border: 1.5px solid var(--color-border-strong); background: var(--color-surface); cursor: pointer; }
+.ped-erase__size[aria-checked='true'] { border-color: var(--color-primary); background: var(--color-soft); }
+.ped-erase__size i { display: block; border-radius: 50%; background: #d6453f; }
+.ped-erase__size:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.ped__row--end { justify-content: flex-end; }

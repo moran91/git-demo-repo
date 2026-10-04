@@ -9,7 +9,8 @@ import { Icon } from '@/design/Icon';
 import { money } from '@/lib/format';
 import { call } from '@/lib/api';
 import { errorKey, uploadErrorKey } from '@/lib/errors';
-import { UPLOAD_ACCEPT, prepareImageUpload, recordUpload } from '@/lib/images';
+import { UPLOAD_ACCEPT, prepareImageUpload, publicImageUrl, recordUpload } from '@/lib/images';
+import { PhotoEditorDialog } from './PhotoEditorDialog';
 import { useDash } from './shell';
 import { FormError, useDraftSafety } from './BusinessExperience';
 import { StorageImage } from '@/customer/StorageImage';
@@ -127,6 +128,21 @@ export function ProductEditor({ initial, categoryId, categories, onClose }: { in
       return false;
     }
   };
+  // Optional on-device photo editor (crop, light, studio background): applied only when the owner saves.
+  const [editSource, setEditSource] = useState<Blob | null>(null);
+  const openEditor = async () => {
+    setUploadError(null);
+    try {
+      if (held) { setEditSource(held); return; }
+      if (!d.imagePath) return;
+      const res = await fetch(publicImageUrl(d.imagePath));
+      if (!res.ok) throw new Error(String(res.status));
+      setEditSource(await res.blob());
+    } catch (e) {
+      console.warn('photo editor: could not read the current photo', e);
+      toast(`${t('edit.saveFailed')} (${e instanceof Error ? e.message : String(e)})`, 'danger');
+    }
+  };
   const pickPhoto = async (file: File) => {
     if (!productId) { setUploadError(null); setHeld(file); return; }
     setBusy(true);
@@ -219,14 +235,22 @@ export function ProductEditor({ initial, categoryId, categories, onClose }: { in
     <fieldset className="form-fields pe-page" disabled={busy}>
       <FormError message={error} />
       <div className="pe-hero">
-        <div className="pe-hero__photo">
-          {heldUrl ? <img src={heldUrl} alt="" /> : photoPath ? <StorageImage path={photoPath} alt="" square fallbackLabel={t('discovery.imageFallback')} /> : null}
-          <label className={`pe-hero__cam ${hasPhoto ? '' : 'pe-hero__cam--empty'}`} title={hasPhoto ? t('catalog.changePhoto') : t('catalog.uploadPhoto')}>
-            <Icon name="image" size={hasPhoto ? 20 : 28} />
-            <span className="visually-hidden">{hasPhoto ? t('catalog.changePhoto') : t('catalog.uploadPhoto')}</span>
-            <input type="file" accept={UPLOAD_ACCEPT} className="visually-hidden" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickPhoto(f); e.target.value = ''; }} />
-          </label>
-          {hasPhoto ? <IconButton icon="x" size={16} label={t('catalog.removePhoto')} className="pe-hero__remove" onClick={() => void removePhoto()} /> : null}
+        <div className="pe-hero__media">
+          <div className="pe-hero__photo">
+            {heldUrl ? <img src={heldUrl} alt="" /> : photoPath ? <StorageImage path={photoPath} alt="" square fallbackLabel={t('discovery.imageFallback')} /> : null}
+            <label className={`pe-hero__cam ${hasPhoto ? '' : 'pe-hero__cam--empty'}`} title={hasPhoto ? t('catalog.changePhoto') : t('catalog.uploadPhoto')}>
+              <Icon name="image" size={hasPhoto ? 20 : 28} />
+              <span className="visually-hidden">{hasPhoto ? t('catalog.changePhoto') : t('catalog.uploadPhoto')}</span>
+              <input type="file" accept={UPLOAD_ACCEPT} className="visually-hidden" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickPhoto(f); e.target.value = ''; }} />
+            </label>
+            {hasPhoto ? <IconButton icon="x" size={16} label={t('catalog.removePhoto')} className="pe-hero__remove" onClick={() => void removePhoto()} /> : null}
+          </div>
+          {hasPhoto ? (
+            <button type="button" className="pe-studio-btn" disabled={busy} onClick={() => void openEditor()}>
+              <Icon name="edit" size={14} />
+              {t('edit.open')}
+            </button>
+          ) : null}
         </div>
         <div className="pe-hero__fields" ref={heroRef}>
           <LocalizedInput lang={lang} label={t('common.name')} value={d.name} required onChange={(name) => set({ name })} machineText={machineTextOf(initial, 'name')} />
@@ -241,6 +265,7 @@ export function ProductEditor({ initial, categoryId, categories, onClose }: { in
         </div>
       </div>
       {uploadError ? <div className="field__error pe-hero__error" role="alert"><Icon name="alert" size={14} /> {uploadError}</div> : null}
+      {editSource ? <PhotoEditorDialog source={editSource} onDone={(edited) => { setEditSource(null); if (edited) void pickPhoto(edited); }} /> : null}
       <div className="kvrow-list pe-toggles">
         <LedgerRow label={t('catalog.available')}><Switch checked={d.available} label={t('catalog.available')} onChange={(available) => set({ available })} /></LedgerRow>
         <LedgerRow label={t('product.mostOrdered')}><Switch checked={!!d.mostOrdered} label={t('product.mostOrdered')} onChange={(mostOrdered) => set({ mostOrdered })} /></LedgerRow>
