@@ -116,15 +116,16 @@ interface Request {
 ### 4.1 Product fields
 - `tags?: DishTag[]`, `serves?: number` (1–12) and `autoFields?: { tags?: DishTag[]; serves?: number; dishType?: DishType }`. `autoFields` holds machine values so an owner edit can be detected.
 - **Rule:** if the stored value equals `autoFields.x`, it is machine-owned and may be re-derived. Once an owner saves a different value, `autoFields.x` is cleared and the value is never overwritten again. This mirrors `reconcileAuto` in translation.
+- **On save:** `saveProduct` computes `autoTags` from the saved name and description. A sent value equal to that suggestion stays machine-owned; a different one becomes owner-owned. An omitted value keeps the stored value and its mark. The editor pre-fills machine-owned fields live from `autoTags(draft)`.
 - `saveProduct` accepts `tags` and `serves` (omitted keeps the previous value, same as `dishType`). `copyToBranch` copies them.
 - Schema: `packages/shared/src/schemas.ts`. Type: `types.ts` `Product`.
 
 ### 4.2 Dish index (`publicBranches/{br}/index/dishes`)
-- `DishIndexEntry` gains `tags?`, `serves?` and `category?: Localized`. `toDishIndexEntry` fills them.
+- `DishIndexEntry` gains `tags?` and `serves?`. `toDishIndexEntry` fills them. (Category is used only by the backfill's auto-tagging, so it stays out of the index.)
 - Still restaurants only, and still one document per branch.
 
 ### 4.3 Deals in the index
-- A new document `publicBranches/{br}/index/deals`: `{ combos: Record<id, {name, description?, priceAgorot, items, imagePath?, itemsValueAgorot}>, promotions: Record<id, {title, body?, productIds, endsAt}>, updatedAt }`.
+- A new document `publicBranches/{br}/index/deals`: `{ combos: Record<id, {name, description?, priceAgorot, items, imagePath?}>, promotions: Record<id, {title, body?, productIds, endsAt}>, updatedAt }`.
 - It is written wherever combos and promotions are projected today (projections.ts) and in `reprojectCatalog`.
 - The existing `match /index/{docId}` rule already allows a public read. A rules test asserts it.
 
