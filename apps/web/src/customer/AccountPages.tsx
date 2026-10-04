@@ -8,7 +8,6 @@ import { db } from '@/lib/firebase';
 import { useCollection, useDoc, orderBy, where, limit } from '@/lib/queries';
 import { Button, EmptyState, Skeleton, Alert, Dialog, ConfirmDialog, TextInput, toast, Badge } from '@/design/components';
 import { Icon } from '@/design/Icon';
-import { LanguageSelect } from '@/app/Shell';
 import { call } from '@/lib/api';
 import { errorKey } from '@/lib/errors';
 import { enablePush, pushState, type PushState } from '@/lib/push';
@@ -41,10 +40,6 @@ export function AccountPage() {
   return (
     <div className="stack">
       <h1>{t('account.title')}</h1>
-      <section className="card stack">
-        <h2>{t('account.language')}</h2>
-        <LanguageSelect />
-      </section>
       {!user ? (
         <>
           <GuestGate />

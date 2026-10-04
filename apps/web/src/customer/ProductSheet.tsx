@@ -87,7 +87,7 @@ export function ProductSheet({ product, business, branch, mode, cityId, onClose,
     } catch {
       /* ignore */
     }
-    toast(`${editLine ? t('product.saveChanges') : t('product.addToCart')} ✓`);
+    if (editLine) toast(`${t('product.saveChanges')} ✓`);
     onClose();
   };
   const submit = () => {

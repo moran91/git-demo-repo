@@ -42,7 +42,9 @@ test('search ranks the dish before other dishes of a place whose name matches, a
   // Cola has nothing to choose: "+" puts it straight in the cart.
   await search.fill('קולה');
   await page.locator('.crave-dish').first().getByRole('button', { name: /הוספת קולה/ }).click();
-  await expect(page.getByText('הוספה לסל ✓').first()).toBeVisible();
+  // No toast: the bottom-nav basket takes the add (fly-in, count) instead.
+  await expect(page.getByText('הוספה לסל ✓')).toHaveCount(0);
+  await expect(page.locator('.bottom-nav a.has-items .bottom-nav__count')).toHaveText('1');
   await expect.poll(() => page.evaluate(() => JSON.stringify(localStorage))).toContain('p-cola');
 
   // Shawarma needs a bread choice, so "+" opens the product sheet instead.

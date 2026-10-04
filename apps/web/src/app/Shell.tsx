@@ -9,11 +9,8 @@ import { applyUpdate, hasUpdate, subscribeNeedRefresh } from '@/lib/sw';
 import { useAuth } from '@/lib/auth';
 import { call } from '@/lib/api';
 
-/**
- * Language control. Full form: a three-way segmented control (settings pages, the dashboard sidebar).
- * Compact form: a globe pill that opens a small menu — the customer topbar has no room for a select.
- */
-export function LanguageSelect({ compact }: { compact?: boolean }) {
+/** The one language control in the app: a globe button that opens a small menu. */
+export function LanguageSelect() {
   const { locale, setLocale } = useI18n();
   const t = useT();
   const { user } = useAuth();
@@ -32,21 +29,10 @@ export function LanguageSelect({ compact }: { compact?: boolean }) {
     document.addEventListener('keydown', onKey);
     return () => { document.removeEventListener('pointerdown', onDown); document.removeEventListener('keydown', onKey); };
   }, [open]);
-  if (!compact) {
-    return (
-      <div className="lang-seg" role="radiogroup" aria-label={t('common.language')}>
-        {LOCALES.map((l) => (
-          <button key={l} type="button" role="radio" lang={l} aria-checked={l === locale} className={`lang-seg__opt ${l === locale ? 'is-active' : ''}`} onClick={() => pick(l)}>{LOCALE_NAMES[l]}</button>
-        ))}
-      </div>
-    );
-  }
   return (
     <div className="lang-menu" ref={rootRef}>
       <button type="button" className="lang-menu__btn" aria-haspopup="menu" aria-expanded={open} aria-label={`${t('common.language')}: ${LOCALE_NAMES[locale]}`} onClick={() => setOpen((o) => !o)}>
-        <Icon name="globe" size={18} />
-        <span className="lang-menu__name" lang={locale}>{LOCALE_NAMES[locale]}</span>
-        <Icon name="chevronDown" size={16} className="icon lang-menu__chev" />
+        <Icon name="globe" size={20} />
       </button>
       {open ? (
         <div className="lang-menu__list" role="menu" aria-label={t('common.language')}>

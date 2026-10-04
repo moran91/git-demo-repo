@@ -15,7 +15,7 @@ function AuthFrame({ title, body, children }: { title: string; body?: string; ch
   const t = useT();
   return (
     <main className="page stack auth-card">
-      <div className="auth-card__top"><Link to="/" className="brand"><BrandMark size={28} label={t('brand.logoLabel')} /><span className="brand__word">{BRAND.wordmark}</span></Link><LanguageSelect compact /></div>
+      <div className="auth-card__top"><Link to="/" className="brand"><BrandMark size={28} label={t('brand.logoLabel')} /><span className="brand__word">{BRAND.wordmark}</span></Link><LanguageSelect /></div>
       <h1>{title}</h1>
       {body ? <p className="muted">{body}</p> : null}
       {children}

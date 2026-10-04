@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { comboUnitPrice, makeId, type Combo, type FulfillmentMode, type Localized, type Product } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
-import { Alert, Button, ConfirmDialog, Dialog, Stepper, TextArea, toast } from '@/design/components';
+import { Alert, Button, ConfirmDialog, Dialog, Stepper, TextArea } from '@/design/components';
 import { addLine, cartBelongsTo, cartStore } from '@/lib/cart';
 import { money } from '@/lib/format';
 import type { PublicBranch, PublicBusiness } from './hooks';
@@ -52,7 +52,6 @@ export function ComboSheet({ combo, products, business, branch, mode, cityId, on
       lineMeta: { name: combo.name, modifierNames: combo.items.map((it, i) => ({ en: `${it.quantity} × ${L(names[i] ?? {}, business.defaultLocale)}` })), unitLabel: {}, pricingMode: 'unit', imagePath: comboMemberImages(combo, products)[0], isCombo: true },
     });
     try { sessionStorage.removeItem('qareeb.cart.quotedTotal'); window.dispatchEvent(new Event('qareeb:cart-quote')); } catch { /* ignore */ }
-    toast(`${t('deals.addCombo')} ✓`);
     onClose();
   };
   const submit = () => {

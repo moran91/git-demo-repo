@@ -53,7 +53,8 @@ export function addLine(params: { businessId: string; branchId: string; mode: Fu
     if (existing) lines = base.lines.map((l) => (l.lineId === existing.lineId ? { ...l, quantity: l.quantity + params.line.quantity } : l));
     else lines = [...base.lines, params.line];
     return { cart: { ...base, lines, updatedAt: new Date().toISOString() }, meta: params.meta, lineMeta: { ...(cartBelongsTo(s, params.businessId, params.branchId) ? s.lineMeta : {}), [params.line.lineId]: params.lineMeta } };
-  });
+  });  // CustomerLayout answers with the fly-into-basket animation and a screen-reader announcement.
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('qareeb:cart-add'));
 }
 
 /**

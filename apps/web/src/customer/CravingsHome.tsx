@@ -229,7 +229,6 @@ function useQuickAdd(cityId: string) {
         } catch {
           /* ignore */
         }
-        toast(`${t('product.addToCart')} ✓`);
         setReplace(null);
       };
       if (cart.cart && !cartBelongsTo(cart, business.id, branch.id)) setReplace({ commit });

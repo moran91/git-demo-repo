@@ -3,7 +3,6 @@ import { useI18n, useT } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
 import { Icon } from '@/design/Icon';
 import { Badge, Button, toast } from '@/design/components';
-import { LanguageSelect } from '@/app/Shell';
 import { errorKey } from '@/lib/errors';
 import { useConfirmNavigation } from './BusinessExperience';
 import { BranchChip, BusinessSwitcher, PageTitle, useDash, useNavSections, useSwitchableBusinesses } from './shell';
@@ -45,10 +44,6 @@ export function MorePage() {
           </ul>
         </section>
       ))}
-      <section className="card more__group" aria-labelledby="more-lang">
-        <h2 id="more-lang" className="more__group-title">{t('common.language')}</h2>
-        <div className="more__pad"><LanguageSelect /></div>
-      </section>
       {switchable.length > 1 ? (
         <section className="card more__group" aria-labelledby="more-biz">
           <h2 id="more-biz" className="more__group-title">{t('dash.switchBusiness')}</h2>

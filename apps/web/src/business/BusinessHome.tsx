@@ -29,7 +29,7 @@ export function BusinessHome() {
   if (!user) return null;
   return (
     <main className="page stack home">
-      <div className="home__head"><h1>{t('dash.title')}</h1><LanguageSelect compact /></div>
+      <div className="home__head"><h1>{t('dash.title')}</h1><LanguageSelect /></div>
       {isAdmin && memberships.length === 0 ? (
         <section className="stack" aria-label={t('admin.allBusinesses')}>
           <input className="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('admin.searchBusinesses')} aria-label={t('admin.searchBusinesses')} />

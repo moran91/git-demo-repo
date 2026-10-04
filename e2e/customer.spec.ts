@@ -45,7 +45,7 @@ test.describe('customer storefront', () => {
     await dialog.getByRole('button', { name: 'Increase quantity' }).click();
     await expect(dialog.getByRole('button', { name: /Add to cart/ })).toContainText('₪86');
     await dialog.getByRole('button', { name: /Add to cart/ }).click();
-    await expect(page.locator('.cart-bar')).toContainText('2 items');
+    await expect(page.locator('.bottom-nav .bottom-nav__count')).toHaveText('2');
     await page.goto('/cart');
     await expect(page.getByText('Laffa, Fries inside')).toBeVisible();
     await expect(page.locator('.summary')).toContainText('₪86');

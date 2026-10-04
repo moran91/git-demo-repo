@@ -59,7 +59,7 @@ function SidebarFoot({ compact }: { compact?: boolean }) {
   const { signOut } = useAuth();
   return (
     <div className={`dash__sidebar-foot${compact ? ' dash__sidebar-foot--row' : ''}`}>
-      <LanguageSelect compact={compact} />
+      <LanguageSelect />
       <button type="button" className="dash__signout" onClick={() => void signOut().catch((e) => toast(t(errorKey(e)), 'danger'))}><Icon name="logout" size={20} directional /><span>{t('common.signOut')}</span></button>
     </div>
   );

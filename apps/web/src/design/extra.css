@@ -19,25 +19,17 @@
 .city-chip__chev { flex: none; color: var(--color-text-muted); }
 /* Desktop: the chip sits beside the brand; the auto margin pushes nav + language to the far end. */
 @media (min-width: 900px) { .topbar__nav { margin-inline-start: auto; } .city-chip { margin-inline-start: var(--space-3); } }
-/* Phone: language collapses to its globe so the town gets the room. */
-@media (max-width: 599px) {
-  .topbar .lang-menu__btn { width: var(--touch-min); padding: 0; justify-content: center; }
-  .topbar .lang-menu__name, .topbar .lang-menu__chev { display: none; }
-}
-/* Language controls (2026-09-15 nav redesign). Segmented control for settings/sidebar; globe pill + menu for the topbar. */
-.lang-seg { max-width: 420px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: var(--radius-control); background: var(--color-bg); border: 1px solid var(--color-border); }
-.lang-seg__opt { height: 36px; border-radius: 9px; border: 1px solid transparent; background: transparent; color: var(--color-text-muted); font-weight: 500; font-size: var(--text-secondary); cursor: pointer; font-family: inherit; transition: background-color var(--duration) var(--ease), color var(--duration) var(--ease); }
-.lang-seg__opt:hover { color: var(--color-text); }
-@media (pointer: coarse) { .lang-seg__opt { height: var(--touch-min); } }
-.lang-seg__opt.is-active { background: var(--color-surface); color: var(--color-primary); font-weight: 600; border-color: var(--color-border-strong); box-shadow: var(--shadow-card); }
+/* Language control (one everywhere): a round globe button + menu. */
 .lang-menu { position: relative; flex: none; }
-.lang-menu__btn { display: inline-flex; align-items: center; gap: 6px; height: var(--touch-min); padding: 0 10px 0 12px; border-radius: 22px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); font-weight: 500; font-size: var(--text-secondary); cursor: pointer; font-family: inherit; }
+.lang-menu__btn { display: inline-flex; align-items: center; justify-content: center; width: var(--touch-min); height: var(--touch-min); padding: 0; border-radius: 50%; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); font-weight: 500; font-size: var(--text-secondary); cursor: pointer; font-family: inherit; }
 .lang-menu__btn .icon { color: var(--color-text-muted); }
 .lang-menu__btn:hover { border-color: var(--color-border-strong); }
 .lang-menu__list { position: absolute; top: calc(100% + 6px); inset-inline-end: 0; min-width: 200px; padding: 6px; border-radius: var(--radius-card); background: var(--color-surface); border: 1px solid var(--color-border); box-shadow: var(--shadow-float); display: flex; flex-direction: column; gap: 2px; z-index: 60; }
 .lang-menu__item { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: var(--touch-min); padding: 0 var(--space-3); border-radius: var(--radius-control); border: 0; background: transparent; color: var(--color-text); font-weight: 500; font-size: var(--text-control); cursor: pointer; font-family: inherit; text-align: start; }
 .lang-menu__item:hover { background: var(--color-bg); }
 .lang-menu__item.is-active { background: var(--color-soft); color: var(--color-primary); font-weight: 600; }
+/* Sidebar foot sits at the bottom edge of the start side: open upward, toward the content. */
+.dash__sidebar-foot .lang-menu__list { top: auto; bottom: calc(100% + 6px); inset-inline-end: auto; inset-inline-start: 0; }
 /* Picker's "Use my location" row (icon + name + label). */
 .locbar__icon { flex: none; width: 44px; height: 44px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--color-soft); color: var(--color-primary); }
 .locbar__text { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
@@ -57,10 +49,17 @@
 .bottom-nav a { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-decoration: none; color: var(--color-text-muted); font-size: var(--text-badge); font-weight: 500; min-height: var(--bottom-nav-height); position: relative; }
 .bottom-nav a.active { color: var(--color-primary); }
 .bottom-nav__count { position: absolute; top: 8px; inset-inline-start: calc(50% + 6px); background: var(--color-primary); color: var(--color-on-primary); border-radius: 999px; font-size: var(--text-badge); min-width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; }
-.cart-bar { position: fixed; inset-inline: var(--gutter); bottom: calc(var(--bottom-nav-height) + var(--safe-bottom) + var(--space-3)); z-index: 41; }
-.cart-bar { animation: rise-in var(--duration-enter) var(--ease-out); }
-@media (min-width: 900px) { .cart-bar { display: none; } }
-.cart-bar .btn { width: 100%; justify-content: space-between; box-shadow: var(--shadow-float); }
+/* The basket acknowledges adds itself: a dish thumbnail flies in (lib/flyToCart.ts), the icon bumps and
+ * the count pops; while the basket holds something the icon is tinted and gives an occasional wiggle. */
+.cart-icon { display: inline-flex; transform-origin: 50% 85%; }
+.bottom-nav a.has-items .cart-icon { color: var(--color-primary); animation: cart-alive 4.5s var(--ease) 1.5s infinite; }
+.cart-icon.is-bump, .bottom-nav a.has-items .cart-icon.is-bump { animation: cart-bump 420ms var(--ease-out); }
+.bottom-nav a.has-items .bottom-nav__count { animation: count-pop 320ms var(--ease-out); }
+.cart-fly { position: fixed; z-index: 80; border-radius: 50%; object-fit: cover; pointer-events: none; background: var(--color-primary); box-shadow: var(--shadow-float); border: 2px solid var(--color-surface); will-change: transform; }
+@keyframes cart-bump { 0% { transform: scale(1); } 35% { transform: scale(1.32) rotate(-8deg); } 65% { transform: scale(0.92) rotate(4deg); } 100% { transform: scale(1); } }
+@keyframes cart-alive { 0%, 84%, 100% { transform: none; } 87% { transform: rotate(-12deg) translateY(-1px); } 90% { transform: rotate(10deg) translateY(-2px); } 93% { transform: rotate(-6deg); } 96% { transform: rotate(3deg); } }
+@keyframes count-pop { 0% { transform: scale(0.4); } 60% { transform: scale(1.25); } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .bottom-nav a.has-items .cart-icon, .cart-icon.is-bump, .bottom-nav a.has-items .cart-icon.is-bump, .bottom-nav a.has-items .bottom-nav__count { animation: none; } }
 .hero { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-5); }
 .hero p { color: var(--color-text-muted); }
 .controls { display: grid; gap: var(--space-3); margin-bottom: var(--space-6); }

@@ -43,10 +43,7 @@ bdi { unicode-bidi: isolate; }
 
 /* ---------- layout ---------- */
 .page { padding-inline: var(--gutter); padding-block: var(--space-4) var(--space-8); max-width: var(--max-content); margin-inline: auto; width: 100%; }
-/* --cart-bar-space is set on :root by CustomerLayout while the floating cart bar is on screen: it is the
- * bar's measured height plus its offset from the bottom nav. Everything anchored to the bottom edge adds
- * it, so the bar can never sit on top of the last row of content (or of a toast). It is 0 when no bar. */
-.page--customer { padding-bottom: calc(var(--bottom-nav-height) + var(--safe-bottom) + var(--cart-bar-space, 0px) + var(--space-8)); }
+.page--customer { padding-bottom: calc(var(--bottom-nav-height) + var(--safe-bottom) + var(--space-8)); }
 @media (min-width: 900px) { .page--customer { padding-bottom: var(--space-8); } }
 .stack { display: flex; flex-direction: column; gap: var(--space-4); }
 .stack--sm { gap: var(--space-2); }
@@ -131,7 +128,7 @@ legend.field__label { padding: 0; margin: 0 0 var(--space-2); flex-wrap: wrap; r
 /* ---------- segmented ---------- */
 .segmented { display: inline-flex; padding: 4px; background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-segment); gap: 4px; width: 100%; }
 .segmented__btn { flex: 1; min-height: var(--touch-min); border: 0; border-radius: 10px; background: transparent; color: var(--color-text-muted); font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); padding: 0 var(--space-3); transition: background-color var(--duration) var(--ease), color var(--duration) var(--ease); }
-/* Selected: a raised surface on the sunken track (same language as .lang-seg), not a primary-coloured ring. */
+/* Selected: a raised surface on the sunken track (the segmented-control look), not a primary-coloured ring. */
 .segmented__btn[aria-checked='true'], .segmented__btn[aria-selected='true'] { background: var(--color-surface); color: var(--color-primary); font-weight: 600; box-shadow: var(--shadow-card), inset 0 0 0 1px var(--color-border-strong); }
 .segmented--stacked .segmented__btn { flex-direction: column; gap: 2px; padding: 6px 4px; min-height: 56px; font-size: var(--text-secondary); line-height: 1.2; text-align: center; }
 
@@ -201,7 +198,7 @@ body:has(dialog[open]) { overflow: hidden; }
 .dialog__footer .btn { flex: 1; }
 
 /* ---------- toast ---------- */
-.toast-region { position: fixed; inset-inline: var(--gutter); bottom: calc(var(--bottom-nav-height) + var(--safe-bottom) + var(--cart-bar-space, 0px) + var(--space-3)); z-index: 60; display: flex; flex-direction: column; gap: var(--space-2); pointer-events: none; }
+.toast-region { position: fixed; inset-inline: var(--gutter); bottom: calc(var(--bottom-nav-height) + var(--safe-bottom) + var(--space-3)); z-index: 60; display: flex; flex-direction: column; gap: var(--space-2); pointer-events: none; }
 @media (min-width: 900px) { .toast-region { bottom: var(--space-6); inset-inline: auto var(--gutter); max-width: 420px; } }
 .toast { pointer-events: auto; background: var(--color-text); color: var(--color-bg); padding: var(--space-3) var(--space-4); border-radius: var(--radius-control); box-shadow: var(--shadow-float); font-size: var(--text-secondary); display: flex; gap: var(--space-3); align-items: center; }
 .toast--danger { background: var(--color-danger); color: #fff; }

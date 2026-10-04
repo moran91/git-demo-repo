@@ -8,7 +8,6 @@
 .business-app .dash__nav a, .business-app .dash__signout, .business-app .dash__identity-text strong { font-size: 17px; }
 .business-app .dash__identity-text .muted { font-size: var(--text-control); }
 /* 44px+ tap targets for the language segment, segmented controls and the order card's phone link. */
-.business-app .lang-seg__opt { height: auto; min-height: 44px; }
 .business-app .segmented__btn { min-height: 44px; }
 .business-app .order-card__tel, .business-app .order-card__reflink { min-height: 44px; display: inline-flex; align-items: center; }
 .business-app .dash__header > .btn { padding-block: 0; white-space: nowrap; }
