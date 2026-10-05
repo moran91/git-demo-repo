@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { buildAssistantData, prepareDishes, toAssistantPlaces, type AssistantData, type DealsIndexDoc, type DishIndexDoc, type Order, type PairsIndexDoc } from '@qareeb/shared';
+import { useMemo, useState } from 'react';
+import { buildAssistantData, makeDishPreparer, toAssistantPlaces, type AssistantData, type DealsIndexDoc, type DishIndexDoc, type Order, type PairsIndexDoc } from '@qareeb/shared';
 import { useAuth } from '@/lib/auth';
 import { cartStore } from '@/lib/cart';
 import { useCollection, limit, orderBy, where } from '@/lib/queries';
@@ -22,8 +22,9 @@ export function useAssistantData(cityId: string): { data: AssistantData; branche
   // The same query as the orders page, so it shares its index and its cache.
   const orders = useCollection<Order>(user ? 'orders' : null, [where('customer.uid', '==', user?.uid ?? '_'), orderBy('placedAt', 'desc'), limit(50)], [user?.uid]);
   const cartBranchId = cartStore.use().cart?.branchId;
-  // Search texts are folded once per index snapshot; open/closed and the time follow the clock.
-  const prepared = useMemo(() => prepareDishes(restaurants.data.map((b) => ({ branchId: b.id, name: b.businessName })), dishes.docs), [restaurants.data, dishes.docs]);
+  // Search texts are folded once per index document (unchanged places are reused); open/closed and the time follow the clock.
+  const [prepare] = useState(makeDishPreparer);
+  const prepared = useMemo(() => prepare(restaurants.data.map((b) => ({ branchId: b.id, name: b.businessName })), dishes.docs), [prepare, restaurants.data, dishes.docs]);
   const branches = useMemo(() => new Map(restaurants.data.map((b) => [b.id, b])), [restaurants.data]);
   const data = useMemo(
     () => buildAssistantData({ now, places: toAssistantPlaces(restaurants.data, now, cityId), dishes: prepared, deals: deals.docs, pairs: pairs.docs, orders: orders.data, ...(cartBranchId ? { cartBranchId } : {}) }),

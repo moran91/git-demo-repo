@@ -7,12 +7,16 @@ import {
   needsReplace,
   parseConversation,
   pickMode,
+  prepareDishes,
+  planCombo,
   planUsual,
+  makeDishPreparer,
   respond,
   toAssistantPlaces,
   type CartOwner,
   type Combo,
   type Conversation,
+  type DishIndexDoc,
   type Product,
   type ProfileLine,
   type QuickAddEffects,
@@ -43,6 +47,7 @@ const pizza = product({
 const cola = product({ id: 'cola', name: { he: 'קולה' }, priceAgorot: 1000 });
 const nuts = product({ id: 'nuts', name: { he: 'אגוזים' }, pricingMode: 'weight', priceAgorot: 8000, weightStepGrams: 100, minWeightGrams: 200 });
 
+const combo: Combo = { id: 'meal', businessId: 'biz', branchId: 'br', name: { he: 'ארוחה' }, description: {}, items: [{ productId: 'cola', quantity: 2 }], priceAgorot: 1500, promoted: false, active: true, archived: false, sortOrder: 0, createdAt: '', updatedAt: '' };
 const usualLine = (patch: Partial<ProfileLine>): ProfileLine => ({ productId: 'p', modifiers: [], quantity: 1, name: { he: 'שורה' }, ...patch });
 const products = (...ps: Product[]) => new Map(ps.map((p) => [p.id, p]));
 const noCombos = new Map<string, { combo: Combo; products: ReadonlyMap<string, Product> }>();
@@ -90,7 +95,7 @@ describe('planUsual (order again at current prices)', () => {
     ];
     for (const [ps, line] of cases) {
       const plan = planUsual([line], { products: products(...ps), combos: noCombos });
-      expect(plan, line.name.he).toEqual({ ready: [], sheets: [], combos: [], dropped: [line.name] });
+      expect(plan, line.name.he).toEqual({ ready: [], sheets: [], dropped: [line.name] });
     }
   });
 
@@ -98,22 +103,50 @@ describe('planUsual (order again at current prices)', () => {
     const withRequired = { ...cola, modifierGroups: [{ id: 'ice', name: { he: 'קרח' }, required: true, minSelect: 1, maxSelect: 1, sortOrder: 0, options: [{ id: 'yes', name: { he: 'כן' }, priceDeltaAgorot: 0, available: true, sortOrder: 0 }] }] };
     const sizes = { ...cola, variants: [{ id: 'can', name: { he: 'פחית' }, priceAgorot: 1000, available: true, sortOrder: 0 }] };
     const plan = planUsual([usualLine({ productId: 'cola' })], { products: products(withRequired), combos: noCombos });
-    expect(plan.sheets.map((p) => p.id)).toEqual(['cola']);
+    expect(plan.sheets).toEqual([{ kind: 'product', product: withRequired }]);
     expect(plan.ready).toEqual([]);
-    expect(planUsual([usualLine({ productId: 'cola' })], { products: products(sizes), combos: noCombos }).sheets.map((p) => p.id)).toEqual(['cola']);
+    expect(planUsual([usualLine({ productId: 'cola' })], { products: products(sizes), combos: noCombos }).sheets).toEqual([{ kind: 'product', product: sizes }]);
   });
 
-  it('keeps live combos for their sheet and drops a combo with a gone member', () => {
-    const combo: Combo = { id: 'meal', businessId: 'biz', branchId: 'br', name: { he: 'ארוחה' }, description: {}, items: [{ productId: 'cola', quantity: 2 }], priceAgorot: 1500, promoted: false, active: true, archived: false, sortOrder: 0, createdAt: '', updatedAt: '' };
+  it('puts an unchanged combo straight into the cart as one line with its quantity', () => {
     const line = usualLine({ productId: 'meal', comboId: 'meal', quantity: 2, name: combo.name });
-    const live = planUsual([line], { products: new Map(), combos: new Map([['meal', { combo, products: products(cola) }]]) });
-    expect(live.combos).toEqual([{ combo, products: products(cola), quantity: 2 }]);
-    expect(live.dropped).toEqual([]);
-    const broken = planUsual([line], { products: new Map(), combos: new Map([['meal', { combo, products: products({ ...cola, available: false }) }]]) });
-    expect(broken.combos).toEqual([]);
-    expect(broken.dropped).toEqual([combo.name]);
-    expect(planUsual([line], { products: new Map(), combos: new Map() }).dropped).toEqual([combo.name]);
-    expect(planUsual([line], { products: new Map(), combos: new Map([['meal', { combo: { ...combo, active: false }, products: products(cola) }]]) }).dropped).toEqual([combo.name]);
+    const plan = planUsual([line, usualLine({ productId: 'cola' })], { products: products(cola), combos: new Map([['meal', { combo, products: products(cola) }]]) });
+    expect(plan.sheets).toEqual([]);
+    expect(plan.dropped).toEqual([]);
+    expect(plan.ready.map((r) => [r.kind, r.line])).toEqual([
+      ['combo', { productId: 'meal', comboId: 'meal', modifiers: [], quantity: 2, expectedUnitPriceAgorot: 1500 }],
+      ['product', { productId: 'cola', modifiers: [], quantity: 1, expectedUnitPriceAgorot: 1000 }],
+    ]);
+    expect(plan.ready[0]!.priced.lineTotalAgorot).toBe(3000);
+  });
+
+  it('takes a combo\'s price as the menu has it now', () => {
+    const plan = planUsual([usualLine({ productId: 'meal', comboId: 'meal', name: combo.name })], { products: new Map(), combos: new Map([['meal', { combo: { ...combo, priceAgorot: 1700 }, products: products(cola) }]]) });
+    expect(plan.ready.map((r) => r.line.expectedUnitPriceAgorot)).toEqual([1700]);
+  });
+
+  it('drops and names a combo that is gone, off, or missing a member', () => {
+    const line = usualLine({ productId: 'meal', comboId: 'meal', quantity: 2, name: combo.name });
+    const gone = (combos: Map<string, { combo: Combo; products: ReadonlyMap<string, Product> }>) => planUsual([line], { products: new Map(), combos });
+    for (const plan of [
+      gone(new Map()),
+      gone(new Map([['meal', { combo, products: products({ ...cola, available: false }) }]])),
+      gone(new Map([['meal', { combo, products: new Map() }]])),
+      gone(new Map([['meal', { combo: { ...combo, active: false }, products: products(cola) }]])),
+    ]) expect(plan).toEqual({ ready: [], sheets: [], dropped: [combo.name] });
+  });
+
+  it('opens one combo sheet (not one per unit) only when the line itself cannot be priced', () => {
+    const plan = planUsual([usualLine({ productId: 'meal', comboId: 'meal', quantity: 150, name: combo.name })], { products: new Map(), combos: new Map([['meal', { combo, products: products(cola) }]]) });
+    expect(plan).toEqual({ ready: [], sheets: [{ kind: 'combo', combo, products: products(cola) }], dropped: [] });
+  });
+});
+
+describe('planCombo (a deal or a meal\'s combo from "add")', () => {
+  it('is ready at the current price, gone when a member is gone, a sheet only for a bad quantity', () => {
+    expect(planCombo(combo, products(cola), 1)).toMatchObject({ status: 'ready', line: { comboId: 'meal', productId: 'meal', quantity: 1, expectedUnitPriceAgorot: 1500 } });
+    expect(planCombo(combo, new Map(), 1)).toEqual({ status: 'gone' });
+    expect(planCombo(combo, products(cola), 0)).toEqual({ status: 'sheet' });
   });
 });
 
@@ -131,9 +164,9 @@ function fakeCart(owner: CartOwner | null, answer: 'yes' | 'no' = 'yes') {
   const s = { owner, lines: [] as string[], queue: [] as string[], confirms: 0, cleared: 0 };
   const fx: QuickAddEffects<string, string> = {
     owner: () => s.owner,
-    confirm: (run) => {
+    confirm: async () => {
       s.confirms++;
-      if (answer === 'yes') run();
+      return answer === 'yes';
     },
     clear: () => {
       s.cleared++;
@@ -159,10 +192,10 @@ describe('applyQuickAdd (one replace confirm per action)', () => {
   const here: CartOwner = { businessId: 'b1', branchId: 'br1' };
   const other: CartOwner = { businessId: 'b2', branchId: 'br2' };
 
-  it('asks once, clears the other place, adds the ready lines and queues the sheets', () => {
+  it('asks once, clears the other place, adds the ready lines and queues the sheets', async () => {
     const { s, fx, openSheets } = fakeCart(other);
     s.lines = ['old'];
-    applyQuickAdd(here, ['a', 'b'], ['sheet'], fx);
+    expect(await applyQuickAdd(here, ['a', 'b'], ['sheet'], fx)).toBe(true);
     expect(s.confirms).toBe(1);
     expect(s.cleared).toBe(1);
     expect(s.lines).toEqual(['a', 'b']);
@@ -172,10 +205,10 @@ describe('applyQuickAdd (one replace confirm per action)', () => {
     expect(s.confirms).toBe(1);
   });
 
-  it('when everything needs a sheet, the confirmed path still empties the other cart so the sheets never ask again', () => {
+  it('when everything needs a sheet, the confirmed path still empties the other cart so the sheets never ask again', async () => {
     const { s, fx, openSheets } = fakeCart(other);
     s.lines = ['old'];
-    applyQuickAdd(here, [], ['combo', 'pizza'], fx);
+    expect(await applyQuickAdd(here, [], ['combo', 'pizza'], fx)).toBe(true);
     expect(s.confirms).toBe(1);
     expect(s.lines).toEqual([]);
     expect(s.owner).toBeNull();
@@ -183,10 +216,10 @@ describe('applyQuickAdd (one replace confirm per action)', () => {
     expect(s.confirms).toBe(1);
   });
 
-  it('adds without asking to an empty cart or this place\'s cart', () => {
+  it('adds without asking to an empty cart or this place\'s cart', async () => {
     for (const owner of [null, here]) {
       const { s, fx } = fakeCart(owner);
-      applyQuickAdd(here, ['a'], ['sheet'], fx);
+      expect(await applyQuickAdd(here, ['a'], ['sheet'], fx)).toBe(true);
       expect(s.confirms).toBe(0);
       expect(s.cleared).toBe(0);
       expect(s.lines).toEqual(['a']);
@@ -194,20 +227,31 @@ describe('applyQuickAdd (one replace confirm per action)', () => {
     }
   });
 
-  it('changes nothing when the customer keeps the other cart', () => {
+  it('settles only once the confirm is answered, and changes nothing on cancel', async () => {
     const { s, fx } = fakeCart(other, 'no');
     s.lines = ['old'];
-    applyQuickAdd(here, ['a'], ['sheet'], fx);
+    let answer!: (yes: boolean) => void;
+    fx.confirm = () => {
+      s.confirms++;
+      return new Promise<boolean>((r) => (answer = r));
+    };
+    let settled: boolean | undefined;
+    const done = applyQuickAdd(here, ['a'], ['sheet'], fx).then((v) => (settled = v));
+    await Promise.resolve();
     expect(s.confirms).toBe(1);
+    expect(settled).toBeUndefined();
+    answer(false);
+    await done;
+    expect(settled).toBe(false);
     expect(s.cleared).toBe(0);
     expect(s.lines).toEqual(['old']);
     expect(s.owner).toEqual(other);
     expect(s.queue).toEqual([]);
   });
 
-  it('asks nothing when there is nothing to add', () => {
+  it('asks nothing and adds nothing when there is nothing to add', async () => {
     const { s, fx } = fakeCart(other);
-    applyQuickAdd(here, [], [], fx);
+    expect(await applyQuickAdd(here, [], [], fx)).toBe(false);
     expect(s.confirms).toBe(0);
     expect(s.owner).toEqual(other);
   });
@@ -216,6 +260,38 @@ describe('applyQuickAdd (one replace confirm per action)', () => {
     expect(needsReplace({ businessId: 'b1', branchId: 'br9' }, here)).toBe(true);
     expect(needsReplace(here, here)).toBe(false);
     expect(needsReplace(null, here)).toBe(false);
+  });
+});
+
+describe('makeDishPreparer (fold dish texts once per index document)', () => {
+  const entry = { name: { he: 'פיצה' }, priceAgorot: 4000, fromPrice: false, available: true, needsChoice: false, sortOrder: 0 };
+  const idx = (branchId: string, ids: string[]): DishIndexDoc => ({ branchId, businessId: 'biz', updatedAt: '', dishes: Object.fromEntries(ids.map((id) => [id, { ...entry }])) });
+
+  it('matches prepareDishes and reuses the folded dishes of documents that did not change', () => {
+    const prepare = makeDishPreparer();
+    const a = idx('a', ['p1', 'p2']);
+    const b = idx('b', ['p3']);
+    const places = [{ branchId: 'a', name: { he: 'א' } }, { branchId: 'b', name: { he: 'ב' } }];
+    const first = prepare(places, new Map([['a', a]]));
+    expect(first).toEqual(prepareDishes(places, new Map([['a', a]])));
+    const b2 = idx('b', ['p3', 'p4']);
+    const second = prepare(places, new Map([['a', a], ['b', b]]));
+    expect(second.slice(0, 2)).toEqual(first);
+    expect(second[0]).toBe(first[0]);
+    const third = prepare(places, new Map([['a', a], ['b', b2]]));
+    expect(third[0]).toBe(first[0]);
+    expect(third.map((d) => d.id)).toEqual(['p1', 'p2', 'p3', 'p4']);
+    expect(third).toEqual(prepareDishes(places, new Map([['a', a], ['b', b2]])));
+  });
+
+  it('folds again when the place\'s name changed', () => {
+    const prepare = makeDishPreparer();
+    const a = idx('a', ['p1']);
+    const before = prepare([{ branchId: 'a', name: { he: 'א' } }], new Map([['a', a]]));
+    expect(prepare([{ branchId: 'a', name: { he: 'א' } }], new Map([['a', a]]))[0]).toBe(before[0]);
+    const after = prepare([{ branchId: 'a', name: { he: 'חדש' } }], new Map([['a', a]]));
+    expect(after[0]).not.toBe(before[0]);
+    expect(after).toEqual(prepareDishes([{ branchId: 'a', name: { he: 'חדש' } }], new Map([['a', a]])));
   });
 });
 
