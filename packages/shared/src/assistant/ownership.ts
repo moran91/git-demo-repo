@@ -79,3 +79,24 @@ export function resolveAutoFields(input: AutoInput, existing: Ownable | undefine
   }
   return { values: values as AutoValues, autoFields: autoFields as AutoFields };
 }
+
+/** What the product editor shows for each field: the owner's draft value once touched, else the live suggestion
+ *  while the stored value is the machine's, else the stored (owner's) value. */
+export function editorAutoView(saved: Ownable | undefined, draft: AutoInput, suggested: AutoTagResult): { tags: DishTag[]; serves: number; dishType: DishType | 'none' } {
+  const machine = (k: AutoKey) => !saved || isMachineOwned(saved, k);
+  return {
+    tags: draft.tags ?? (machine('tags') ? suggested.tags : saved?.tags ?? []),
+    serves: draft.serves ?? (machine('serves') ? suggested.serves : saved?.serves ?? suggested.serves),
+    dishType: draft.dishType ?? (machine('dishType') ? suggested.dishType : saved?.dishType) ?? 'none',
+  };
+}
+
+/** What the product editor sends: only the fields the owner touched (a type cleared to empty as 'none'). Untouched
+ *  fields are omitted, so the server derives the machine's and keeps the owner's (it is the one source of suggestions). */
+export function ownerAutoInput(draft: AutoInput): AutoInput {
+  const out: AutoInput = {};
+  if (draft.tags !== undefined) out.tags = draft.tags;
+  if (draft.serves !== undefined) out.serves = draft.serves;
+  if (draft.dishType !== undefined) out.dishType = draft.dishType;
+  return out;
+}

@@ -666,6 +666,8 @@ export const he: Dictionary = {
   'catalog.copyToBody': 'יוצר עותק עצמאי בסניף שנבחר. עריכות מאוחרות לא מסונכרנות.',
   'catalog.copied': 'הועתק',
   'catalog.category': 'קטגוריה',
+  'catalog.tags': 'תגיות',
+  'catalog.serves': 'מספיק ל־',
   'catalog.noCategories': 'צרו קטגוריה קודם.',
   'catalog.empty': 'אין מוצרים בסניף הזה עדיין.',
   'catalog.stockAdjust': 'עדכון מלאי',

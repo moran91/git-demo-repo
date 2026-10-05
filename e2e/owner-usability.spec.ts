@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { fsGet, setLocale, signInAsCustomer, signInEmail } from './helpers';
+import { fsGet, fsQuery, setLocale, signInAsCustomer, signInEmail } from './helpers';
 
 const base = '/business/biz-abu-salim/br-abu-salim-main';
 
@@ -188,6 +188,53 @@ test.describe('owner usability regressions', () => {
     await expect(row.locator('.btn--add__count')).toHaveText('1');
     await picker.getByRole('button', { name: 'Done', exact: true }).click();
     await expect(page.getByRole('dialog')).toContainText('Falafel plate (Large)');
+  });
+
+  test('tags and serves fill themselves from the name; an unticked tag stays unticked through a rename', async ({ page }) => {
+    await page.goto(`${base}/catalog`);
+    await page.getByRole('button', { name: 'New product', exact: true }).first().click();
+    const editor = page.getByRole('dialog');
+    const stamp = Date.now();
+    let name = `Spicy pizza ${stamp}`;
+    const chip = (label: string) => editor.getByRole('button', { name: label, exact: true });
+    const serves = editor.locator('.kvrow', { hasText: 'Serves' }).locator('output');
+    const stored = async () => (await fsQuery('products', [{ field: 'name.en', op: 'EQUAL', value: name }], 1, 'businesses/biz-abu-salim/branches/br-abu-salim-main'))[0] as { tags?: string[]; serves?: number; autoFields?: Record<string, unknown> } | undefined;
+    await editor.getByRole('textbox', { name: 'Name English', exact: true }).fill(name);
+    await editor.getByRole('spinbutton', { name: 'Base price' }).fill('40');
+    await expect(chip('spicy')).toHaveAttribute('aria-pressed', 'true');
+    await expect(chip('vegetarian')).toHaveAttribute('aria-pressed', 'true');
+    await expect(chip('to share')).toHaveAttribute('aria-pressed', 'false');
+    await expect(serves).toHaveText('2');
+    await expect(editor.getByRole('combobox', { name: 'Dish type' })).toHaveValue('pizza');
+    await chip('spicy').click();
+    await expect(chip('spicy')).toHaveAttribute('aria-pressed', 'false');
+    await editor.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(editor).toHaveCount(0);
+    await expect.poll(async () => (await stored())?.tags).toEqual(['vegetarian']);
+    expect((await stored())!.autoFields).toEqual({ serves: 2, dishType: 'pizza' });
+
+    const reopen = async () => {
+      await page.getByRole('button', { name: 'Search', exact: true }).click();
+      await page.getByLabel('Find a product or category').fill(String(stamp));
+      await page.getByRole('button', { name: `Edit: ${name}`, exact: true }).click();
+    };
+    await reopen();
+    await expect(chip('spicy')).toHaveAttribute('aria-pressed', 'false');
+    // Rename: serves (still automatic) follows the new name live; the owner's tags do not, even though the
+    // suggestion now adds "to share".
+    name = `Spicy family pizza ${stamp}`;
+    await editor.getByRole('textbox', { name: 'Name English', exact: true }).fill(name);
+    await expect(serves).toHaveText('4');
+    await expect(chip('spicy')).toHaveAttribute('aria-pressed', 'false');
+    await expect(chip('to share')).toHaveAttribute('aria-pressed', 'false');
+    await editor.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(editor).toHaveCount(0);
+    await expect.poll(async () => (await stored())?.serves).toBe(4);
+    expect((await stored())!.tags).toEqual(['vegetarian']);
+    await page.reload();
+    await reopen();
+    await expect(chip('spicy')).toHaveAttribute('aria-pressed', 'false');
+    await expect(serves).toHaveText('4');
   });
 });
 

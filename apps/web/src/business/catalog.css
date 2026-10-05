@@ -176,6 +176,11 @@
 
 .pe-sec { padding-block: var(--space-4) var(--space-5); border-top: 1px solid var(--color-border); display: flex; flex-direction: column; gap: var(--space-3); }
 .pe-sec--first { border-top: 0; }
+/* Tags (automatic until the owner taps one): wrapping chips, pressed = on. */
+.pe-tags { border: 0; padding: 0; margin: 0; min-width: 0; }
+.pe-tags > legend { padding: 0; margin-block-end: var(--space-2); }
+.pe-tags__chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.pe-tags__chips .chip { min-height: var(--touch-min); }
 .pe-sec__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: 40px; }
 .pe-sec__head h3 { font-size: 16px; font-weight: 600; }
 .pe-sec__head .btn { flex: none; min-height: 44px; padding-inline: var(--space-3); }

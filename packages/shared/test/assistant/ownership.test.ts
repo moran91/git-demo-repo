@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isMachineOwned, resolveAutoFields, same, type AutoTagResult } from '../../src/index.js';
+import { editorAutoView, isMachineOwned, ownerAutoInput, resolveAutoFields, same, type AutoTagResult } from '../../src/index.js';
 
 const suggested: AutoTagResult = { tags: ['spicy', 'vegetarian'], serves: 2, dishType: 'pizza' };
 const noType: AutoTagResult = { tags: [], serves: 1 };
@@ -108,5 +108,37 @@ describe('same', () => {
     expect(same(['a'], ['b'])).toBe(false);
     expect(same(2, 2)).toBe(true);
     expect(same(undefined, 2)).toBe(false);
+  });
+});
+
+describe('editorAutoView (what the product editor shows)', () => {
+  it('a new dish shows the live suggestion, an empty type as none', () => {
+    expect(editorAutoView(undefined, {}, suggested)).toEqual({ tags: ['spicy', 'vegetarian'], serves: 2, dishType: 'pizza' });
+    expect(editorAutoView(undefined, {}, noType).dishType).toBe('none');
+  });
+  it('machine-owned stored values follow the live suggestion, not the stored value', () => {
+    const saved = { tags: ['kids' as const], serves: 1, autoFields: { tags: ['kids' as const], serves: 1, dishType: 'none' as const } };
+    expect(editorAutoView(saved, {}, suggested)).toEqual({ tags: ['spicy', 'vegetarian'], serves: 2, dishType: 'pizza' });
+  });
+  it('owner-owned stored values are shown as stored', () => {
+    const saved = { tags: ['kids' as const], serves: 3, autoFields: {} };
+    expect(editorAutoView(saved, {}, suggested)).toEqual({ tags: ['kids'], serves: 3, dishType: 'none' });
+  });
+  it('a touched field shows the draft value, including a type cleared to none', () => {
+    expect(editorAutoView(undefined, { tags: ['vegetarian'], dishType: 'none' }, suggested)).toEqual({ tags: ['vegetarian'], serves: 2, dishType: 'none' });
+  });
+  it('a legacy product with an owner-set type keeps it', () => {
+    expect(editorAutoView({ dishType: 'pasta' }, {}, suggested)).toEqual({ tags: ['spicy', 'vegetarian'], serves: 2, dishType: 'pasta' });
+  });
+});
+
+describe('ownerAutoInput (what the product editor sends)', () => {
+  it('sends only the touched fields; untouched ones are omitted so the server derives them', () => {
+    expect(ownerAutoInput({})).toEqual({});
+    expect(ownerAutoInput({ tags: ['kids'] })).toEqual({ tags: ['kids'] });
+    expect(Object.keys(ownerAutoInput({ tags: ['kids'], serves: undefined }))).toEqual(['tags']);
+  });
+  it('a touched type cleared to none is sent as none', () => {
+    expect(ownerAutoInput({ dishType: 'none', serves: 3 })).toEqual({ dishType: 'none', serves: 3 });
   });
 });

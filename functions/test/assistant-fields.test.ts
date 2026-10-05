@@ -78,4 +78,45 @@ describe('assistant fields on saveProduct', () => {
     expect(p.autoFields).toBeUndefined();
     expect(p.dishType).toBeUndefined();
   });
+
+  // The product editor (Task 15) sends only the fields the owner touched; untouched ones are omitted.
+  describe('editor payloads', () => {
+    it('an untouched save after a rename re-derives the type, tags and serves', async () => {
+      const { product } = await owner1.call<{ product: { id: string } }>('saveProduct', { businessId, branchId, product: input('פיצה משפחתית חריפה') });
+      await owner1.call('saveProduct', { businessId, branchId, productId: product.id, product: input('המבורגר בקר') });
+      const p = await priv(product.id);
+      expect(p.dishType).toBe('burger');
+      expect(p.tags).toEqual(['meat']);
+      expect(p.serves).toBe(1);
+      expect(p.autoFields).toEqual({ dishType: 'burger', tags: ['meat'], serves: 1 });
+    });
+
+    it('a touched tag survives a later rename while the untouched fields follow it', async () => {
+      const { product } = await owner1.call<{ product: { id: string } }>('saveProduct', { businessId, branchId, product: input('פיצה משפחתית חריפה') });
+      // The owner unticks "spicy": the editor sends the shown tags without it, and nothing else.
+      await owner1.call('saveProduct', { businessId, branchId, productId: product.id, product: input('פיצה משפחתית חריפה', { tags: ['vegetarian', 'sharing'] }) });
+      let p = await priv(product.id);
+      expect(p.tags).toEqual(['vegetarian', 'sharing']);
+      expect(p.autoFields.tags).toBeUndefined();
+      await owner1.call('saveProduct', { businessId, branchId, productId: product.id, product: input('פיצה חריפה') });
+      p = await priv(product.id);
+      expect(p.tags).toEqual(['vegetarian', 'sharing']);
+      expect(p.serves).toBe(2);
+      expect(p.autoFields).toEqual({ dishType: 'pizza', serves: 2 });
+    });
+
+    it('a touched type cleared to none stays empty and the owner’s through a rename', async () => {
+      const { product } = await owner1.call<{ product: { id: string } }>('saveProduct', { businessId, branchId, product: input('פיצה מרגריטה') });
+      await owner1.call('saveProduct', { businessId, branchId, productId: product.id, product: input('פיצה מרגריטה', { dishType: 'none' }) });
+      let p = await priv(product.id);
+      expect(p.dishType).toBeUndefined();
+      expect(p.autoFields.dishType).toBeUndefined();
+      await owner1.call('saveProduct', { businessId, branchId, productId: product.id, product: input('פיצה משפחתית חריפה') });
+      p = await priv(product.id);
+      expect(p.dishType).toBeUndefined();
+      expect(p.autoFields.dishType).toBeUndefined();
+      expect(p.tags).toEqual(expect.arrayContaining(['spicy', 'sharing']));
+      expect((await entry(product.id))!.dishType).toBeUndefined();
+    });
+  });
 });

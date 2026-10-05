@@ -666,6 +666,8 @@ export const ar: Dictionary = {
   'catalog.copyToBody': 'ينشئ نسخة مستقلة في الفرع المحدد. التعديلات اللاحقة لا تتزامن.',
   'catalog.copied': 'تم النسخ',
   'catalog.category': 'الفئة',
+  'catalog.tags': 'وسوم',
+  'catalog.serves': 'بكفي لـ',
   'catalog.noCategories': 'أنشئ فئة أولًا.',
   'catalog.empty': 'لا توجد أصناف في هذا الفرع بعد.',
   'catalog.stockAdjust': 'تعديل المخزون',

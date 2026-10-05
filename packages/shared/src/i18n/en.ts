@@ -678,6 +678,8 @@ export const en = {
   'catalog.copyToBody': 'Creates an independent copy in the selected branch. Later edits are not synchronised.',
   'catalog.copied': 'Copied',
   'catalog.category': 'Category',
+  'catalog.tags': 'Tags',
+  'catalog.serves': 'Serves',
   'catalog.noCategories': 'Create a category first.',
   'catalog.empty': 'No products in this branch yet.',
   'catalog.stockAdjust': 'Adjust stock',

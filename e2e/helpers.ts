@@ -28,13 +28,14 @@ function decode(v: FsValue): unknown {
   if (v.arrayValue) return (v.arrayValue.values ?? []).map(decode);
   return null;
 }
-export async function fsQuery(collectionId: string, filters: Array<{ field: string; op: 'EQUAL'; value: string }>, limit = 10): Promise<Array<Record<string, unknown> & { id: string }>> {
+/** `parent` scopes the query to a document's subcollection (e.g. `businesses/b/branches/br` for its products). */
+export async function fsQuery(collectionId: string, filters: Array<{ field: string; op: 'EQUAL'; value: string }>, limit = 10, parent?: string): Promise<Array<Record<string, unknown> & { id: string }>> {
   const structuredQuery = {
     from: [{ collectionId }],
     where: { compositeFilter: { op: 'AND', filters: filters.map((f) => ({ fieldFilter: { field: { fieldPath: f.field }, op: f.op, value: { stringValue: f.value } } })) } },
     limit,
   };
-  const res = await fetch(`${FS}:runQuery`, { method: 'POST', headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' }, body: JSON.stringify({ structuredQuery }) });
+  const res = await fetch(`${FS}${parent ? `/${parent}` : ''}:runQuery`, { method: 'POST', headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' }, body: JSON.stringify({ structuredQuery }) });
   const rows = (await res.json()) as Array<{ document?: { name: string; fields: Record<string, FsValue> } }>;
   return rows.filter((r) => r.document).map((r) => ({ id: r.document!.name.split('/').pop()!, ...(decode({ mapValue: { fields: r.document!.fields } }) as Record<string, unknown>) }));
 }
