@@ -71,8 +71,8 @@ function draftFrom(p: Product | undefined, categoryId: string): Draft {
   // Callable responses encode omitted optional values as null; Firestore snapshots omit them.
   // Normalize both sources, including variant/extra fields, before editing and validating.
   const normalized = JSON.parse(JSON.stringify(p, (_key, value) => value === null ? undefined : value)) as Product;
-  // `autoTranslated` is server-owned (the save schema is strict); the editor reads it from `initial`.
-  const { id: _i, branchId: _b, businessId: _bz, archived: _a, createdAt: _c, updatedAt: _u, autoTranslated: _t, imagePath, sortOrder, ...rest } = normalized;
+  // `autoTranslated` and `autoFields` are server-owned (the save schema is strict); the editor reads autoTranslated from `initial`.
+  const { id: _i, branchId: _b, businessId: _bz, archived: _a, createdAt: _c, updatedAt: _u, autoTranslated: _t, autoFields: _af, imagePath, sortOrder, ...rest } = normalized;
   return { ...rest, dishType: rest.dishType ?? 'none', imagePath, sortOrder };
 }
 

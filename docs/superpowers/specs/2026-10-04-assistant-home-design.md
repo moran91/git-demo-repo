@@ -121,7 +121,7 @@ interface Request {
 - Schema: `packages/shared/src/schemas.ts`. Type: `types.ts` `Product`.
 
 ### 4.2 Dish index (`publicBranches/{br}/index/dishes`)
-- `DishIndexEntry` gains `tags?` and `serves?`. `toDishIndexEntry` fills them. (Category is used only by the backfill's auto-tagging, so it stays out of the index.)
+- `DishIndexEntry` gains `tags?` and `serves?`. `toDishIndexEntry` fills them. (The category name feeds auto-tagging in both saveProduct and the backfill, but is not stored in the index.)
 - Still restaurants only, and still one document per branch.
 
 ### 4.3 Deals in the index
