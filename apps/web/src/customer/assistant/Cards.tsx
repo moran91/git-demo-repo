@@ -17,17 +17,24 @@ interface Props<K extends ResolvedCard['kind']> {
   onDropped?: (names: string[]) => void;
 }
 
-/** Digits and prices inside right-to-left text, kept left to right ("₪150", "22:00", "4"). */
-const LTR_RUN = /(?:₪[\s ]?)?\d+(?:[.,:]\d+)*(?:[\s ]?₪)?/g;
+/**
+ * Money as the app's formatter writes it ("‏35 ‏₪", "₪35"), or as typed ("₪50", "150 ₪"), then any
+ * other number or time ("4", "22:00").
+ */
+const RUN = /(\u200f?\d+(?:[.,]\d+)?[\s\u00a0]\u200f?₪|₪[\s\u00a0]?\d+(?:[.,]\d+)?|\d+(?:[.,]\d+)?₪)|\d+(?:[.,:]\d+)*/g;
 
-/** Text with every number or price run isolated as left-to-right, so "עד ₪150:" never reads "150₪ עד". */
+/**
+ * Text with its numbers isolated. Money keeps the app's own look (a plain <bdi>, "₪ 35" as in the
+ * product sheet and the cart); other numbers and times are kept left to right, so "ל-4" or "22:00"
+ * never reorder around Hebrew or Arabic words.
+ */
 export function bidi(text: string): ReactNode {
   const out: ReactNode[] = [];
   let at = 0;
-  for (const m of text.matchAll(LTR_RUN)) {
+  for (const m of text.matchAll(RUN)) {
     const i = m.index;
     if (i > at) out.push(text.slice(at, i));
-    out.push(<bdi key={i} dir="ltr">{m[0]}</bdi>);
+    out.push(m[1] ? <bdi key={i}>{m[0]}</bdi> : <bdi key={i} dir="ltr">{m[0]}</bdi>);
     at = i + m[0].length;
   }
   if (!out.length) return text;
@@ -82,7 +89,7 @@ function Price({ agorot, from }: { agorot: number; from?: boolean }) {
   const t = useT();
   const { locale } = useI18n();
   const price = money(agorot, locale);
-  return <span className="ac__price price">{from ? bidi(t('assistant.from', { price })) : <bdi dir="ltr">{price}</bdi>}</span>;
+  return from ? <span className="ac__price price">{bidi(t('assistant.from', { price }))}</span> : <bdi className="ac__price price">{price}</bdi>;
 }
 
 function DishCard({ r, branch, showBranch, quick }: Props<'dish'>) {
@@ -107,8 +114,9 @@ function MealCard({ r, branch, showBranch, quick }: Props<'meal'>) {
   const t = useT();
   const { L } = useI18n();
   const { basket, place, lines } = r;
-  // A line with a size or option to pick is priced at its cheapest, so the total is a starting price.
-  const from = basket.lines.some((l) => l.needsChoice);
+  // A dish with a size or option to pick is priced at its cheapest, so the total is a starting price.
+  // A combo has a fixed price (the engine still flags it as a choice; quick add no longer opens it).
+  const from = basket.lines.some((l) => l.needsChoice && !l.comboId);
   return (
     <article className={place.open ? 'ac ac--meal' : 'ac ac--meal ac--closed'}>
       <header className="ac__head">
@@ -123,6 +131,7 @@ function MealCard({ r, branch, showBranch, quick }: Props<'meal'>) {
               <StorageImage path={imagePath} alt="" square fallbackLabel="" fallbackMark={label} className="ac__thumb" />
               <span className="ac__qty"><bdi dir="ltr">{line.qty}×</bdi></span>
               <span className="ac__line-name">{label}</span>
+              {line.comboId ? <span className="ac__tag"><Badge tone="accent" icon="tag">{t('assistant.deal')}</Badge></span> : null}
             </li>
           );
         })}

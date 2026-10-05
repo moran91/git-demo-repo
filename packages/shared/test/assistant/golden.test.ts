@@ -4,7 +4,7 @@
  * customer phrase is misread, it is added here and the engine is fixed. Never weaken a case to pass.
  */
 import { describe, expect, it } from 'vitest';
-import { EMPTY_CONVERSATION, reply, respond, tokenize, type AssistantData, type AssistantTurn, type Card, type Conversation, type DishTag, type DishType, type FulfillmentMode, type Lang, type Meal, type ReplyKey, type Shortcut, type TurnKind } from '../../src/index.js';
+import { EMPTY_CONVERSATION, formatILS, reply, respond, tokenize, type AssistantData, type AssistantTurn, type Card, type Conversation, type DishTag, type DishType, type FulfillmentMode, type Lang, type Meal, type ReplyKey, type Shortcut, type TurnKind } from '../../src/index.js';
 import { PLACES, fixtureData } from './fixtures.js';
 
 interface Case {
@@ -331,7 +331,7 @@ const CASES: Case[] = [
   { say: 'pizza for 2', kind: 'meal', people: 2, branch: 'morano', includes: 'm-combo-pair' },
   { say: 'פיצה עד 50', kind: 'meal', budget: 5000, includes: 'm-margherita' },
   { say: 'שווארמה ל-3 במשלוח', kind: 'meal', people: 3, mode: 'delivery', branch: 'abu' },
-  { say: 'ל-6 עד 30', kind: 'blocked', people: 6, budget: 3000, cards: 0, textHas: ['₪30'] },
+  { say: 'ל-6 עד 30', kind: 'blocked', people: 6, budget: 3000, cards: 0, textHas: [formatILS(3000, 'he')] },
 
   // Cheap
   { say: 'זול', kind: 'dish', cheap: true, sortedByPrice: true, noCardTags: ['cold_drink', 'hot_drink'] },

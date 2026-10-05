@@ -4,6 +4,7 @@
  * or dish picks. Empty answers name the wish that blocked them; misunderstandings climb a reprompt
  * ladder that never repeats itself. The whole Conversation is plain JSON (kept in sessionStorage).
  */
+import { formatILS } from '../money.js';
 import { layoutAlternatives } from '../search/index.js';
 import { clockAt, dishKey, localHour, type AssistantData, type AssistantDeal, type AssistantPlace } from './data.js';
 import { buildMeals, type MealBasket } from './mealBuilder.js';
@@ -319,7 +320,7 @@ function mealAnswer(r: Request, ctx: Ctx): Answer {
   const seen = baskets.slice(0, r.page * MEAL_PAGE + page.length);
   return {
     kind: 'meal',
-    text: partialLine(r, ctx, true) ?? (r.people !== undefined ? reply('meal', r.lang, { people: r.people }, seedOf(r, data)) : reply('mealBudget', r.lang, { budget: shekels(r.budgetAgorot ?? 0) }, seedOf(r, data))),
+    text: partialLine(r, ctx, true) ?? (r.people !== undefined ? reply('meal', r.lang, { people: r.people }, seedOf(r, data)) : reply('mealBudget', r.lang, { budget: shekels(r.budgetAgorot ?? 0, r.lang) }, seedOf(r, data))),
     cards: page.map((basket) => ({ kind: 'meal', basket })),
     chips: refineChips(r, data, 'meal'),
     ...(baskets.length > (r.page + 1) * MEAL_PAGE ? { more: moreChip(r) } : {}),
@@ -485,7 +486,7 @@ function typedLabel(words: readonly string[], text: string): string {
 function partialLine(r: Request, ctx: Ctx, meal = false): string | undefined {
   const { missing } = parts(r, ctx.data);
   if (!missing.length) return undefined;
-  const vars = { missing: missing.join(', '), people: r.people ?? 1, budget: shekels(r.budgetAgorot ?? 0) };
+  const vars = { missing: missing.join(', '), people: r.people ?? 1, budget: shekels(r.budgetAgorot ?? 0, r.lang) };
   const key: ReplyKey = !meal ? 'partial' : r.people !== undefined ? 'mealPartial' : 'mealBudgetPartial';
   return reply(key, r.lang, vars, seedOf(r, ctx.data));
 }
@@ -565,7 +566,7 @@ function slotWords(r: Request, slot: Slot, data: AssistantData, tags: readonly W
       return said.length ? { key: 'blockedExclude', label: said.join(', ') } : { key: 'blockedOther', label: '' };
     }
     case 'budget':
-      return { key: 'blockedBudget', label: shekels(r.budgetAgorot ?? r.maxPriceAgorot ?? 0) };
+      return { key: 'blockedBudget', label: shekels(r.budgetAgorot ?? r.maxPriceAgorot ?? 0, r.lang) };
     case 'mode':
       return { key: 'blockedMode', label: r.mode ? MODE_LABELS[r.mode][L] : '' };
     case 'place':
@@ -630,7 +631,8 @@ function noMore(r: Request, ctx: Ctx, chips: Chip[]): Answer {
   return { kind: 'none', text: reply('noMore', r.lang, {}, seedOf(r, ctx.data)), cards: [], chips, shown: ctx.prev?.shown ?? NOTHING_SHOWN, understood: true };
 }
 
-const shekels = (agorot: number) => `₪${Math.round(agorot / 100)}`;
+/** Money as the app shows it everywhere (cards, cart, sheets): the shared formatter, in whole shekels. */
+const shekels = (agorot: number, lang: Lang) => formatILS(Math.round(agorot / 100) * 100, lang);
 const sayChip = (label: string): Chip => ({ label, send: label });
 const shortcutChip = (shortcut: 'deals' | 'usual', lang: Lang): Chip => ({ label: chipLabel(shortcut, lang), request: { ...emptyRequest(lang), shortcut } });
 const moreChip = (r: Request): Chip => ({ label: chipLabel('more', r.lang), request: { ...r, page: r.page + 1 } });

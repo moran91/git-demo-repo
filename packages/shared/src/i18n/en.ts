@@ -1446,6 +1446,7 @@ export const en = {
   'assistant.deal': 'Deal',
   'assistant.missing': 'Not available now: {names}',
   'assistant.signIn': 'Sign in',
+  'assistant.loading': 'Menus are still loading.',
   'assistant.toCart': 'To cart',
   'discovery.closedCount': 'Closed now ({count})',
 } as const;

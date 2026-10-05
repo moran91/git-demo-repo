@@ -1424,6 +1424,7 @@ export const he: Dictionary = {
   'assistant.deal': 'מבצע',
   'assistant.missing': 'לא זמין עכשיו: {names}',
   'assistant.signIn': 'התחברות',
+  'assistant.loading': 'התפריטים עוד נטענים.',
   'assistant.toCart': 'לסל',
   'discovery.closedCount': 'סגורים כעת ({count})',
 };

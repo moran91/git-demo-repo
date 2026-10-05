@@ -6,7 +6,7 @@ import type { Lang, Meal } from './understand.js';
 export type ReplyKey =
   | 'picks' | 'picksNow' | 'partial' | 'mealPartial' | 'mealBudgetPartial' | 'meal' | 'mealBudget' | 'deals' | 'dealsNone' | 'usual' | 'usualNone' | 'usualSignedOut' | 'surprise' | 'place'
   | 'blockedTags' | 'blockedExclude' | 'blockedOther' | 'blockedBudget' | 'blockedMode' | 'blockedPlace'
-  | 'closed' | 'closedNoTime' | 'closedAll' | 'closedAllNoTime' | 'noMore' | 'reprompt1' | 'reprompt2' | 'upsell'
+  | 'closed' | 'closedNoTime' | 'closedAll' | 'closedAllNoTime' | 'noMore' | 'reprompt1' | 'reprompt2' | 'upsell' | 'dropped'
   | 'greetMorning' | 'greetNoon' | 'greetEvening' | 'greetNight';
 
 const R: Record<ReplyKey, Record<Lang, readonly string[]>> = {
@@ -37,6 +37,7 @@ const R: Record<ReplyKey, Record<Lang, readonly string[]>> = {
   noMore: { he: ['זה הכול.', 'אין עוד.', 'זה מה שיש.'], ar: ['هاد كل اشي.', 'ما في كمان.', 'هاد اللي في.'], en: ["That's all.", 'No more.', "That's everything."] },
   reprompt1: { he: ['לא בטוח שהבנתי, אולי אחד מאלה?', 'לא הבנתי, אפשר לנסות ככה:', 'אפשר לנסות ככה:'], ar: ['مش متأكد إني فهمت، يمكن واحد من هدول؟', 'ما فهمت، جرّب هيك:', 'جرّب هيك:'], en: ['Not sure I got that, maybe one of these?', "I didn't get that, try this:", 'Try one of these:'] },
   reprompt2: { he: ['במה אפשר לעזור?', 'בואו נתחיל מכאן:', 'אפשר לבחור:'], ar: ['كيف بقدر أساعد؟', 'خلينا نبلش من هون:', 'اختار:'], en: ['How can I help?', "Let's start here:", 'Pick one:'] },
+  dropped: { he: ['לא זמין עכשיו: {missing}.', 'את זה אין כרגע: {missing}.', 'חסר כרגע: {missing}.'], ar: ['مش متوفر هلا: {missing}.', 'هاد مش موجود هلا: {missing}.', 'ناقص هلا: {missing}.'], en: ['Not available now: {missing}.', 'Missing right now: {missing}.', "Couldn't add: {missing}."] },
   upsell: { he: ['להוסיף גם את זה?', 'הולך טוב עם זה:', 'משהו ליד?'], ar: ['بدك تضيف هاد كمان؟', 'بيزبط معه:', 'اشي جنبه؟'], en: ['Add this too?', 'Goes well with it:', 'Something on the side?'] },
   greetMorning: { he: ['בוקר טוב!', 'בוקר טוב, מה מתחשק?', 'בוקר!'], ar: ['صباح الخير!', 'صباح الخير، شو بدك؟', 'صباح النور!'], en: ['Good morning!', 'Morning, what do you feel like?', 'Morning!'] },
   greetNoon: { he: ['צהריים טובים!', 'מה לצהריים?', 'צהריים!'], ar: ['نهارك سعيد!', 'شو عالغدا؟', 'أهلا!'], en: ['Good afternoon!', "What's for lunch?", 'Hi there!'] },

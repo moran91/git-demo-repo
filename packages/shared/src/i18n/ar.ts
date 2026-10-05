@@ -1424,6 +1424,7 @@ export const ar: Dictionary = {
   'assistant.deal': 'عرض',
   'assistant.missing': 'مش متوفر هلا: {names}',
   'assistant.signIn': 'تسجيل الدخول',
+  'assistant.loading': 'القوائم لسا عم تتحمّل.',
   'assistant.toCart': 'للسلة',
   'discovery.closedCount': 'مسكّر هلا ({count})',
 };

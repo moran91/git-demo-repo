@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_CONVERSATION, afterAdd, homeView, rank, reply, respond, retrieve, type AssistantTurn, type Card, type Conversation, type ReplyKey } from '../../src/index.js';
+import { EMPTY_CONVERSATION, afterAdd, formatILS, homeView, rank, reply, respond, retrieve, type AssistantTurn, type Card, type Conversation, type ReplyKey } from '../../src/index.js';
 import { NOW, PLACES, allClosed, fixtureData } from './fixtures.js';
 
 const data = fixtureData();
@@ -36,7 +36,9 @@ describe('respond', () => {
     const c = say('ל-6 עד 30');
     const t = last(c);
     expect(t.kind).toBe('blocked');
-    expect(t.text).toContain('₪30');
+    // The same money format as the cards and the cart ("‏30 ‏₪"), not a home-made "₪30".
+    expect(t.text).toContain(formatILS(3000, 'he'));
+    expect(t.text).not.toContain('₪30');
     expect(t.cards).toEqual([]);
     const drop = t.chips[0]!;
     expect(drop.request?.budgetAgorot).toBeUndefined();
