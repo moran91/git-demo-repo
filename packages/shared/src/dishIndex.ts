@@ -5,7 +5,8 @@
  * holding a compact entry per live product. The home reads one such document per branch in the city
  * and searches in memory, so a load costs one read per place instead of one per dish.
  */
-import type { Agorot, Localized, Product } from './types.js';
+import type { DishTag } from './assistant/tags.js';
+import type { Agorot, Combo, ComboItem, Localized, Product, Promotion } from './types.js';
 
 /** Fixed dish-type list, owner-assigned per product. Order is the order chips appear in. */
 export const DISH_TYPES = ['pizza', 'pasta', 'burger', 'shawarma', 'hummus', 'sushi', 'pastries', 'salads', 'mains', 'snacks', 'desserts', 'drinks'] as const;
@@ -27,6 +28,9 @@ export interface DishIndexEntry {
   needsChoice: boolean;
   sortOrder: number;
   mostOrdered?: boolean;
+  tags?: DishTag[];
+  /** People one portion feeds; missing reads as 1 (2 for a whole pizza). */
+  serves?: number;
 }
 
 export interface DishIndexDoc {
@@ -54,6 +58,8 @@ export function toDishIndexEntry(p: Product): DishIndexEntry {
   if (p.dishType) entry.dishType = p.dishType;
   if (p.imagePath) entry.imagePath = p.imagePath;
   if (p.mostOrdered) entry.mostOrdered = true;
+  if (p.tags?.length) entry.tags = p.tags;
+  if (p.serves) entry.serves = p.serves;
   return entry;
 }
 
@@ -127,4 +133,67 @@ export function rankDishes<T extends DishHit>(hits: T[], opts: { seed: number; p
 /** Day number used as the rotation seed, so the order is stable within a day. */
 export function daySeed(now: Date): number {
   return Math.floor(now.getTime() / 86_400_000);
+}
+
+/** `publicBranches/{branchId}/index/deals`: active combos and promotions, so the assistant answers "what's on offer?" across the city in one read per place. */
+export interface DealsIndexCombo {
+  name: Localized;
+  description?: Localized;
+  priceAgorot: Agorot;
+  items: ComboItem[];
+  imagePath?: string;
+  sortOrder: number;
+}
+export interface DealsIndexPromotion {
+  title: Localized;
+  body?: Localized;
+  productIds: string[];
+  /** Last valid day, YYYY-MM-DD in Asia/Jerusalem; the client drops expired ones. */
+  endsAt: string;
+  imagePath?: string;
+  sortOrder: number;
+}
+export interface DealsIndexDoc {
+  branchId: string;
+  businessId: string;
+  combos: Record<string, DealsIndexCombo>;
+  promotions: Record<string, DealsIndexPromotion>;
+  updatedAt: string;
+}
+/** `publicBranches/{branchId}/index/pairs`: what customers add together, rebuilt nightly from orders. */
+export interface PairEntry {
+  productId: string;
+  count: number;
+}
+export interface PairsIndexDoc {
+  branchId: string;
+  pairs: Record<string, PairEntry[]>;
+  updatedAt: string;
+}
+
+const hasText = (l?: Localized) => Object.values(l ?? {}).some((v) => v && v.trim());
+
+export function toDealsCombo(c: Combo): DealsIndexCombo {
+  const d: DealsIndexCombo = { name: c.name, priceAgorot: c.priceAgorot, items: c.items, sortOrder: c.sortOrder };
+  if (hasText(c.description)) d.description = c.description;
+  if (c.imagePath) d.imagePath = c.imagePath;
+  return d;
+}
+
+export function toDealsPromotion(p: Promotion): DealsIndexPromotion {
+  const d: DealsIndexPromotion = { title: p.title, productIds: p.productIds, endsAt: p.endsAt, sortOrder: p.sortOrder };
+  if (hasText(p.body)) d.body = p.body;
+  if (p.imagePath) d.imagePath = p.imagePath;
+  return d;
+}
+
+/** The whole deals document for one branch: only active, unarchived combos and active promotions, keyed by id. */
+export function toDealsIndexDoc(branchId: string, businessId: string, combos: Combo[], promos: Promotion[], now: string): DealsIndexDoc {
+  return {
+    branchId,
+    businessId,
+    combos: Object.fromEntries(combos.filter((c) => c.active && !c.archived).map((c) => [c.id, toDealsCombo(c)])),
+    promotions: Object.fromEntries(promos.filter((p) => p.active).map((p) => [p.id, toDealsPromotion(p)])),
+    updatedAt: now,
+  };
 }

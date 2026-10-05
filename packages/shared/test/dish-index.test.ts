@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DISH_TYPES, matchesQuery, normalizeSearch, rankDishes, toDishIndexEntry, type DishHit, type Product } from '../src/index.js';
+import { DISH_TYPES, matchesQuery, normalizeSearch, rankDishes, toDealsCombo, toDealsIndexDoc, toDealsPromotion, toDishIndexEntry, type Combo, type DishHit, type Product, type Promotion } from '../src/index.js';
 
 const base: Product = {
   id: 'p1', branchId: 'br1', businessId: 'b1', categoryId: 'c1',
@@ -103,4 +103,25 @@ describe('rankDishes', () => {
 
 it('has the twelve agreed dish types', () => {
   expect(DISH_TYPES).toEqual(['pizza', 'pasta', 'burger', 'shawarma', 'hummus', 'sushi', 'pastries', 'salads', 'mains', 'snacks', 'desserts', 'drinks']);
+});
+
+describe('assistant fields in the indexes', () => {
+  it('the dish entry carries tags and serves when set', () => {
+    expect(toDishIndexEntry({ ...base, tags: ['spicy'], serves: 2 })).toMatchObject({ tags: ['spicy'], serves: 2 });
+    const plain = toDishIndexEntry({ ...base, tags: [] });
+    expect('tags' in plain).toBe(false);
+    expect('serves' in plain).toBe(false);
+  });
+  const combo: Combo = { id: 'c1', businessId: 'b1', branchId: 'br1', name: { he: 'קומבו' }, description: {}, items: [{ productId: 'p1', quantity: 2 }], priceAgorot: 6000, promoted: true, active: true, archived: false, sortOrder: 1, createdAt: '', updatedAt: '' };
+  const promo: Promotion = { id: 'pr', businessId: 'b1', branchId: 'br1', title: { he: '1+1' }, body: { he: 'רק היום' }, productIds: ['p1'], endsAt: '2030-01-01', active: true, sortOrder: 0, createdAt: '', updatedAt: '' };
+  it('deals entries keep what the assistant shows and drop empty text', () => {
+    expect(toDealsCombo(combo)).toEqual({ name: { he: 'קומבו' }, priceAgorot: 6000, items: [{ productId: 'p1', quantity: 2 }], sortOrder: 1 });
+    expect(toDealsPromotion(promo)).toEqual({ title: { he: '1+1' }, body: { he: 'רק היום' }, productIds: ['p1'], endsAt: '2030-01-01', sortOrder: 0 });
+  });
+  it('the deals document holds only live combos and promotions, keyed by id', () => {
+    const doc = toDealsIndexDoc('br1', 'b1', [combo, { ...combo, id: 'c2', active: false }, { ...combo, id: 'c3', archived: true }], [promo, { ...promo, id: 'pr2', active: false }], '2026-10-05T00:00:00.000Z');
+    expect(Object.keys(doc.combos)).toEqual(['c1']);
+    expect(Object.keys(doc.promotions)).toEqual(['pr']);
+    expect(doc).toMatchObject({ branchId: 'br1', businessId: 'b1', updatedAt: '2026-10-05T00:00:00.000Z' });
+  });
 });
