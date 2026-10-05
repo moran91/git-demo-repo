@@ -23,6 +23,9 @@ describe('rebuildPairs', () => {
     // Other suites' orders may add more pairs; ours must be there and the old order must not.
     expect(doc.pairs['p-shawarma'].map((p: { productId: string }) => p.productId)).toContain('p-cola');
     expect(JSON.stringify(doc.pairs)).not.toContain('p-old-only');
+    // The public doc ranks dishes but never publishes sales-volume counts.
+    expect(JSON.stringify(doc)).not.toContain('count');
+    expect(doc.pairs['p-shawarma'].every((p: object) => Object.keys(p).join() === 'productId')).toBe(true);
     const cleanup = db.batch();
     for (let i = 0; i < 10; i++) cleanup.delete(db.doc(`orders/pairs-test-${i}`));
     for (const k of ['old1', 'old2']) cleanup.delete(db.doc(`orders/pairs-test-${k}`));
@@ -37,8 +40,8 @@ describe('rebuildPairs', () => {
     const hiddenDoc = db.doc(`publicBranches/${hiddenOnly}/index/pairs`);
     const now = new Date('2026-10-05T03:00:00.000Z');
     await dishes.set({ branchId: stale, businessId: 'biz-x', dishes: {}, updatedAt: now.toISOString() });
-    await staleDoc.set({ branchId: stale, pairs: { a: [{ productId: 'b', count: 5 }] }, updatedAt: '2026-01-01T00:00:00.000Z' });
-    await hiddenDoc.set({ branchId: hiddenOnly, pairs: { a: [{ productId: 'b', count: 5 }] }, updatedAt: '2026-01-01T00:00:00.000Z' });
+    await staleDoc.set({ branchId: stale, pairs: { a: [{ productId: 'b' }] }, updatedAt: '2026-01-01T00:00:00.000Z' });
+    await hiddenDoc.set({ branchId: hiddenOnly, pairs: { a: [{ productId: 'b' }] }, updatedAt: '2026-01-01T00:00:00.000Z' });
     // Ten recent orders at a branch with no dish index must not produce a pairs doc.
     const batch = db.batch();
     for (let i = 0; i < 10; i++) batch.set(db.doc(`orders/pairs-nodish-${i}`), { branchId: hiddenOnly, businessId: 'biz-x', status: 'accepted', placedAt: now.toISOString(), lines: [{ productId: 'a' }, { productId: 'b' }] });
@@ -64,11 +67,11 @@ describe('reprojectCatalog and the pairs doc', () => {
     const pairsRef = db.doc(`publicBranches/${branchId}/index/pairs`);
     await bizRef.set({ id: businessId, type: 'restaurant', approval: 'approved' });
     await brRef.set({ id: branchId, businessId, approval: 'approved' });
-    await pairsRef.set({ branchId, pairs: { a: [{ productId: 'b', count: 5 }] }, updatedAt: '2026-01-01T00:00:00.000Z' });
+    await pairsRef.set({ branchId, pairs: { a: [{ productId: 'b' }] }, updatedAt: '2026-01-01T00:00:00.000Z' });
 
     await reprojectCatalog(businessId, branchId);
     // Reproject never writes pairs, so the nightly doc survives unchanged.
-    expect((await pairsRef.get()).data()!.pairs.a[0].count).toBe(5);
+    expect((await pairsRef.get()).data()!.pairs.a).toEqual([{ productId: 'b' }]);
 
     await brRef.update({ approval: 'pending' });
     await reprojectCatalog(businessId, branchId);

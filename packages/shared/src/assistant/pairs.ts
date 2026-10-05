@@ -24,7 +24,7 @@ export function computePairs(orders: PairOrder[]): Record<string, PairEntry[]> |
   }
   const out: Record<string, PairEntry[]> = {};
   for (const [a, m] of counts) {
-    const list = [...m].filter(([, n]) => n >= 2).sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0])).slice(0, TOP).map(([productId, count]) => ({ productId, count }));
+    const list = [...m].filter(([, n]) => n >= 2).sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0])).slice(0, TOP).map(([productId]) => ({ productId }));
     if (list.length) out[a] = list;
   }
   return out;

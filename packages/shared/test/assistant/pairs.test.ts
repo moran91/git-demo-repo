@@ -16,8 +16,8 @@ describe('computePairs', () => {
       { status: 'accepted', lines: [{ productId: 'pizza' }, { productId: 'gone', removed: true }, { productId: 'c1', comboId: 'c1' }] },
     ];
     const pairs = computePairs(orders)!;
-    expect(pairs.pizza).toEqual([{ productId: 'cola', count: 6 }, { productId: 'fries', count: 3 }]);
-    expect(pairs.cola).toEqual([{ productId: 'pizza', count: 6 }]);
+    expect(pairs.pizza).toEqual([{ productId: 'cola' }, { productId: 'fries' }]);
+    expect(pairs.cola).toEqual([{ productId: 'pizza' }]);
     expect(pairs.salad).toBeUndefined();
   });
 });

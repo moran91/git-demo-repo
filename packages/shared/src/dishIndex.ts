@@ -161,9 +161,9 @@ export interface DealsIndexDoc {
   updatedAt: string;
 }
 /** `publicBranches/{branchId}/index/pairs`: what customers add together, rebuilt nightly from orders. */
+/** Ranked best-first; the co-order count is deliberately not published (it is sales volume). */
 export interface PairEntry {
   productId: string;
-  count: number;
 }
 export interface PairsIndexDoc {
   branchId: string;
