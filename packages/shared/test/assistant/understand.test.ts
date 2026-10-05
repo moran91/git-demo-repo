@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detectLang, hasSlots, understand, uniq, type PlaceName, type Previous } from '../../src/index.js';
+import { detectLang, emptyRequest, hasSlots, understand, uniq, type Lang, type PlaceName, type Previous, type Request } from '../../src/index.js';
 
 const places: PlaceName[] = [
   { branchId: 'morano', name: { he: 'מורנו', ar: 'مورانو', en: 'Morano' } },
@@ -7,6 +7,9 @@ const places: PlaceName[] = [
   { branchId: 'burger', name: { he: 'בורגר באזל', ar: 'برغر بازل', en: 'Burger Basil' } },
 ];
 const u = (text: string, prev?: Previous) => understand(text, places, prev);
+/** The whole request: an empty one in `lang` with only the stated slots set. */
+const want = (lang: Lang, patch: Partial<Request>): Request => ({ ...emptyRequest(lang), ...patch });
+const noWords = (tags: Request['exclude']['tags'], words: string[]) => ({ tags, words, dishIds: [], branchIds: [] });
 
 describe('understand', () => {
   it('taste wishes are tags, food words stay as the craving', () => {
@@ -84,6 +87,77 @@ describe('understand', () => {
     expect(detectLang('بيتزا')).toBe('ar');
     expect(hasSlots(u('hello'))).toBe(false);
     expect(hasSlots(u('שלום'))).toBe(false);
+  });
+
+  it('negation chains over "and": without X and Y excludes both', () => {
+    expect(u('בלי בצל ובלי עגבניות')).toEqual(want('he', { exclude: noWords([], ['בצל', 'עגבניות']) }));
+    expect(u('שווארמה בלי בצל ועגבניה')).toEqual(want('he', { craving: ['שווארמה'], exclude: noWords([], ['בצל', 'עגבניה']) }));
+    expect(u('شاورما بدون بصل وبدون بندورة')).toEqual(want('ar', { craving: ['شاورما'], exclude: noWords([], ['بصل', 'بندوره']) }));
+    expect(u('burger without onion and tomato')).toEqual(want('en', { craving: ['burger'], exclude: noWords([], ['onion', 'tomato']) }));
+  });
+
+  it('a people word after the number beats a budget word before it', () => {
+    expect(u('עד 4 אנשים')).toEqual(want('he', { people: 4 }));
+    expect(u('up to 4 people')).toEqual(want('en', { people: 4 }));
+    expect(u('max 6 people')).toEqual(want('en', { people: 6 }));
+    expect(u('עד 50 שקל')).toEqual(want('he', { budgetAgorot: 5000 }));
+  });
+
+  it('a message without letters keeps the previous language, else the fallback', () => {
+    const he: Previous = { request: u('משהו חריף'), shown: { dishIds: [], branchIds: [] } };
+    const ar: Previous = { request: u('اشي حار'), shown: { dishIds: [], branchIds: [] } };
+    expect(u('2', he).lang).toBe('he');
+    expect(u('150', he)).toMatchObject({ lang: 'he', budgetAgorot: 15000 });
+    expect(u('2', ar).lang).toBe('ar');
+    expect(u('150₪', ar)).toMatchObject({ lang: 'ar', budgetAgorot: 15000 });
+    expect(understand('30', places).lang).toBe('he');
+    expect(understand('30', places, undefined, 'ar').lang).toBe('ar');
+    expect(understand('pizza', places, ar, 'ar').lang).toBe('en');
+  });
+
+  it('arabizi: people, budget, taste and exclusions', () => {
+    expect(u('shi 7ar la 4 la7ad 150')).toEqual(want('ar', { tags: ['spicy'], people: 4, budgetAgorot: 15000 }));
+    expect(u('7ar bdun la7meh')).toEqual(want('ar', { tags: ['spicy'], exclude: noWords(['meat'], ['la7meh']) }));
+    expect(u('pizza la arba3a 7atta 100')).toEqual(want('ar', { craving: ['pizza'], people: 4, budgetAgorot: 10000 }));
+    expect(u('pizza bidun jebne')).toEqual(want('en', { craving: ['pizza'], exclude: noWords(['cheese'], ['jebne']) }));
+  });
+
+  it('number words: two, "for two people", tens and hundreds', () => {
+    expect(u('שתי פיצות')).toEqual(want('he', { craving: ['פיצות'], people: 2 }));
+    expect(u('שני שווארמות')).toEqual(want('he', { craving: ['שווארמות'], people: 2 }));
+    expect(u('بيتزا لشخصين')).toEqual(want('ar', { craving: ['بيتزا'], people: 2 }));
+    expect(u('لتنين')).toEqual(want('ar', { people: 2 }));
+    expect(u('עד מאה שקל')).toEqual(want('he', { budgetAgorot: 10000 }));
+    expect(u('עד חמישים')).toEqual(want('he', { budgetAgorot: 5000 }));
+    expect(u('حتى مية شيكل')).toEqual(want('ar', { budgetAgorot: 10000 }));
+    expect(u('بحدود خمسين')).toEqual(want('ar', { budgetAgorot: 5000 }));
+    expect(u('under fifty')).toEqual(want('en', { budgetAgorot: 5000 }));
+    expect(u('up to a hundred shekels')).toEqual(want('en', { budgetAgorot: 10000 }));
+  });
+
+  it('intensifiers after a negation belong to it', () => {
+    expect(u('not too spicy')).toEqual(want('en', { exclude: noWords(['spicy'], ['spicy']) }));
+    expect(u('לא חריף מדי')).toEqual(want('he', { exclude: noWords(['spicy'], ['חריפ']) }));
+    expect(u('לא כל כך חריף')).toEqual(want('he', { exclude: noWords(['spicy'], ['חריפ']) }));
+    expect(u('مش حار كتير')).toEqual(want('ar', { exclude: noWords(['spicy'], ['حار']) }));
+  });
+
+  it('"no more than N" is a budget, not an exclusion', () => {
+    expect(u('no more than 100')).toEqual(want('en', { budgetAgorot: 10000 }));
+    expect(u('not more than 100')).toEqual(want('en', { budgetAgorot: 10000 }));
+    expect(u('לא יותר מ-100')).toEqual(want('he', { budgetAgorot: 10000 }));
+  });
+
+  it('places named with a ב or ל prefix', () => {
+    expect(u('במורנו')).toEqual(want('he', { placeBranchIds: ['morano'] }));
+    expect(u('למורנו')).toEqual(want('he', { placeBranchIds: ['morano'] }));
+  });
+
+  it('"we are N" is a head count', () => {
+    expect(u('אנחנו 15')).toEqual(want('he', { people: 15 }));
+    expect(u('we are 15')).toEqual(want('en', { people: 15 }));
+    expect(u('احنا 5')).toEqual(want('ar', { people: 5 }));
+    expect(u('احنا 15')).toEqual(want('ar', { people: 15 }));
   });
 
   it('uniq keeps first occurrences', () => {
