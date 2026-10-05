@@ -22,8 +22,8 @@ export const TAG_TERMS: Record<DishTag, readonly string[]> = {
   sweet: ['מתוק', 'מתוקה', 'קינוח', 'קינוחים', 'שוקולד', 'נוטלה', 'וופל', 'גלידה', 'עוגה', 'עוגת', 'כנאפה', 'קנאפה', 'בקלאווה', 'קרפ', 'מלבי', 'sweet', 'dessert', 'chocolate', 'nutella', 'waffle', 'ice cream', 'cake', 'knafeh', 'kunafa', 'baklava', 'crepe', 'حلو', 'حلويات', 'شوكولا', 'شوكولاته', 'نوتيلا', 'وافل', 'بوظة', 'ايس كريم', 'كيك', 'كنافة', 'بقلاوة', 'كريب', 'مهلبية'],
   cold_drink: ['קולה', 'קוקה', 'ספרייט', 'פאנטה', 'זירו', 'מיץ', 'מים', 'סודה', 'לימונדה', 'שייק', 'מילקשייק', 'אייס', 'קר', 'קרה', 'בירה', 'פריגת', 'גרוס', 'סמוזי', 'cola', 'coke', 'sprite', 'fanta', 'juice', 'water', 'soda', 'lemonade', 'shake', 'milkshake', 'iced', 'ice', 'cold', 'beer', 'smoothie', 'slush', 'redbull', 'red bull', 'كولا', 'كوكا', 'سبرايت', 'فانتا', 'عصير', 'مي', 'مياه', 'صودا', 'ليموناضة', 'شيك', 'مثلج', 'بارد', 'باردة', 'سلاش', 'بيرة'],
   hot_drink: ['קפה', 'תה', 'הפוך', 'אספרסו', 'קפוצ׳ינו', 'קפוצינו', 'לאטה', 'שוקו חם', 'סחלב', 'נס קפה', 'coffee', 'tea', 'espresso', 'cappuccino', 'latte', 'americano', 'macchiato', 'hot chocolate', 'sahlab', 'قهوة', 'شاي', 'اسبريسو', 'كابتشينو', 'كابوتشينو', 'لاتيه', 'سحلب', 'نسكافيه'],
-  meat: ['בשר', 'בשרי', 'בקר', 'עגל', 'כבש', 'טלה', 'אנטריקוט', 'סטייק', 'קבב', 'קציצות', 'המבורגר', 'בורגר', 'צ׳יזבורגר', 'ציזבורגר', "צ'יזבורגר", 'מנסף', 'מעורב ירושלמי', 'מעורב בפיתה', 'מעורב בלאפה', 'מנת מעורב', 'שיפוד', 'שיפודים', 'שיפודי', 'שישליק', 'עראיס', 'פפרוני', 'סלמי', 'נקניק', 'נקניקיה', 'נקניקיות', 'קבנוס', 'מרגז', 'כבד', 'meat', 'beef', 'veal', 'lamb', 'steak', 'entrecote', 'kebab', 'kofta', 'burger', 'hamburger', 'cheeseburger', 'mansaf', 'meorav', 'skewer', 'skewers', 'shish', 'shishlik', 'arayes', 'pepperoni', 'salami', 'sausage', 'hot dog', 'لحم', 'لحمة', 'عجل', 'غنم', 'خروف', 'ستيك', 'كباب', 'كفتة', 'برغر', 'همبرغر', 'برجر', 'تشيز برغر', 'تشيزبرغر', 'تشيز برجر', 'منسف', 'شيش', 'شقف', 'عرايس', 'بيبروني', 'سلامي', 'نقانق', 'سجق', 'كبدة'],
-  chicken: ['עוף', 'עופות', 'פרגית', 'פרגיות', 'שניצל', 'שניצלונים', 'חזה', 'כנפיים', 'כנפי', 'נאגטס', 'chicken', 'schnitzel', 'wings', 'nuggets', 'taouk', 'دجاج', 'جاج', 'فراخ', 'شنيتسل', 'طاووق', 'اجنحة', 'ناجتس'],
+  meat: ['בשר', 'בשרי', 'בקר', 'עגל', 'כבש', 'טלה', 'אנטריקוט', 'סטייק', 'קבב', 'קציצות', 'המבורגר', 'בורגר', 'צ׳יזבורגר', 'ציזבורגר', "צ'יזבורגר", 'מנסף', 'מעורב ירושלמי', 'מעורב בפיתה', 'מעורב בלאפה', 'מנת מעורב', 'שיפוד', 'שיפודים', 'שיפודי', 'שישליק', 'עראיס', 'פפרוני', 'סלמי', 'נקניק', 'נקניקיה', 'נקניקיות', 'פסטרמה', 'פסטרמות', 'קבנוס', 'מרגז', 'כבד', 'meat', 'beef', 'veal', 'lamb', 'steak', 'entrecote', 'kebab', 'kofta', 'burger', 'hamburger', 'cheeseburger', 'mansaf', 'meorav', 'skewer', 'skewers', 'shish', 'shishlik', 'arayes', 'pepperoni', 'salami', 'sausage', 'hot dog', 'pastrami', 'لحم', 'لحمة', 'عجل', 'غنم', 'خروف', 'ستيك', 'كباب', 'كفتة', 'برغر', 'همبرغر', 'برجر', 'تشيز برغر', 'تشيزبرغر', 'تشيز برجر', 'منسف', 'شيش', 'شقف', 'عرايس', 'بيبروني', 'سلامي', 'نقانق', 'سجق', 'كبدة', 'بسطرمة'],
+  chicken: ['עוף', 'עופות', 'פרגית', 'פרגיות', 'שניצל', 'שניצלונים', 'חזה', 'כנפיים', 'כנפי', 'נאגטס', "צ'קן", 'צ׳קן', "צ'יקן", 'צ׳יקן', 'הודו', 'chicken', 'schnitzel', 'wings', 'nuggets', 'taouk', 'turkey', 'دجاج', 'جاج', 'فراخ', 'شنيتسل', 'طاووق', 'اجنحة', 'ناجتس', 'ديك رومي', 'حبش'],
   fish: ['דג', 'דגים', 'סלמון', 'טונה', 'שרימפס', 'לברק', 'דניס', 'fish', 'salmon', 'tuna', 'shrimp', 'shrimps', 'seafood', 'سمك', 'سلمون', 'تونة', 'قريدس', 'جمبري'],
   cheese: ['גבינה', 'גבינות', 'מוצרלה', 'צהובה', 'פטה', 'בולגרית', 'חלומי', 'רוקפור', 'פרמזן', 'צ׳דר', 'צדר', 'cheese', 'mozzarella', 'feta', 'halloumi', 'parmesan', 'cheddar', 'gouda', 'جبنة', 'جبن', 'موزاريلا', 'حلوم', 'فيتا', 'شيدر', 'بارميزان'],
   sharing: ['מגש', 'מגשים', 'פלטה', 'פלטת', 'משפחתי', 'משפחתית', 'זוגי', 'זוגית', 'מארז', 'platter', 'tray', 'family', 'sharing', 'bucket', 'صينية', 'عائلي', 'عائلية', 'بلاتر'],
@@ -70,8 +70,13 @@ export const TAG_LABELS: Record<DishTag, Record<Locale, string>> = {
 export const TAG_MATCHERS = Object.fromEntries(DISH_TAGS.map((t) => [t, termMatcher(TAG_TERMS[t])])) as Record<DishTag, TermMatcher>;
 const TYPE_MATCHERS = Object.fromEntries(DISH_TYPES.map((t) => [t, termMatcher(TYPE_TERMS[t])])) as Record<DishType, TermMatcher>;
 const PEOPLE = termMatcher(PEOPLE_TERMS);
-/** Meat words that also name chicken or fish dishes ("בורגר עוף", "שיפודי פרגית", "شيش طاووق"): alone they do not make a chicken dish meat. */
-const GENERIC_MEAT = termMatcher(['המבורגר', 'בורגר', 'שיפוד', 'שיפודים', 'שיפודי', 'שישליק', 'burger', 'hamburger', 'skewer', 'skewers', 'shish', 'shishlik', 'برغر', 'همبرغر', 'برجر', 'شيش', 'شقف']);
+/** Meat words that also name chicken or fish dishes ("בורגר עוף", "שיפודי פרגית", "شيش طاووق", "סטייק סלמון", turkey pastrami): alone they do not make a chicken or fish dish meat. */
+const GENERIC_MEAT = termMatcher(['המבורגר', 'בורגר', 'שיפוד', 'שיפודים', 'שיפודי', 'שישליק', 'סטייק', 'סטייקים', 'פסטרמה', 'פסטרמות', 'burger', 'hamburger', 'skewer', 'skewers', 'shish', 'shishlik', 'steak', 'steaks', 'pastrami', 'برغر', 'همبرغر', 'برجر', 'شيش', 'شقف', 'ستيك', 'بسطرمة']);
+/** Words for a cut that can be cooked from a vegetable or cheese too ("שיפודי ירקות", "סטייק חלומי"). */
+const SKEWER = termMatcher(['שיפוד', 'שיפודים', 'שיפודי', 'שישליק', 'סטייק', 'סטייקים', 'skewer', 'skewers', 'shish', 'shishlik', 'steak', 'steaks', 'شيش', 'شقف', 'ستيك']);
+const SKEWER_ONLY = termMatcher(['שיפוד', 'שיפודים', 'שיפודי', 'שישליק', 'skewer', 'skewers', 'shish', 'shishlik', 'شيش', 'شقف']);
+const VEGETABLE = termMatcher(['ירקות', 'ירק', 'vegetable', 'vegetables', 'veggies', 'خضار', 'خضروات']);
+const HALLOUMI = termMatcher(['חלומי', 'halloumi', 'حلوم']);
 /** Types that are meat unless the dish says chicken, fish, vegetarian or vegan ("שווארמה בלאפה", "Cheeseburger"). */
 const MEAT_TYPES: readonly DishType[] = ['burger', 'shawarma'];
 const NOT_MEAT_TAGS: readonly DishTag[] = ['chicken', 'fish', 'vegetarian', 'vegan'];
@@ -109,11 +114,22 @@ export function autoTags(input: AutoTagInput): AutoTagResult {
   for (const t of DISH_TAGS) if (t !== 'sharing' && countMatches(text, TAG_MATCHERS[t]) > 0) tags.add(t);
   // The menu section names drinks, breakfasts and sweets ("שתייה קרה", "قهوة", "ארוחות בוקר").
   for (const t of ['cold_drink', 'hot_drink', 'breakfast', 'sweet', 'kids'] as const) if (countMatches(cat, TAG_MATCHERS[t]) > 0) tags.add(t);
-  // A burger or skewer word alone is not "meat" when the dish is chicken, fish, vegetarian or vegan.
-  const notMeat = NOT_MEAT_TAGS.some((t) => tags.has(t));
-  if (tags.has('meat') && notMeat && countMatches(text, TAG_MATCHERS.meat) <= countMatches(text, GENERIC_MEAT)) tags.delete('meat');
+  const meatWords = countMatches(text, TAG_MATCHERS.meat);
+  // Halloumi is vegetarian when the only meaty words are cuts a cheese can be cooked as ("סטייק חלומי", "שיפודי חלומי"); a halloumi burger or shawarma stays what its type says.
+  if (!tags.has('chicken') && !tags.has('fish') && !(dishType && MEAT_TYPES.includes(dishType)) && countMatches(text, HALLOUMI) > 0 && meatWords <= countMatches(text, SKEWER)) tags.add('vegetarian');
+  if (tags.has('vegetarian') || tags.has('vegan')) {
+    // Vegetarian and vegan beat any meat word ("בלי בשר", "Vegan kebab").
+    tags.delete('meat');
+  } else if (tags.has('meat')) {
+    // A burger, skewer or steak word alone is not "meat" when the dish is chicken or fish (turkey is chicken here).
+    if ((tags.has('chicken') || tags.has('fish')) && meatWords <= countMatches(text, GENERIC_MEAT)) tags.delete('meat');
+    // A skewer is vegetable or cheese when nothing else says meat.
+    else if (meatWords <= countMatches(text, SKEWER_ONLY) && (tags.has('cheese') || countMatches(text, VEGETABLE) > 0)) tags.delete('meat');
+  }
   // A burger or shawarma is beef or lamb unless it says otherwise ("Cheeseburger", "שווארמה בלאפה").
-  if (dishType && MEAT_TYPES.includes(dishType) && !notMeat) tags.add('meat');
+  if (dishType && MEAT_TYPES.includes(dishType) && !NOT_MEAT_TAGS.some((t) => tags.has(t))) tags.add('meat');
+  // A dessert is never meat ("שיפוד וופל"); a sweet skewer or steak is a dessert even when its words also name a main.
+  if (dishType === 'desserts' || (tags.has('sweet') && (!dishType || meatWords <= countMatches(text, SKEWER)))) tags.delete('meat');
   // Beef, chicken and fish dishes are not drinks, whatever else their words say.
   if (tags.has('meat') || tags.has('chicken') || tags.has('fish')) for (const t of DRINK_TAGS) tags.delete(t);
   if (tags.has('cold_drink')) tags.delete('hot_drink');
@@ -124,8 +140,8 @@ export function autoTags(input: AutoTagInput): AutoTagResult {
   if (tags.has('vegan')) tags.add('vegetarian');
   if (dishType && VEGETARIAN_TYPES.includes(dishType) && !tags.has('meat') && !tags.has('chicken') && !tags.has('fish')) tags.add('vegetarian');
   const serves = pickServes(name, desc, dishType, dishType === 'drinks' || tags.has('cold_drink') ? `${allText(input.name)} ${allText(input.description)}` : undefined);
-  // A big bottle is shared, but it is not a sharing platter.
-  if (serves >= 3 && dishType !== 'drinks') tags.add('sharing');
+  // A big bottle is shared, but it is not a sharing platter, typed or not.
+  if (serves >= 3 && dishType !== 'drinks' && !DRINK_TAGS.some((t) => tags.has(t))) tags.add('sharing');
   return { tags: DISH_TAGS.filter((t) => tags.has(t)), serves, ...(dishType ? { dishType } : {}) };
 }
 

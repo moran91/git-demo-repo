@@ -137,4 +137,108 @@ describe('autoTags', () => {
     // A litre on a dish that is not a drink says nothing about people; a big bottle is not a sharing platter.
     expect(autoTags({ name: { he: 'קולה 1.5 ליטר' } }).tags).not.toContain('sharing');
   });
+  describe('dry-run tagging mistakes (2026-10-04)', () => {
+    const tagsOf = (name: object, categoryName?: object) => autoTags({ name, ...(categoryName ? { categoryName } : {}) }).tags;
+
+    it('the dry-run rows, with their live descriptions and menu sections', () => {
+      const run = (he: string, description: string, category: string) => autoTags({ name: { he }, description: { he: description }, categoryName: { he: category } });
+      const steak = run('סטייק חלומי', "5 יח' סטייק חלומי", 'סלט');
+      expect(steak.tags).toEqual(expect.arrayContaining(['vegetarian', 'cheese']));
+      expect(steak.tags).not.toContain('meat');
+      const wok = run('מוקפץ אסייתי צמחוני', 'נודלס מוקפצים ברוטב אסייתי עשיר, יחד עם ירקות טריים. בחירה קלילה, מושלמת למי שמחפש חוויה אסייתית בלי בשר – ועדיין עם הרבה נשמה', 'מנות עיקריות');
+      expect(wok.tags).toContain('vegetarian');
+      expect(wok.tags).not.toContain('meat');
+      const waffle = run('שיפוד וופל', 'שיפוד וופל', 'קינוחים');
+      expect(waffle.dishType).toBe('desserts');
+      expect(waffle.tags).toContain('sweet');
+      expect(waffle.tags).not.toContain('meat');
+      const turkey = run('בגט/לחמניה הודו', 'בגט/לחמניה הודו', 'שווארמה');
+      expect(turkey.tags).toContain('chicken');
+      expect(turkey.tags).not.toContain('meat');
+      for (const he of ["צ'קן טוסט", 'צ׳יקן טוסט']) {
+        const toast = run(he, `${he}, עם מיונז וחמוצים`, 'בורגר');
+        expect(toast.tags, he).toContain('chicken');
+        expect(toast.tags, he).not.toContain('meat');
+      }
+      const pastrami = run('כריך פסטרמה', 'כריך פסטרמה', 'טוסטים וכריכים');
+      expect(pastrami.tags).toContain('meat');
+    });
+    it('1. vegetarian or vegan beats any meat word', () => {
+      for (const name of [{ he: 'מוקפץ אסייתי צמחוני' }, { he: 'סטייק כרובית צמחוני' }, { en: 'Vegan kebab' }, { ar: 'كباب نباتي' }, { he: 'קציצות טבעוניות' }]) {
+        const tags = tagsOf(name);
+        expect(tags, JSON.stringify(name)).not.toContain('meat');
+        expect(tags, JSON.stringify(name)).toContain('vegetarian');
+      }
+    });
+    it('1. halloumi makes a dish vegetarian when nothing meaty is there: סטייק חלומי', () => {
+      for (const name of [{ he: 'סטייק חלומי' }, { en: 'Halloumi steak' }, { ar: 'ستيك حلوم' }]) {
+        const tags = tagsOf(name);
+        expect(tags, JSON.stringify(name)).toEqual(expect.arrayContaining(['vegetarian', 'cheese']));
+        expect(tags, JSON.stringify(name)).not.toContain('meat');
+      }
+    });
+    it('1. halloumi does not make meat vegetarian', () => {
+      for (const name of [{ he: 'המבורגר בקר עם חלומי' }, { he: 'המבורגר חלומי' }, { en: 'Halloumi and beef skewer' }, { en: 'Chicken halloumi sandwich' }]) {
+        expect(tagsOf(name), JSON.stringify(name)).not.toContain('vegetarian');
+      }
+      expect(tagsOf({ he: 'המבורגר בקר עם חלומי' })).toContain('meat');
+      expect(tagsOf({ he: 'המבורגר חלומי' })).toContain('meat');
+      expect(tagsOf({ en: 'Halloumi and beef skewer' })).toContain('meat');
+    });
+    it('2. a dessert is never meat: שיפוד וופל', () => {
+      const r = autoTags({ name: { he: 'שיפוד וופל' }, categoryName: { he: 'קינוחים' } });
+      expect(r.dishType).toBe('desserts');
+      expect(r.tags).toContain('sweet');
+      expect(r.tags).not.toContain('meat');
+      const bare = tagsOf({ he: 'שיפוד וופל' });
+      expect(bare).toContain('sweet');
+      expect(bare).not.toContain('meat');
+      expect(tagsOf({ en: 'Chocolate steak' })).not.toContain('meat');
+    });
+    it('3. turkey is poultry: chicken, not meat', () => {
+      for (const name of [{ he: 'בגט הודו' }, { he: 'לחמניה הודו' }, { he: 'בגט/לחמניה הודו' }, { en: 'Turkey baguette' }, { ar: 'ساندويش ديك رومي' }, { ar: 'شاورما حبش' }, { he: 'שווארמה הודו' }, { en: 'Turkey shawarma' }, { ar: 'شاورما ديك رومي' }, { he: 'פסטרמה הודו' }]) {
+        const tags = tagsOf(name);
+        expect(tags, JSON.stringify(name)).toContain('chicken');
+        expect(tags, JSON.stringify(name)).not.toContain('meat');
+      }
+    });
+    it('3. turkey with real beef stays meat as well', () => {
+      expect(tagsOf({ he: 'סנדוויץ הודו ובקר' })).toEqual(expect.arrayContaining(['chicken', 'meat']));
+    });
+    it('4. צ׳יקן is chicken', () => {
+      for (const name of [{ he: "צ'קן טוסט" }, { he: 'צ׳יקן טוסט' }, { he: "צ'יקן טוסט" }, { he: 'צ׳קן טוסט' }, { he: 'צ׳יקן בורגר' }]) {
+        const tags = tagsOf(name);
+        expect(tags, JSON.stringify(name)).toContain('chicken');
+        expect(tags, JSON.stringify(name)).not.toContain('meat');
+      }
+    });
+    it('4. pastrami is meat', () => {
+      for (const name of [{ he: 'כריך פסטרמה' }, { he: 'כריך פסטרמות' }, { he: 'פסטרמה' }, { en: 'Pastrami sandwich' }, { ar: 'ساندويش بسطرمة' }]) {
+        expect(tagsOf(name), JSON.stringify(name)).toContain('meat');
+      }
+    });
+    it('5. vegetable or halloumi skewers are not meat', () => {
+      for (const name of [{ he: 'שיפודי ירקות' }, { en: 'Vegetable skewers' }, { en: 'Halloumi skewers' }, { he: 'שיפודי חלומי' }, { ar: 'شيش خضار' }, { he: 'שיפוד גבינה' }, { en: 'Cheese skewer' }]) {
+        expect(tagsOf(name), JSON.stringify(name)).not.toContain('meat');
+      }
+      expect(tagsOf({ en: 'Halloumi skewers' })).toEqual(expect.arrayContaining(['vegetarian', 'cheese']));
+      expect(tagsOf({ he: 'שיפודי חלומי' })).toContain('vegetarian');
+    });
+    it('5. a plain skewer, or a skewer with real meat, is still meat', () => {
+      for (const name of [{ he: 'שיפוד' }, { he: 'שיפודי בקר' }, { en: 'Skewers' }, { en: 'Lamb skewers with vegetables' }, { he: 'שיפודי כבש עם ירקות' }, { ar: 'شيش لحم' }]) {
+        expect(tagsOf(name), JSON.stringify(name)).toContain('meat');
+      }
+    });
+    it('6. a cold or hot drink never gets sharing, typed or not', () => {
+      for (const name of [{ en: 'Red Bull 1.5L' }, { en: 'Slush 1.5L' }, { he: 'רד בול 1.5 ליטר' }, { he: 'קולה 1.5 ליטר' }, { en: 'Family coffee 2L' }]) {
+        const r = autoTags({ name });
+        expect(r.tags, JSON.stringify(name)).not.toContain('sharing');
+      }
+      const redBull = autoTags({ name: { en: 'Red Bull 1.5L' } });
+      expect(redBull.tags).toContain('cold_drink');
+      expect(redBull.serves).toBe(4);
+      // A real platter still shares.
+      expect(autoTags({ name: { he: 'מגש סושי 40 יחידות' } }).tags).toContain('sharing');
+    });
+  });
 });
