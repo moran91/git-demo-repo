@@ -10,10 +10,10 @@ import { buildMeals, type MealBasket } from './mealBuilder.js';
 import type { Usual } from './profile.js';
 import { hashUnit, mealOf, rank, roundRobin, type Hit } from './rank.js';
 import { MODE_LABELS, chipLabel, peopleLabel, reply, replyNot, type ReplyKey } from './replies.js';
-import { ALL_FILTERS, cravingMatches, isDishWord, isKnownFood, placeUsable, retrieve, strongLevel, type Candidate, type Filters } from './retrieve.js';
+import { ALL_FILTERS, cravingMatches, placeUsable, retrieve, strongLevel, type Candidate, type Filters } from './retrieve.js';
 import { TAG_LABELS, type DishTag } from './tags.js';
 import { tokenize, uniq, wordForms } from './text.js';
-import { emptyRequest, hasSlots, isMealRequest, understand, wantsIdeas, type Lang, type Previous, type Request, type Shown } from './understand.js';
+import { emptyRequest, hasSlots, isDishWord, isKnownFood, isMealRequest, understand, wantsIdeas, type CravingGroup, type Lang, type Previous, type Request, type Shown } from './understand.js';
 import { upsellFor } from './upsell.js';
 
 export type Card =
@@ -197,7 +197,7 @@ function pickAnswer(r: Request, ctx: Ctx, kind: 'dish' | 'surprise', retry: bool
   const key: ReplyKey = kind === 'surprise' ? 'surprise' : r.craving.length || r.tags.length ? 'picks' : 'picksNow';
   return {
     kind,
-    text: reply(key, r.lang, {}, seedOf(r, data)),
+    text: partialLine(r, ctx) ?? reply(key, r.lang, {}, seedOf(r, data)),
     cards: page.map(dishCard),
     chips: refineChips(r, data, 'dish'),
     ...(kind === 'dish' && ranked.length > (r.page + 1) * size ? { more: moreChip(r) } : {}),
@@ -207,16 +207,24 @@ function pickAnswer(r: Request, ctx: Ctx, kind: 'dish' | 'surprise', retry: bool
   };
 }
 
+/** The request for one of the things asked for: its own words and wishes, plus the diet wishes of the whole message. */
+function partOf(r: Request, g: CravingGroup, groups: readonly CravingGroup[]): Request {
+  const owned = new Set(groups.flatMap((x) => x.tags));
+  const { groups: _g, warm: _w, ...rest } = r;
+  const warm = g.warm || (r.warm && !groups.some((x) => x.warm));
+  return { ...rest, craving: g.craving, tags: uniq([...r.tags.filter((t) => !owned.has(t)), ...g.tags]), ...(warm ? { warm: true } : {}) };
+}
+
 /**
- * What to look for. A request whose words no dish has all of is answered in parts only when it can be:
- * joined words ("פיצה עם קולה", "pizza and sushi") are each a thing of their own; a word that names
- * nothing beside a dish word ("שווארמה בפיתה") is dropped. A two-word name ("hot dog", "מרק עוף") stays
- * whole, so it gets an honest "not on the menu", never each word's dishes.
+ * One thing asked for, made answerable: as said, or without a word that names nothing beside a dish word
+ * ("שווארמה בפיתה"). A name of two words that no dish has ("hot dog", "עוגת גבינה") is not answerable:
+ * it is never replaced by what each word alone names.
  */
-function parts(r: Request, data: AssistantData): Request[] {
-  if (r.craving.length < 2 || cravingMatches(data, r.craving).size) return [r];
-  // Each word in its best form ("ופלאפל" → "פלאפל", "وكولا" → "كولا"): the bare word first, a whole-word match ends the search.
-  const forms = r.craving.map((word) => {
+function answerable(p: Request, data: AssistantData): Request | undefined {
+  if (!p.craving.length || cravingMatches(data, p.craving).size) return p;
+  if (p.craving.length < 2) return undefined;
+  // Each word in its best form: the bare word first, a whole-word match ends the search.
+  const forms = p.craving.map((word) => {
     let form: string | undefined;
     let best = 4;
     for (const f of wordForms(word)) {
@@ -228,19 +236,41 @@ function parts(r: Request, data: AssistantData): Request[] {
     return form;
   });
   const named = forms.filter((f): f is string => !!f);
-  if (r.joined) return named.map((f) => ({ ...r, craving: [f] }));
-  if (named.length && named.length < forms.length && named.some(isDishWord)) return [{ ...r, craving: named }];
-  return [r];
+  return named.length && named.length < forms.length && named.some(isDishWord) ? { ...p, craving: named } : undefined;
+}
+
+interface Parts {
+  requests: Request[];
+  /** Craving words of things asked for that no place has ("hot dog" in "hot dog and fries"). */
+  missing: string[][];
+}
+
+/**
+ * What to look for: each thing asked for ("פיצה ושתייה קרה" is a pizza and a cold drink), made answerable.
+ * Things no place has are named, never swapped for look-alikes; when none is answerable the request stays
+ * whole, for the honest "not on the menu" answer.
+ */
+function parts(r: Request, data: AssistantData): Parts {
+  const groups = r.groups ?? [];
+  const raw = groups.length > 1 ? groups.map((g) => partOf(r, g, groups)) : [r];
+  const requests: Request[] = [];
+  const missing: string[][] = [];
+  for (const p of raw) {
+    const q = answerable(p, data);
+    if (q) requests.push(q);
+    else missing.push(p.craving);
+  }
+  return requests.length ? { requests, missing } : { requests: [r], missing: [] };
 }
 
 /** Dishes that fit, over all parts (unranked: for "is there anything" checks). */
 function candidates(r: Request, data: AssistantData, f: Filters = ALL_FILTERS): Candidate[] {
-  return parts(r, data).flatMap((p) => retrieve(p, data, f));
+  return parts(r, data).requests.flatMap((p) => retrieve(p, data, f));
 }
 
 /** Ranked dishes for a request; parts take turns, so "פיצה עם קולה" shows both. Empty when nothing fits. */
 function rankedFor(r: Request, data: AssistantData, f: Filters = ALL_FILTERS): Hit[] {
-  const lists = parts(r, data).map((p) => rank(retrieve(p, data, f), p, data));
+  const lists = parts(r, data).requests.map((p) => rank(retrieve(p, data, f), p, data));
   if (lists.length === 1) return lists[0]!;
   const out: Hit[] = [];
   const seen = new Set<string>();
@@ -289,7 +319,7 @@ function mealAnswer(r: Request, ctx: Ctx): Answer {
   const seen = baskets.slice(0, r.page * MEAL_PAGE + page.length);
   return {
     kind: 'meal',
-    text: r.people !== undefined ? reply('meal', r.lang, { people: r.people }, seedOf(r, data)) : reply('mealBudget', r.lang, { budget: shekels(r.budgetAgorot ?? 0) }, seedOf(r, data)),
+    text: partialLine(r, ctx) ?? (r.people !== undefined ? reply('meal', r.lang, { people: r.people }, seedOf(r, data)) : reply('mealBudget', r.lang, { budget: shekels(r.budgetAgorot ?? 0) }, seedOf(r, data))),
     cards: page.map((basket) => ({ kind: 'meal', basket })),
     chips: refineChips(r, data, 'meal'),
     ...(baskets.length > (r.page + 1) * MEAL_PAGE ? { more: moreChip(r) } : {}),
@@ -426,11 +456,22 @@ function notOnMenu(r: Request, ctx: Ctx): Answer | undefined {
   // Never "nothing for X" while X names dishes (a filter blocks them; that is the blocked answer's job).
   if (!r.craving.length || cravingMatches(ctx.data, r.craving).size) return undefined;
   // Every word a known food, or a two-word name with a known food in it ("hot dog", "מרק עוף").
-  const known = r.craving.every(isKnownFood) || (r.craving.length > 1 && !r.joined && r.craving.some(isKnownFood));
+  const known = r.craving.every(isKnownFood) || (r.craving.length > 1 && r.craving.some(isKnownFood));
   if (!known) return undefined;
-  const typed = ctx.text.split(/\s+/).filter((w) => w && tokenize(w).some((t) => r.craving.includes(t)));
-  const label = (typed.length ? typed : r.craving).join(' ').replace(/[?!.,؟]+$/u, '');
+  const label = (r.groups?.length ? r.groups.map((g) => g.craving) : [r.craving]).map((w) => typedLabel(w, ctx.text)).join(', ');
   return { kind: 'blocked', text: reply('blockedTags', r.lang, { slot: label }, seedOf(r, ctx.data)), cards: [], chips: suggestionChips(r.lang, ctx).slice(0, 3), shown: NOTHING_SHOWN, request: r, understood: true };
+}
+
+/** The words as the customer typed them ("ice cream", not the folded "ice cream"/"עופ"). */
+function typedLabel(words: readonly string[], text: string): string {
+  const typed = text.split(/\s+/).filter((w) => w && tokenize(w).some((t) => words.includes(t) || words.includes(t.slice(1))));
+  return (typed.length ? typed : words).join(' ').replace(/[?!.,؟]+$/u, '');
+}
+
+/** The line over the cards: says which asked-for thing no place has ("No hot dog right now, but here's the rest:"). */
+function partialLine(r: Request, ctx: Ctx): string | undefined {
+  const { missing } = parts(r, ctx.data);
+  return missing.length ? reply('partial', r.lang, { missing: missing.map((m) => typedLabel(m, ctx.text)).join(', ') }, seedOf(r, ctx.data)) : undefined;
 }
 
 /** Some places are open, but what was asked for is at closed ones: name the first to open. */
@@ -477,11 +518,13 @@ function slotOrder(r: Request, p: Request | undefined): Slot[] {
 /** A wish of the tags slot: a dish tag, or "warm". */
 type Wish = DishTag | 'warm';
 const WARM_LABEL: Record<Lang, string> = { he: 'חם', ar: 'سخن', en: 'warm' };
-const wishesOf = (r: Request): Wish[] => [...(r.warm ? ['warm' as const] : []), ...r.tags];
+const wishesOf = (r: Request): Wish[] => [...(r.warm || r.groups?.some((g) => g.warm) ? ['warm' as const] : []), ...r.tags];
 function withoutWishes(r: Request, wishes: readonly Wish[]): Request {
+  const noWarm = wishes.includes('warm');
   const { warm: _w, ...rest } = r;
   const tags = r.tags.filter((t) => !wishes.includes(t));
-  return wishes.includes('warm') ? { ...rest, tags } : { ...r, tags };
+  const groups = r.groups?.map(({ warm, ...g }) => ({ ...g, tags: g.tags.filter((t) => !wishes.includes(t)), ...(warm && !noWarm ? { warm } : {}) }));
+  return { ...(noWarm ? rest : r), tags, ...(groups ? { groups } : {}) };
 }
 
 function blocked(r: Request, slot: Slot, data: AssistantData, tags: readonly Wish[] = wishesOf(r)): Answer {

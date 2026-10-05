@@ -65,10 +65,10 @@ export const NUMBER_WORDS = new Map<string, number>(
 );
 /** Filler words: dropped before the rest becomes the craving. "Meal" words are here too: "ארוחה ל-4" asks for a meal, not for a dish called meal (the people and budget make it a meal request). */
 export const STOP = set([
-  'משהו', 'אני', 'אנחנו', 'רוצה', 'רוצים', 'בא', 'לי', 'לנו', 'מה', 'יש', 'תן', 'תני', 'תנו', 'תביא', 'תביאו', 'אפשר', 'עם', 'של', 'את', 'גם', 'הכי', 'טוב', 'טובה', 'טעים', 'טעימה', 'בבקשה', 'היום', 'עכשיו', 'קצת', 'איזה', 'ממש', 'רק', 'בשביל', 'עבור', 'להזמין', 'הזמנה', 'לאכול', 'אוכל', 'מנה', 'מנות', 'ארוחה', 'ארוחת', 'ארוחות', 'לארוחה', 'צריך', 'אבל', 'מסעדה', 'מסעדות', 'תפריט', 'עצמי', 'משביע', 'משביעה', 'משביעים', 'מחפש', 'מחפשת', 'תמליץ', 'תמליצו', 'המלצה', 'מומלץ', 'או', 'על', 'זה', 'כן', 'היי', 'שלום', 'אהלן', 'תראה', 'תראו', 'במקום', 'ל', 'ב', 'ו', 'ה', 'מ', 'ש',
-  'something', 'some', 'i', 'im', 'we', 'want', 'wanna', 'would', 'like', 'me', 'us', 'give', 'get', 'please', 'pls', 'plz', 'good', 'tasty', 'nice', 'now', 'today', 'any', 'a', 'an', 'the', 'and', 'or', 'with', 'of', 'to', 'up', 'for', 'from', 'order', 'eat', 'food', 'dish', 'need', 'looking', 'recommend', 'hi', 'hello', 'hey', 'what', 'whats', 'is', 'are', 'there', 'do', 'you', 'have', 'can', 'could', 'in', 'at', 'my', 'our', 'show', 'instead', 'tonight', 'meal', 'meals', 'should', 'shall', 'on', 'about', 'ma', 'bade', 'filling', 'hearty', 'but', 'does', 'did', 'has', 'got', 'serve', 'serves', 'sell', 'sells', 'menu', 'restaurant', 'restaurants',
-  'شي', 'اشي', 'شيء', 'بدي', 'بدنا', 'ابغى', 'ابي', 'عايز', 'اريد', 'في', 'فيه', 'من', 'مع', 'هلا', 'هسا', 'اليوم', 'لو', 'سمحت', 'طيب', 'زاكي', 'انا', 'احنا', 'ممكن', 'شو', 'ايش', 'عندكم', 'عندك', 'اكل', 'اطلب', 'نطلب', 'عشان', 'ل', 'و', 'او', 'يا', 'مرحبا', 'اهلا', 'هاي', 'بس', 'منيح', 'وريني', 'بدل', 'وجبة', 'وجبه', 'وجبات', 'مشبع', 'بشبع', 'لكن', 'على', 'عن', 'ما', 'مطعم', 'منيو', 'الاكثر',
-  'bde', 'bidi', 'badde', 'shi', 'eshi', 'ishi', 'shu', 'sho', 'shou', 'w', 'wa', 'bdi', 'badi', 'badna', 'ana', 'fi', 'hala', 'halla', 'wajbe', 'wajba', 'wajbeh', 'wajbi',
+  'משהו', 'אני', 'אנחנו', 'רוצה', 'רוצים', 'בא', 'לי', 'לנו', 'מה', 'יש', 'תן', 'תני', 'תנו', 'תביא', 'תביאו', 'אפשר', 'עם', 'של', 'את', 'גם', 'הכי', 'טוב', 'טובה', 'טעים', 'טעימה', 'בבקשה', 'היום', 'עכשיו', 'קצת', 'איזה', 'ממש', 'רק', 'בשביל', 'עבור', 'להזמין', 'הזמנה', 'לאכול', 'אוכל', 'מנה', 'מנות', 'ארוחה', 'ארוחת', 'ארוחות', 'לארוחה', 'צריך', 'אקסטרה', 'תוספת', 'אבל', 'מסעדה', 'מסעדות', 'תפריט', 'עצמי', 'משביע', 'משביעה', 'משביעים', 'מחפש', 'מחפשת', 'תמליץ', 'תמליצו', 'המלצה', 'מומלץ', 'או', 'על', 'זה', 'כן', 'היי', 'שלום', 'אהלן', 'תראה', 'תראו', 'במקום', 'ל', 'ב', 'ו', 'ה', 'מ', 'ש',
+  'something', 'some', 'i', 'im', 'we', 'want', 'wanna', 'would', 'like', 'me', 'us', 'give', 'get', 'please', 'pls', 'plz', 'good', 'tasty', 'nice', 'now', 'today', 'any', 'a', 'an', 'the', 'and', 'or', 'with', 'of', 'to', 'up', 'for', 'from', 'order', 'eat', 'food', 'dish', 'need', 'looking', 'recommend', 'hi', 'hello', 'hey', 'what', 'whats', 'is', 'are', 'there', 'do', 'you', 'have', 'can', 'could', 'in', 'at', 'my', 'our', 'show', 'instead', 'tonight', 'meal', 'meals', 'should', 'shall', 'extra', 'on', 'about', 'ma', 'bade', 'filling', 'hearty', 'but', 'does', 'did', 'has', 'got', 'serve', 'serves', 'sell', 'sells', 'menu', 'restaurant', 'restaurants',
+  'شي', 'اشي', 'شيء', 'بدي', 'بدنا', 'ابغى', 'ابي', 'عايز', 'اريد', 'في', 'فيه', 'من', 'مع', 'هلا', 'هسا', 'اليوم', 'لو', 'سمحت', 'طيب', 'زاكي', 'انا', 'احنا', 'ممكن', 'شو', 'ايش', 'عندكم', 'عندك', 'اكل', 'اطلب', 'نطلب', 'عشان', 'ل', 'و', 'او', 'يا', 'مرحبا', 'اهلا', 'هاي', 'بس', 'منيح', 'وريني', 'بدل', 'وجبة', 'وجبه', 'وجبات', 'مشبع', 'بشبع', 'لكن', 'اكسترا', 'زيادة', 'على', 'عن', 'ما', 'مطعم', 'منيو', 'الاكثر',
+  'bde', 'bidi', 'badde', 'shi', 'eshi', 'ishi', 'shu', 'sho', 'shou', 'w', 'wa', 'ma3', 'bdi', 'badi', 'badna', 'ana', 'fi', 'hala', 'halla', 'wajbe', 'wajba', 'wajbeh', 'wajbi',
 ]);
 
 /**
@@ -105,8 +105,14 @@ export const COLD = phrases(['קר', 'קרה', 'קרים', 'קרות', 'cold', '
 /** Words that name a drink, so a cold word next to them asks for a cold drink. */
 export const DRINK_WORDS = set([...TYPE_TERMS.drinks, ...TAG_TERMS.cold_drink, ...TAG_TERMS.hot_drink, 'שתייה', 'مشروبات', 'drinks', 'ahwe', '2ahwe', 'qahwa']);
 
-/** Words that join two things asked for: "פיצה עם קולה", "pizza and sushi", "حمص وفلافل" (also the ו/و prefix). */
-export const JOIN = set(['and', 'or', '&', '+', 'plus', 'with', 'w', 'wa', 'ו', 'و', 'או', 'עם', 'مع', 'او']);
+/** Words that always join two things asked for: "pizza and sushi", "ice cream or cake" (also the ו/و prefix). */
+export const JOIN = set(['and', 'or', '&', '+', 'plus', 'w', 'wa', 'ו', 'و', 'או', 'او']);
+/** "With": a second thing when a dish, drink or side follows ("שווארמה עם צ׳יפס"), else a topping ("פיצה עם גבינה"). */
+export const WITH = set(['עם', 'with', 'مع', 'ma3']);
+/** "And something…": "פיצה ומשהו לשתות". */
+export const SOMETHING = set(['משהו', 'something', 'اشي', 'شي', 'eshi']);
+/** Diet wishes hold for the whole message; taste and temperature wishes belong to the thing they were said with. */
+export const DIET_TAGS: readonly DishTag[] = ['vegan', 'vegetarian', 'gluten_free', 'kids'];
 
 /**
  * Wishes that name a whole kind of dish with a verb or a loose word ("משהו לשתות", "בא לי לנשנש",

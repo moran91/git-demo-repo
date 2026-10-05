@@ -5,10 +5,8 @@
 import { expandQueryWord, matchScore, parseQuery } from '../search/index.js';
 import type { DishType } from '../dishIndex.js';
 import type { FulfillmentMode } from '../types.js';
-import { DISH_TYPE_WORDS, type AssistantData, type AssistantDish, type AssistantPlace } from './data.js';
-import { TYPE_TERMS } from './tags.js';
-import { foldAll, wordForms } from './text.js';
-import type { Request } from './understand.js';
+import type { AssistantData, AssistantDish, AssistantPlace } from './data.js';
+import { isKnownFood, type Request } from './understand.js';
 import { CRAVING_FAMILIES } from './vocab.js';
 
 export interface Filters {
@@ -74,19 +72,6 @@ function cravingVariants(craving: readonly string[]): Variant[] {
     for (const m of [...singulars(w), ...members]) out.push({ text: [...craving.slice(0, i), m, ...craving.slice(i + 1)].join(' '), needs: expandQueryWord(m) });
   });
   return out;
-}
-
-/** Words that name a kind of dish ("פיצה", "pizza", "קינוחים"), from the tagger and the search type words. */
-const TYPE_WORDS = new Set(foldAll([...Object.values(TYPE_TERMS).flat(), ...Object.values(DISH_TYPE_WORDS).flatMap((w) => w.split(' '))]));
-
-/** A word naming a kind of dish ("שווארמה", "pizza"). */
-export function isDishWord(word: string): boolean {
-  return wordForms(word).some((f) => TYPE_WORDS.has(f));
-}
-
-/** A word the food word list or the dish types know ("בירה", "water", "pizza"): not a typo, so it never stands for a dish that only sounds like it. */
-export function isKnownFood(word: string): boolean {
-  return isDishWord(word) || wordForms(word).some((f) => expandQueryWord(f).length > 1);
 }
 
 const strongMemo = new WeakMap<AssistantData, Map<string, number>>();

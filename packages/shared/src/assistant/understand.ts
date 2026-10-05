@@ -5,8 +5,9 @@
  * with wishes but no craving of its own refines the previous request ("יותר זול", "ל-6", "בלי בשר").
  */
 import { normalizeSearch } from '../dishIndex.js';
-import { LEXICON, matchScore, parseQuery, prepareFields, type PreparedFields } from '../search/index.js';
+import { LEXICON, expandQueryWord, matchScore, parseQuery, prepareFields, type PreparedFields } from '../search/index.js';
 import type { FulfillmentMode, Localized } from '../types.js';
+import { DISH_TYPE_WORDS } from './data.js';
 import { DISH_TAGS, PEOPLE_TERMS, TAG_MATCHERS, TYPE_TERMS, type DishTag } from './tags.js';
 import { foldAll, isIn, tokenize, uniq, wordForms } from './text.js';
 import * as V from './vocab.js';
@@ -35,14 +36,24 @@ export interface Request {
   cheap?: boolean;
   /** "Something warm": a hot dish or drink (no cold drinks, salads, sushi or desserts). A wish of the tags slot. */
   warm?: boolean;
-  /** The craving words were joined ("פיצה עם קולה", "pizza and sushi"): two things, so each may be answered alone. */
-  joined?: boolean;
+  /**
+   * Two or more things asked for at once ("פיצה ושתייה קרה", "hot dog and fries"), split where they were
+   * joined. `craving` is all their words; each group keeps its own words and its taste/temperature wishes.
+   */
+  groups?: CravingGroup[];
   mode?: FulfillmentMode;
   placeBranchIds?: string[];
   meal?: Meal;
   shortcut?: Shortcut;
   page: number;
   lang: Lang;
+}
+
+export interface CravingGroup {
+  craving: string[];
+  /** Wishes said with this thing only (diet wishes stay on the whole request). */
+  tags: DishTag[];
+  warm?: boolean;
 }
 
 export interface PlaceName {
@@ -63,6 +74,21 @@ export interface Previous {
 type Refine = 'more' | 'other' | 'otherPlace' | 'cheaper';
 
 const PEOPLE = new Set(foldAll(PEOPLE_TERMS));
+/** Words that name a kind of dish ("פיצה", "pizza", "קינוחים"), from the tagger and the search type words. */
+const TYPE_WORDS = new Set(foldAll([...Object.values(TYPE_TERMS).flat(), ...Object.values(DISH_TYPE_WORDS).flatMap((w) => w.split(' '))]));
+
+/** A word naming a kind of dish ("שווארמה", "pizza", "צ׳יפס", "קולה"). */
+export function isDishWord(word: string): boolean {
+  return wordForms(word).some((f) => TYPE_WORDS.has(f));
+}
+
+/** Exactly this word is known, without taking a prefix off ("וופל", "وافل" are waffles, not "and …"). */
+const knownExact = (w: string): boolean => TYPE_WORDS.has(w) || expandQueryWord(w).length > 1;
+
+/** A word the food word list or the dish types know ("בירה", "water", "pizza"): not a typo, so it never stands for a dish that only sounds like it. */
+export function isKnownFood(word: string): boolean {
+  return wordForms(word).some(knownExact);
+}
 const FOOD_WORDS = new Set([...LEXICON.flat(), ...Object.values(TYPE_TERMS).flat()].map((w) => normalizeSearch(w)));
 
 export function emptyRequest(lang: Lang): Request {
@@ -112,8 +138,18 @@ export function understand(text: string, places: readonly PlaceName[], prev?: Pr
   if (eat(tokens, used, V.USUAL)) r.shortcut = 'usual';
   else if (eat(tokens, used, V.SURPRISE)) r.shortcut = 'surprise';
   else if (eat(tokens, used, V.DEALS)) r.shortcut = 'deals';
+  // Where each wish was said, so a wish belongs to the thing it was said with ("פיצה ושתייה קרה").
+  const marks: Mark[] = [];
+  const wish = (at: number, m: Omit<Mark, 'at'>): void => {
+    marks.push({ at, ...m });
+    if (m.tag) addTo(r.tags, m.tag);
+    if (m.warm) r.warm = true;
+  };
   // 2. Multi-word wishes before negation: "ללא גלוטן" is a wish, not an exclusion.
-  for (const [tag, list] of V.REQUEST_TAGS) if (eat(tokens, used, list.filter((p) => p.length > 1))) addTo(r.tags, tag);
+  for (const [tag, list] of V.REQUEST_TAGS) {
+    const at = eatStart(tokens, used, list.filter((p) => p.length > 1));
+    if (at >= 0) wish(at, { tag });
+  }
   // 2b. "No more than 100" is a budget ceiling, not an exclusion of "more".
   const capEnd = eatAt(tokens, used, V.NO_MORE);
   if (capEnd >= 0) budgetEnds.add(capEnd);
@@ -129,14 +165,13 @@ export function understand(text: string, places: readonly PlaceName[], prev?: Pr
   for (const [mode, list] of V.MODES) if (!r.mode && eat(tokens, used, list)) r.mode = mode;
   for (const [meal, list] of V.MEALS) if (!r.meal && eat(tokens, used, list)) r.meal = meal;
   // 7. Single-word wishes, "something warm", and words naming a whole kind of dish ("משהו לשתות").
-  for (const [tag, list] of V.REQUEST_TAGS) while (eat(tokens, used, list)) addTo(r.tags, tag);
-  while (eat(tokens, used, V.WARM)) r.warm = true;
-  let cold = false;
-  while (eat(tokens, used, V.COLD)) cold = true;
-  const kinds: string[] = [];
-  for (const [word, list] of V.TYPE_WISHES) while (eat(tokens, used, list)) addTo(kinds, word[lang]);
+  for (const [tag, list] of V.REQUEST_TAGS) for (let at = eatStart(tokens, used, list); at >= 0; at = eatStart(tokens, used, list)) wish(at, { tag });
+  for (let at = eatStart(tokens, used, V.WARM); at >= 0; at = eatStart(tokens, used, V.WARM)) wish(at, { warm: true });
+  for (let at = eatStart(tokens, used, V.COLD); at >= 0; at = eatStart(tokens, used, V.COLD)) marks.push({ at, cold: true });
+  for (const [word, list] of V.TYPE_WISHES) for (let at = eatStart(tokens, used, list); at >= 0; at = eatStart(tokens, used, list)) marks.push({ at, kind: word[lang] });
+  // 7b. Where two things are joined, and "with" a topping ("פיצה עם גבינה": cheese pizza, one thing).
+  const cuts = joinerCuts(tokens, used, wish);
   // 8. Filler (also with a prefix: "ומשביע"), and hunger words ("רעב", "what's open"), which ask for ideas, not a dish.
-  const joiner = tokens.some((t, i) => !used[i] && V.JOIN.has(t));
   tokens.forEach((t, i) => {
     if (!used[i] && (isIn(t, V.STOP) || isIn(t, V.HUNGRY))) used[i] = true;
   });
@@ -144,9 +179,15 @@ export function understand(text: string, places: readonly PlaceName[], prev?: Pr
   const placeIds = findPlaces(tokens, used, places);
   if (placeIds) r.placeBranchIds = placeIds;
   // 10. The rest is the craving, unless it is only "more" or "something else".
-  r.craving = [...tokens.filter((_, i) => !used[i]), ...kinds.flatMap((w) => tokenize(w))];
-  if (r.craving.length > 1 && (joiner || r.craving.slice(1).some(andPrefixed))) r.joined = true;
-  if (cold && ((!r.craving.length && !r.tags.length) || r.craving.some((w) => isIn(w, V.DRINK_WORDS)))) addTo(r.tags, 'cold_drink');
+  const groups = splitGroups(tokens, used, marks, cuts);
+  if (groups.length > 1) {
+    r.groups = groups;
+    r.craving = groups.flatMap((g) => g.craving);
+    for (const g of groups) for (const t of g.tags) addTo(r.tags, t);
+  } else {
+    r.craving = [...tokens.filter((_, i) => !used[i]), ...marks.flatMap((m) => (m.kind ? tokenize(m.kind) : []))];
+    if (marks.some((m) => m.cold) && coldIsDrink(r.craving, r.tags)) addTo(r.tags, 'cold_drink');
+  }
   if (r.craving.length && r.craving.every((w) => V.MORE.has(w))) {
     r.craving = [];
     refine = refine ?? 'more';
@@ -197,16 +238,25 @@ function mergeWithPrevious(r: Request, prev: Previous, refine: Refine | undefine
   return m;
 }
 
-/** Consumes the first phrase of `list` found in the tokens; returns the index of its last token, or -1. */
-function eatAt(tokens: string[], used: boolean[], list: Phrase[]): number {
+/** Consumes the first phrase of `list` found in the tokens; returns the index of its first token, or -1. */
+function eatStart(tokens: string[], used: boolean[], list: Phrase[]): number {
   for (const p of list) {
     for (let i = 0; i + p.length <= tokens.length; i++) {
       const hit = p.every((w, j) => !used[i + j] && (j === 0 ? wordForms(tokens[i]!).includes(w) : tokens[i + j] === w));
       if (hit) {
         for (let j = 0; j < p.length; j++) used[i + j] = true;
-        return i + p.length - 1;
+        return i;
       }
     }
+  }
+  return -1;
+}
+
+/** Consumes the first phrase of `list` found in the tokens; returns the index of its last token, or -1. */
+function eatAt(tokens: string[], used: boolean[], list: Phrase[]): number {
+  for (const p of list) {
+    const i = eatStart(tokens, used, [p]);
+    if (i >= 0) return i + p.length - 1;
   }
   return -1;
 }
@@ -392,6 +442,103 @@ function findPlaces(tokens: string[], used: boolean[], places: readonly PlaceNam
     }
   }
   return undefined;
+}
+
+interface Mark {
+  at: number;
+  tag?: DishTag;
+  warm?: boolean;
+  cold?: boolean;
+  /** A dish-type word asked for by a verb ("לשתות" → שתייה). */
+  kind?: string;
+}
+
+/** A lone cold word asks for a cold drink when nothing else is asked for, or beside a drink ("קפה קר"); beside a dish it is how the dish is served. */
+function coldIsDrink(craving: readonly string[], tags: readonly DishTag[]): boolean {
+  return (!craving.length && !tags.length) || craving.some((w) => isIn(w, V.DRINK_WORDS));
+}
+
+/** A dish, drink or side ("שווארמה עם צ׳יפס", "pizza with cola"), so "with" adds a second thing. */
+const isSecondThing = (t: string): boolean => isDishWord(t) || isIn(t, V.DRINK_WORDS);
+
+/** "ופלאפל", "وكولا", "ושתייה", "ומשהו": an "and" prefix, but never on a word known as itself ("וופל", "וניל"). */
+function andJoins(t: string): boolean {
+  if (!andPrefixed(t) || knownExact(t)) return false;
+  const rest = t.slice(1);
+  return isKnownFood(rest) || isDishWord(rest) || V.SOMETHING.has(rest);
+}
+
+interface Cuts {
+  /** Joiner words ("and", "with" before a side): a new thing starts after them. */
+  words: Set<number>;
+}
+
+/**
+ * Finds the joiner words. "With" before a dish, drink or side joins; before anything else it is a topping:
+ * the words after it are taken as that dish's wishes ("עם גבינה" → cheese) or dropped ("with mushrooms").
+ */
+function joinerCuts(tokens: string[], used: boolean[], wish: (at: number, m: Omit<Mark, 'at'>) => void): Cuts {
+  const words = new Set<number>();
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i]!;
+    if (used[i]) continue;
+    if (V.JOIN.has(t)) {
+      words.add(i);
+      continue;
+    }
+    if (!V.WITH.has(t)) continue;
+    const next = tokens.findIndex((x, j) => j > i && !used[j] && !isIn(x, V.STOP));
+    if (next >= 0 && isSecondThing(tokens[next]!)) {
+      words.add(i);
+      continue;
+    }
+    for (let k = i + 1; k < tokens.length; k++) {
+      const x = tokens[k]!;
+      if (V.JOIN.has(x) || V.WITH.has(x) || andJoins(x)) break;
+      if (used[k] || isIn(x, V.STOP)) continue;
+      if (isDishWord(x)) break;
+      const tag = tagOf(x);
+      used[k] = true;
+      if (tag) wish(k, { tag });
+    }
+  }
+  return { words };
+}
+
+/**
+ * The craving split into the things asked for, cut at joiner words and at an "and" prefix. Each group
+ * gets the words, dish-type wishes and taste/temperature wishes said inside it. One group (or none) means one thing.
+ */
+function splitGroups(tokens: string[], used: boolean[], marks: readonly Mark[], cuts: Cuts): CravingGroup[] {
+  const starts = new Set(marks.map((m) => m.at));
+  const groupOf: number[] = [];
+  const word: string[] = [];
+  let g = 0;
+  tokens.forEach((t, i) => {
+    if (cuts.words.has(i)) {
+      groupOf.push(-1);
+      word.push('');
+      g++;
+      return;
+    }
+    // A new thing starts at an "and"-prefixed word that is a craving word, starts a wish, or is "ומשהו".
+    const prefixed = i > 0 && (!used[i] || starts.has(i) || V.SOMETHING.has(t.slice(1))) && andJoins(t);
+    if (prefixed) g++;
+    groupOf.push(g);
+    word.push(prefixed ? t.slice(1) : t);
+  });
+  const out: CravingGroup[] = [];
+  for (let k = 0; k <= g; k++) {
+    const idx = tokens.map((_, i) => i).filter((i) => groupOf[i] === k);
+    const mine = marks.filter((m) => groupOf[m.at] === k);
+    const craving = [...idx.filter((i) => !used[i]).map((i) => word[i]!), ...mine.flatMap((m) => (m.kind ? tokenize(m.kind) : []))];
+    const tags = uniq(mine.flatMap((m) => (m.tag && !V.DIET_TAGS.includes(m.tag) ? [m.tag] : [])));
+    if (mine.some((m) => m.cold) && coldIsDrink(craving, tags)) tags.push('cold_drink');
+    const warm = mine.some((m) => m.warm);
+    if (!craving.length && !tags.length && !warm) continue;
+    out.push({ craving, tags, ...(warm ? { warm: true } : {}) });
+  }
+  return out;
 }
 
 function addTo<T>(list: T[], v: T): void {
