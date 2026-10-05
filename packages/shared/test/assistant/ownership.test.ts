@@ -70,6 +70,20 @@ describe('resolveAutoFields', () => {
   });
 });
 
+describe('owner-owned fields survive an omitted empty autoFields', () => {
+  it('a cleared type stored with autoFields omitted but serves set stays the owner’s', () => {
+    const first = resolveAutoFields({ dishType: 'none', tags: ['kids'], serves: 3 }, undefined, suggested);
+    expect(first.autoFields).toEqual({});
+    const stored = { ...first.values }; // autoFields {} omitted by the writer
+    expect('autoFields' in stored).toBe(false);
+    expect(isMachineOwned(stored, 'dishType')).toBe(false);
+    expect(isMachineOwned(stored, 'tags')).toBe(false);
+    const r = resolveAutoFields({}, stored, suggested);
+    expect(r.values).toEqual({ tags: ['kids'], serves: 3 });
+    expect(r.autoFields).toEqual({});
+  });
+});
+
 describe('isMachineOwned', () => {
   it('older products (no autoFields) are machine-owned only where empty', () => {
     expect(isMachineOwned({ dishType: 'pizza' }, 'dishType')).toBe(false);

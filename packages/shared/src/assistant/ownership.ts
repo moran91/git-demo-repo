@@ -9,7 +9,12 @@
 import type { DishType } from '../dishIndex.js';
 import type { AutoTagResult, DishTag } from './tags.js';
 
-/** The marks: a key present means "this stored value is still the machine's". */
+/**
+ * The marks: a key present means "this stored value is still the machine's".
+ * Contract: once a product has been through resolveAutoFields it always has `serves`, so a product with
+ * `serves` but no `autoFields` is an owner who owns every field (empty marks may be omitted when stored);
+ * only a product with neither is legacy. Writers may therefore omit an empty `autoFields`, but must always store `serves`.
+ */
 export interface AutoFields {
   tags?: DishTag[];
   serves?: number;
@@ -38,11 +43,18 @@ export const same = (a: unknown, b: unknown) => JSON.stringify(Array.isArray(a) 
 const norm = (k: AutoKey, v: unknown) => (k === 'dishType' ? (v ?? 'none') : k === 'tags' ? (v ?? []) : v);
 
 export function isMachineOwned(p: Ownable, key: AutoKey): boolean {
-  if (!p.autoFields) return p[key] === undefined;
-  const mark = p.autoFields[key];
+  // Legacy = never saved through resolveAutoFields (which always stores serves): empty fields are the machine's.
+  if (!p.autoFields && p.serves === undefined) return p[key] === undefined;
+  const mark = p.autoFields?.[key];
   return mark !== undefined && same(norm(key, p[key]), norm(key, mark));
 }
 
+/**
+ * Decides each field's value and mark when a product is saved. `existing` is the stored product (undefined for a new one).
+ * Omitted (undefined) input keeps owner-owned values and re-derives machine-owned ones from `suggested`; a sent value
+ * becomes the owner's unless it equals the suggestion. The caller always stores `values` (it always includes `serves`)
+ * and may omit an empty `autoFields`: `serves` without `autoFields` reads as "owner owns everything", never as legacy.
+ */
 export function resolveAutoFields(input: AutoInput, existing: Ownable | undefined, suggested: AutoTagResult): { values: AutoValues; autoFields: AutoFields } {
   const values: Record<string, unknown> = {};
   const autoFields: Record<string, unknown> = {};
