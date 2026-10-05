@@ -41,6 +41,11 @@ export interface DishIndexDoc {
   updatedAt: string;
 }
 
+/** A size, a required option or a weight must be picked, so quick add opens the product sheet instead of adding directly. */
+export function needsChoice(p: Pick<Product, 'variants' | 'modifierGroups' | 'pricingMode'>): boolean {
+  return p.variants.length > 0 || p.modifierGroups.some((g) => g.required || g.minSelect > 0) || p.pricingMode === 'weight';
+}
+
 export function toDishIndexEntry(p: Product): DishIndexEntry {
   const inStock = !p.trackInventory || (p.stockQty ?? 0) > 0 || (p.variants.length > 0 && p.variants.some((v) => (v.stockQty ?? 0) > 0));
   const sizes = p.variants.filter((v) => v.available && (!p.trackInventory || v.stockQty === undefined || v.stockQty > 0));
@@ -50,7 +55,7 @@ export function toDishIndexEntry(p: Product): DishIndexEntry {
     priceAgorot: price,
     fromPrice: p.variants.length > 1,
     available: p.available && inStock,
-    needsChoice: p.variants.length > 0 || p.modifierGroups.some((g) => g.required || g.minSelect > 0) || p.pricingMode === 'weight',
+    needsChoice: needsChoice(p),
     sortOrder: p.sortOrder,
   };
   // Firestore rejects undefined, so optional fields are only set when present.

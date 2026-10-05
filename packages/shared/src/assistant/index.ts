@@ -13,3 +13,4 @@ export * from './replies.js';
 export * from './respond.js';
 export * from './home.js';
 export * from './cards.js';
+export * from './client.js';

@@ -4,33 +4,39 @@ import type { DishIndexDoc } from '@qareeb/shared';
 import { db } from '@/lib/firebase';
 
 /**
- * Live dish indexes (`publicBranches/{id}/index/dishes`) for the given restaurant branches: one
- * document per place, so the home's search and chips cost one read per place, not one per dish.
- * Sold-out and switched-off dishes update in place through the listeners.
+ * Live per-branch index documents (`publicBranches/{id}/index/{dishes|deals|pairs}`): one document per
+ * place, so the home and the assistant cost one read per place, not one per dish. Sold-out and
+ * switched-off dishes update in place through the listeners. A missing or unreadable document just
+ * leaves that place out.
  */
-export function useDishIndexes(branchIds: string[]): { indexes: Map<string, DishIndexDoc>; loading: boolean } {
+export function useBranchIndexDocs<T>(branchIds: string[], docId: 'dishes' | 'deals' | 'pairs'): { docs: Map<string, T>; loading: boolean } {
   const key = [...branchIds].sort().join(',');
-  const [state, setState] = useState<{ key: string; docs: Record<string, DishIndexDoc | null> }>({ key: '', docs: {} });
+  const [state, setState] = useState<{ key: string; docs: Record<string, T | null> }>({ key: '', docs: {} });
   useEffect(() => {
     const ids = key ? key.split(',') : [];
+    const stateKey = `${docId}|${key}`;
     const unsubs = ids.map((id) =>
       onSnapshot(
-        doc(db, `publicBranches/${id}/index/dishes`),
-        (snap) => setState((s) => ({ key, docs: { ...(s.key === key ? s.docs : {}), [id]: snap.exists() ? (snap.data() as DishIndexDoc) : null } })),
-        // A missing or unreadable index just leaves that place out of dish search.
-        () => setState((s) => ({ key, docs: { ...(s.key === key ? s.docs : {}), [id]: null } })),
+        doc(db, `publicBranches/${id}/index/${docId}`),
+        (snap) => setState((s) => ({ key: stateKey, docs: { ...(s.key === stateKey ? s.docs : {}), [id]: snap.exists() ? (snap.data() as T) : null } })),
+        () => setState((s) => ({ key: stateKey, docs: { ...(s.key === stateKey ? s.docs : {}), [id]: null } })),
       ),
     );
     return () => unsubs.forEach((u) => u());
-  }, [key]);
+  }, [key, docId]);
   return useMemo(() => {
     const ids = key ? key.split(',') : [];
-    const docs = state.key === key ? state.docs : {};
-    const indexes = new Map<string, DishIndexDoc>();
+    const docs = state.key === `${docId}|${key}` ? state.docs : {};
+    const out = new Map<string, T>();
     for (const id of ids) {
       const d = docs[id];
-      if (d) indexes.set(id, d);
+      if (d) out.set(id, d);
     }
-    return { indexes, loading: ids.some((id) => !(id in docs)) };
-  }, [state, key]);
+    return { docs: out, loading: ids.some((id) => !(id in docs)) };
+  }, [state, key, docId]);
+}
+
+export function useDishIndexes(branchIds: string[]): { indexes: Map<string, DishIndexDoc>; loading: boolean } {
+  const r = useBranchIndexDocs<DishIndexDoc>(branchIds, 'dishes');
+  return { indexes: r.docs, loading: r.loading };
 }
