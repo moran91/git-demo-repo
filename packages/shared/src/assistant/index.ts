@@ -7,3 +7,5 @@ export * from './profile.js';
 export * from './data.js';
 export * from './retrieve.js';
 export * from './rank.js';
+export * from './mealBuilder.js';
+export * from './upsell.js';
