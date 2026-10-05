@@ -6,7 +6,7 @@ import { handled, fail } from '../lib/errors.js';
 import { parse } from '../lib/validate.js';
 import { requireCaller, requireMembership } from '../lib/auth.js';
 import { enqueueTranslationInTx } from './translation.js';
-import { isPubliclyVisible, projectCategoryInTx, projectComboInTx, projectDishIndexEntry, projectProductInTx, projectPromotionInTx, reprojectCatalog, toPublicProduct } from '../lib/projections.js';
+import { isPubliclyVisible, projectCategoryInTx, projectComboInTx, projectDishIndexEntry, projectProductInTx, projectPromotionInTx, removeDealEntry, reprojectCatalog, toPublicProduct } from '../lib/projections.js';
 import { writeAudit } from '../lib/audit.js';
 import { deleteImageWithVariants } from '../lib/images.js';
 
@@ -592,6 +592,7 @@ export const deleteCombo = onCall(opts, handled(async (req: CallableRequest<unkn
     if (!snap.exists) fail('not_found');
     const combo = snap.data() as Combo;
     imagePath = combo.imagePath;
+    await removeDealEntry(tx, input.branchId, 'combos', input.comboId); // reads, so before any write
     tx.delete(ref);
     tx.delete(col.publicCombos(input.branchId).doc(input.comboId));
     writeAudit(tx, { actorUid: c.uid, action: 'combo.delete', targetType: 'combo', targetId: `${input.branchId}/${input.comboId}`, before: combo, after: undefined });
@@ -688,6 +689,7 @@ export const removePromotion = onCall(opts, handled(async (req: CallableRequest<
     if (!snap.exists) fail('not_found');
     const promotion = snap.data() as Promotion;
     imagePath = promotion.imagePath;
+    await removeDealEntry(tx, input.branchId, 'promotions', input.promotionId); // reads, so before any write
     tx.delete(ref);
     tx.delete(col.publicPromotions(input.branchId).doc(input.promotionId));
     writeAudit(tx, { actorUid: c.uid, action: 'promotion.remove', targetType: 'promotion', targetId: `${input.branchId}/${input.promotionId}`, before: promotion, after: undefined });

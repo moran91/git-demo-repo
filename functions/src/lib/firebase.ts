@@ -69,6 +69,10 @@ export const col = {
   /** One pending machine-translation job per catalog document (latest save wins). */
   translationJobs: () => db.collection('translationJobs'),
   publicDishIndex: (branchId: string) => db.collection('publicBranches').doc(branchId).collection('index').doc('dishes'),
+  /** Active combos and promotions of a restaurant branch, for the assistant's deals. */
+  publicDealsIndex: (branchId: string) => db.collection('publicBranches').doc(branchId).collection('index').doc('deals'),
+  /** What customers add together at a branch, rebuilt nightly (domain/pairs.ts). */
+  publicPairsIndex: (branchId: string) => db.collection('publicBranches').doc(branchId).collection('index').doc('pairs'),
   orders: () => db.collection('orders'),
   order: (id: string) => db.collection('orders').doc(id),
   orderEvents: (orderId: string) => db.collection('orders').doc(orderId).collection('events'),
