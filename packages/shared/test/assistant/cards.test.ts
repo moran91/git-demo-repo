@@ -33,3 +33,17 @@ describe('resolveCard', () => {
     expect(resolveCard({ kind: 'dish', branchId: 'morano', productId: 'm-coke' }, changed)).toBeNull();
   });
 });
+
+describe('resolveCard after a combo member is removed', () => {
+  it('drops a deal or meal whose combo lost a product, and lists it on a usual', () => {
+    const morano = INDEXES.get('morano')!;
+    const { ['m-coke']: _gone, ...rest } = morano.dishes;
+    const changed = buildAssistantData({ now: NOW, places: PLACES, dishes: prepareDishes(PLACES, new Map([...INDEXES, ['morano', { ...morano, dishes: rest }]])), deals: DEALS });
+    expect(resolveCard({ kind: 'deal', branchId: 'morano', dealId: 'm-combo-pair' }, changed)).toBeNull();
+    const comboOnly: MealBasket = { ...basket, lines: [basket.lines[1]!] };
+    expect(resolveCard({ kind: 'meal', basket: comboOnly }, changed)).toBeNull();
+    const usual = { branchId: 'morano', businessId: 'b-morano', lines: [{ productId: 'm-combo-pair', comboId: 'm-combo-pair', quantity: 1, modifiers: [], name: { he: 'קומבו זוגי' } }], count: 3, lastAt: '', mode: 'pickup' as const };
+    expect(resolveCard({ kind: 'usual', usual }, changed)).toMatchObject({ missing: [{ he: 'קומבו זוגי' }] });
+    expect(resolveCard({ kind: 'deal', branchId: 'morano', dealId: 'm-promo-pasta' }, changed)).not.toBeNull();
+  });
+});

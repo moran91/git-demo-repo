@@ -2,29 +2,42 @@
 import type { FulfillmentMode } from '../types.js';
 import type { Lang, Meal } from './understand.js';
 
-export type ReplyKey = 'picks' | 'picksNow' | 'meal' | 'deals' | 'dealsNone' | 'usual' | 'usualNone' | 'usualSignedOut' | 'surprise' | 'place' | 'blocked' | 'closed' | 'closedAll' | 'noMore' | 'reprompt1' | 'reprompt2' | 'upsell' | 'greetMorning' | 'greetNoon' | 'greetEvening' | 'greetNight';
+/** One short sentence per wording. `closed`/`closedNoTime` name the place (no card does); blocked lines are per slot so each reads naturally. */
+export type ReplyKey =
+  | 'picks' | 'picksNow' | 'meal' | 'mealBudget' | 'deals' | 'dealsNone' | 'usual' | 'usualNone' | 'usualSignedOut' | 'surprise' | 'place'
+  | 'blockedTags' | 'blockedExclude' | 'blockedOther' | 'blockedBudget' | 'blockedMode' | 'blockedPlace'
+  | 'closed' | 'closedNoTime' | 'closedAll' | 'closedAllNoTime' | 'noMore' | 'reprompt1' | 'reprompt2' | 'upsell'
+  | 'greetMorning' | 'greetNoon' | 'greetEvening' | 'greetNight';
 
 const R: Record<ReplyKey, Record<Lang, readonly string[]>> = {
   picks: { he: ['הנה מה שמצאתי:', 'אלה נראים מתאימים:', 'מה דעתכם על אלה?'], ar: ['هاي اللي لقيته:', 'هدول ممكن يعجبوك:', 'شو رأيك بهدول؟'], en: ["Here's what I found:", 'These look right:', 'How about these?'] },
   picksNow: { he: ['כמה רעיונות לעכשיו:', 'מה שהולך עכשיו:', 'שווה לנסות:'], ar: ['شوية أفكار لهلا:', 'اقتراحات لهلا:', 'جرّب هدول:'], en: ['A few ideas for now:', 'Good picks right now:', 'Worth a try:'] },
   meal: { he: ['ארוחה ל־{people}:', 'ככה מסתדרים ל־{people}:', 'מוכן ל־{people}:'], ar: ['وجبة لـ{people}:', 'هيك بتزبط لـ{people}:', 'جاهزة لـ{people}:'], en: ['A meal for {people}:', "Here's how {people} can eat:", 'Ready for {people}:'] },
+  mealBudget: { he: ['ארוחה עד {budget}:', 'מה שנכנס ב־{budget}:', 'מוכן עד {budget}:'], ar: ['وجبة لحد {budget}:', 'اللي بيزبط بـ{budget}:', 'جاهزة لحد {budget}:'], en: ['A meal under {budget}:', 'What fits in {budget}:', 'Ready under {budget}:'] },
   deals: { he: ['המבצעים עכשיו:', 'יש מבצעים:', 'שווה עכשיו:'], ar: ['العروض هلا:', 'في عروض:', 'هاي العروض:'], en: ['Deals right now:', 'On offer now:', 'Worth it now:'] },
   dealsNone: { he: ['אין כרגע מבצע מתאים.', 'כרגע אין מבצע כזה.', 'לא מצאתי מבצע מתאים עכשיו.'], ar: ['ما في عرض مناسب هلا.', 'هلا ما في عرض هيك.', 'ما لقيت عرض مناسب هلا.'], en: ['No matching deal right now.', 'No deal like that at the moment.', "I couldn't find a matching deal."] },
   usual: { he: ['כמו תמיד?', 'הרגיל שלכם:', 'שוב את זה?'], ar: ['زي العادة؟', 'طلبك المعتاد:', 'نفس الطلب؟'], en: ['The usual?', 'Your usual:', 'Same again?'] },
-  usualNone: { he: ['עוד אין הזמנות קודמות. מה שאהוב עכשיו:', 'אחרי ההזמנה הראשונה אזכור. בינתיים:', 'עוד לא הזמנתם. אולי אחד מאלה?'], ar: ['ما في طلبات قبل. هاي الأكثر طلبًا:', 'بعد أول طلب بتذكّر. هلا:', 'لسا ما طلبت. يمكن واحد من هدول؟'], en: ['No past orders yet. Popular right now:', "I'll remember after your first order. For now:", 'Nothing ordered yet. Maybe one of these?'] },
-  usualSignedOut: { he: ['כדי שאזכור את הרגיל שלכם צריך להתחבר. בינתיים:', 'אחרי התחברות אזכור מה אתם אוהבים. בינתיים:', 'התחברו ואזכור את הרגיל. בינתיים:'], ar: ['سجّل دخول عشان أتذكّر طلبك. هلا:', 'بعد تسجيل الدخول بتذكّر شو بتحب. هلا:', 'سجّل دخول وبتذكّر العادة. هلا:'], en: ['Sign in so I can remember your usual. For now:', "Sign in and I'll remember what you like. For now:", "Sign in and I'll keep your usual. For now:"] },
+  usualNone: { he: ['אחרי ההזמנה הראשונה אזכור את הרגיל שלכם.', 'עוד אין לכם הזמנות קודמות.', 'עוד לא הזמנתם, אולי אחד מאלה?'], ar: ['بعد أول طلب بتذكّر طلبك المعتاد.', 'لسا ما في طلبات قبل.', 'لسا ما طلبت، يمكن واحد من هدول؟'], en: ["I'll remember your usual after your first order.", 'No past orders yet.', 'Nothing ordered yet, maybe one of these?'] },
+  usualSignedOut: { he: ['התחברו ואזכור את הרגיל שלכם.', 'אחרי התחברות אזכור מה אתם אוהבים.', 'התחברו כדי שאזכור את הרגיל.'], ar: ['سجّل دخول وبتذكّر طلبك المعتاد.', 'بعد تسجيل الدخول بتذكّر شو بتحب.', 'سجّل دخول عشان أتذكّر العادة.'], en: ["Sign in and I'll remember your usual.", "Sign in and I'll remember what you like.", 'Sign in so I can keep your usual.'] },
   surprise: { he: ['תסמכו עליי:', 'בחרתי בשבילכם:', 'נסו את זה:'], ar: ['ثق فيّ:', 'اخترتلك:', 'جرّب هاد:'], en: ['Trust me on this one:', 'I picked this for you:', 'Try this:'] },
-  place: { he: ['מה שווה כאן:', 'הכי מוזמנים כאן:', 'מה יש עכשיו:'], ar: ['أحسن اشي هون:', 'الأكثر طلبًا هون:', 'هاد اللي في هلا:'], en: ['Best here:', 'Most ordered here:', 'On now:'] },
-  blocked: { he: ['לא מצאתי עכשיו משהו עם {slot}.', 'אין כרגע משהו עם {slot}.', 'כרגע אין התאמה עם {slot}.'], ar: ['ما لقيت هلا اشي مع {slot}.', 'هلا ما في اشي مع {slot}.', 'ما في اشي هلا مع {slot}.'], en: ["I couldn't find anything with {slot}.", 'Nothing right now with {slot}.', 'Nothing matches {slot} right now.'] },
-  closed: { he: ['סגור עכשיו. נפתח ב־{time}.', 'נפתח ב־{time}.', 'סגור כרגע, נפתח ב־{time}.'], ar: ['مسكّر هلا، بيفتح الساعة {time}.', 'بيفتح الساعة {time}.', 'مسكّر هلا. بيفتح {time}.'], en: ['Closed now, opens at {time}.', 'Opens at {time}.', 'Closed right now, back at {time}.'] },
-  closedAll: { he: ['הכול סגור כרגע. הראשון נפתח ב־{time}.', 'כרגע אין מקום פתוח. נפתח ב־{time}.', 'הכול סגור עכשיו, נפתח ב־{time}.'], ar: ['كل اشي مسكّر هلا. أول محل بيفتح {time}.', 'ما في محل فاتح هلا. بيفتح {time}.', 'كله مسكّر، بيفتح {time}.'], en: ['Everything is closed now. First opens at {time}.', 'Nothing is open right now. Opens at {time}.', 'All closed now, opening at {time}.'] },
+  place: { he: ['מה יש כאן:', 'מכאן אפשר להזמין:', 'מה יש עכשיו:'], ar: ['شو في هون:', 'من هون فيك تطلب:', 'شو في هلا:'], en: ["Here's what they have:", 'On the menu here:', 'On now:'] },
+  blockedTags: { he: ['אין כרגע תוצאות עבור {slot}.', 'לא מצאתי עכשיו תוצאות עבור {slot}.', 'כרגע אין התאמה עבור {slot}.'], ar: ['ما في هلا نتائج لـ{slot}.', 'ما لقيت هلا نتائج لـ{slot}.', 'هلا ما في اشي مناسب لـ{slot}.'], en: ['Nothing matches “{slot}” right now.', 'No match for “{slot}” right now.', 'Nothing fits “{slot}” right now.'] },
+  blockedExclude: { he: ['אין כרגע משהו בלי {slot}.', 'לא מצאתי עכשיו משהו בלי {slot}.', 'כרגע אין משהו בלי {slot}.'], ar: ['ما في هلا اشي بدون {slot}.', 'ما لقيت هلا اشي بدون {slot}.', 'هلا ما في اشي بدون {slot}.'], en: ['Nothing without {slot} right now.', "I couldn't find anything without {slot}.", 'Nothing without {slot} at the moment.'] },
+  blockedOther: { he: ['לא מצאתי עוד משהו כזה.', 'אין עוד אפשרויות כאלה כרגע.', 'זה כל מה שיש כרגע.'], ar: ['ما لقيت اشي تاني هيك.', 'ما في خيارات تانية هيك هلا.', 'هاد كل اللي في هلا.'], en: ["I couldn't find anything else like that.", 'No other options like that right now.', "That's all there is right now."] },
+  blockedBudget: { he: ['אין כרגע משהו עד {slot}.', 'לא מצאתי עכשיו משהו עד {slot}.', 'כרגע אין משהו עד {slot}.'], ar: ['ما في هلا اشي لحد {slot}.', 'ما لقيت هلا اشي لحد {slot}.', 'هلا ما في اشي لحد {slot}.'], en: ['Nothing under {slot} right now.', "I couldn't find anything under {slot}.", 'Nothing within {slot} at the moment.'] },
+  blockedMode: { he: ['אין כרגע {slot} לזה.', 'לזה אין כרגע {slot}.', 'כרגע אין {slot} לזה.'], ar: ['ما في {slot} لهاد هلا.', 'هاد ما إلو {slot} هلا.', 'هلا ما في {slot} لهاد.'], en: ['No {slot} for that right now.', "That isn't available for {slot} right now.", 'No {slot} for this at the moment.'] },
+  blockedPlace: { he: ['אין את זה כרגע ב{slot}.', 'ב{slot} אין את זה כרגע.', 'לא מצאתי את זה ב{slot}.'], ar: ['هاد مش موجود هلا بـ{slot}.', 'ما لقيت هاد بـ{slot}.', 'بـ{slot} ما في هاد هلا.'], en: ['Not at {slot} right now.', "I couldn't find that at {slot}.", "{slot} doesn't have that right now."] },
+  closed: { he: ['{place} נפתח ב־{time}.', '{place} סגור עכשיו ונפתח ב־{time}.', '{place} ייפתח ב־{time}.'], ar: ['{place} بيفتح الساعة {time}.', '{place} مسكّر هلا وبيفتح {time}.', '{place} بيفتح {time}.'], en: ['{place} opens at {time}.', '{place} is closed now and opens at {time}.', '{place} is back at {time}.'] },
+  closedNoTime: { he: ['{place} סגור עכשיו.', '{place} סגור כרגע.', '{place} לא פתוח עכשיו.'], ar: ['{place} مسكّر هلا.', '{place} مش فاتح هلا.', '{place} مسكّر هلأ.'], en: ['{place} is closed now.', '{place} is closed right now.', "{place} isn't open now."] },
+  closedAll: { he: ['הכול סגור, נפתח ב־{time}.', 'אין כרגע מקום פתוח, הראשון נפתח ב־{time}.', 'הכול סגור עכשיו, נפתח ב־{time}.'], ar: ['كل اشي مسكّر، أول محل بيفتح {time}.', 'ما في محل فاتح هلا، أول واحد بيفتح {time}.', 'كله مسكّر، بيفتح {time}.'], en: ['Everything is closed, the first place opens at {time}.', 'Nothing is open now, the first place opens at {time}.', 'All closed now, opening at {time}.'] },
+  closedAllNoTime: { he: ['הכול סגור כרגע.', 'אין כרגע מקום פתוח.', 'הכול סגור עכשיו.'], ar: ['كل اشي مسكّر هلا.', 'ما في محل فاتح هلا.', 'كله مسكّر هلا.'], en: ['Everything is closed right now.', 'Nothing is open right now.', 'All closed for now.'] },
   noMore: { he: ['זה הכול.', 'אין עוד.', 'זה מה שיש.'], ar: ['هاد كل اشي.', 'ما في كمان.', 'هاد اللي في.'], en: ["That's all.", 'No more.', "That's everything."] },
-  reprompt1: { he: ['לא בטוח שהבנתי. אולי אחד מאלה?', 'הכי קרוב שמצאתי:', 'אפשר לנסות ככה:'], ar: ['مش متأكد إني فهمت. يمكن واحد من هدول؟', 'أقرب اشي لقيته:', 'جرّب هيك:'], en: ["Not sure I got that. Maybe one of these?", 'Closest I found:', 'Try one of these:'] },
+  reprompt1: { he: ['לא בטוח שהבנתי, אולי אחד מאלה?', 'לא הבנתי, אפשר לנסות ככה:', 'אפשר לנסות ככה:'], ar: ['مش متأكد إني فهمت، يمكن واحد من هدول؟', 'ما فهمت، جرّب هيك:', 'جرّب هيك:'], en: ['Not sure I got that, maybe one of these?', "I didn't get that, try this:", 'Try one of these:'] },
   reprompt2: { he: ['במה אפשר לעזור?', 'בואו נתחיל מכאן:', 'אפשר לבחור:'], ar: ['كيف بقدر أساعد؟', 'خلينا نبلش من هون:', 'اختار:'], en: ['How can I help?', "Let's start here:", 'Pick one:'] },
   upsell: { he: ['להוסיף גם את זה?', 'הולך טוב עם זה:', 'משהו ליד?'], ar: ['بدك تضيف هاد كمان؟', 'بيزبط معه:', 'اشي جنبه؟'], en: ['Add this too?', 'Goes well with it:', 'Something on the side?'] },
-  greetMorning: { he: ['בוקר טוב!', 'בוקר טוב, מה מתחשק?', 'בוקר!'], ar: ['صباح الخير!', 'صباح الخير، شو بدك؟', 'صباح النور!'], en: ['Good morning!', 'Morning! What do you feel like?', 'Morning!'] },
+  greetMorning: { he: ['בוקר טוב!', 'בוקר טוב, מה מתחשק?', 'בוקר!'], ar: ['صباح الخير!', 'صباح الخير، شو بدك؟', 'صباح النور!'], en: ['Good morning!', 'Morning, what do you feel like?', 'Morning!'] },
   greetNoon: { he: ['צהריים טובים!', 'מה לצהריים?', 'צהריים!'], ar: ['نهارك سعيد!', 'شو عالغدا؟', 'أهلا!'], en: ['Good afternoon!', "What's for lunch?", 'Hi there!'] },
-  greetEvening: { he: ['ערב טוב!', 'מה לערב?', 'ערב טוב, מה מתחשק?'], ar: ['مسا الخير!', 'شو عالعشا؟', 'مسا الخير، شو بدك؟'], en: ['Good evening!', "What's for dinner?", 'Evening! Hungry?'] },
+  greetEvening: { he: ['ערב טוב!', 'מה לערב?', 'ערב טוב, מה מתחשק?'], ar: ['مسا الخير!', 'شو عالعشا؟', 'مسا الخير، شو بدك؟'], en: ['Good evening!', "What's for dinner?", 'Evening, hungry?'] },
   greetNight: { he: ['עוד ערים?', 'משהו לפני השינה?', 'לילה טוב!'], ar: ['لسا صاحي؟', 'اشي قبل النوم؟', 'سهرة سعيدة!'], en: ['Still up?', 'Something before bed?', 'Late night!'] },
 };
 
@@ -71,4 +84,3 @@ export const MODE_LABELS: Record<FulfillmentMode, Record<Lang, string>> = {
   dine_in: { he: 'ישיבה במקום', ar: 'جلوس بالمطعم', en: 'dine-in' },
 };
 
-export const NO_WORD: Record<Lang, string> = { he: 'בלי', ar: 'بدون', en: 'no' };

@@ -5,13 +5,13 @@
  * ladder that never repeats itself. The whole Conversation is plain JSON (kept in sessionStorage).
  */
 import { layoutAlternatives } from '../search/index.js';
-import { clockAt, dishKey, localHour, type AssistantData, type AssistantDeal } from './data.js';
+import { clockAt, dishKey, localHour, type AssistantData, type AssistantDeal, type AssistantPlace } from './data.js';
 import { buildMeals, type MealBasket } from './mealBuilder.js';
 import type { Usual } from './profile.js';
 import { hashUnit, mealOf, rank, roundRobin, type Hit } from './rank.js';
-import { MODE_LABELS, NO_WORD, chipLabel, peopleLabel, reply, replyNot, type ReplyKey } from './replies.js';
-import { ALL_FILTERS, placeUsable, retrieve, type Filters } from './retrieve.js';
-import { TAG_LABELS } from './tags.js';
+import { MODE_LABELS, chipLabel, peopleLabel, reply, replyNot, type ReplyKey } from './replies.js';
+import { ALL_FILTERS, cravingMatches, placeUsable, retrieve } from './retrieve.js';
+import { TAG_LABELS, type DishTag } from './tags.js';
 import { tokenize, uniq } from './text.js';
 import { emptyRequest, hasSlots, isMealRequest, understand, type Lang, type Previous, type Request, type Shown } from './understand.js';
 import { upsellFor } from './upsell.js';
@@ -71,6 +71,8 @@ interface Answer {
   more?: Chip;
   signIn?: boolean;
   shown?: Shown;
+  /** The request actually answered, when it is not the one read (a wrong-keyboard reading, a meal shown as dishes). */
+  request?: Request;
   understood: boolean;
 }
 interface Ctx {
@@ -79,11 +81,16 @@ interface Ctx {
   opts: RespondOptions;
   misses: number;
   lastText?: string;
+  prev?: Previous;
+  /** The input was a chip carrying its own request. */
+  chip: boolean;
 }
 
 const PAGE = 3;
 const MEAL_PAGE = 2;
 const NOTHING_SHOWN: Shown = { dishIds: [], branchIds: [] };
+type Slot = 'tags' | 'exclude' | 'budget' | 'mode' | 'place';
+const SLOTS: readonly Slot[] = ['tags', 'exclude', 'budget', 'mode', 'place'];
 
 export function respond(conv: Conversation, input: string | Chip, data: AssistantData, opts: RespondOptions): Conversation {
   const text = (typeof input === 'string' ? input : input.label).trim();
@@ -92,12 +99,13 @@ export function respond(conv: Conversation, input: string | Chip, data: Assistan
   const tookUpsell = !!lastAssistant?.upsold && !!opts.inCart?.includes(lastAssistant.upsold);
   const upsellSkips = conv.upsellSkips + (lastAssistant?.kind === 'upsell' && !tookUpsell ? 1 : 0);
   const request = readRequest(input, conv, data, opts);
-  const answer = answerFor(request, { text, data, opts, misses: conv.misses, lastText: lastAssistant?.text });
+  const ctx: Ctx = { text, data, opts, misses: conv.misses, chip: typeof input !== 'string' && !!input.request, ...(lastAssistant ? { lastText: lastAssistant.text } : {}), ...(conv.last ? { prev: conv.last } : {}) };
+  const answer = answerFor(request, ctx);
   const n = conv.turns.length;
   const turn: AssistantTurn = { id: `t${n + 1}`, role: 'assistant', kind: answer.kind, text: answer.text, cards: answer.cards, chips: answer.chips, ...(answer.more ? { more: answer.more } : {}), ...(answer.signIn ? { signIn: true } : {}) };
   return {
     turns: [...conv.turns, { id: `t${n}`, role: 'user', text }, turn],
-    ...(answer.understood ? { last: { request, shown: answer.shown ?? NOTHING_SHOWN } } : conv.last ? { last: conv.last } : {}),
+    ...(answer.understood ? { last: { request: answer.request ?? request, shown: answer.shown ?? NOTHING_SHOWN } } : conv.last ? { last: conv.last } : {}),
     misses: answer.understood ? 0 : conv.misses + 1,
     upsellSkips,
   };
@@ -128,6 +136,22 @@ export function shortcutChips(lang: Lang, data: AssistantData, signedIn: boolean
   return chips;
 }
 
+/** When no place can take an order: the line saying so, and when the first one opens (if known). */
+export function closedAllLine(lang: Lang, data: AssistantData, seed: number): { text: string; time?: string } | undefined {
+  const places = [...data.places.values()];
+  return places.some((p) => placeUsable(p)) ? undefined : closedLine(lang, data, seed, places);
+}
+
+function closedLine(lang: Lang, data: AssistantData, seed: number, places: readonly AssistantPlace[]): { text: string; time?: string } {
+  const { time } = firstToOpen(places, data);
+  return time ? { text: reply('closedAll', lang, { time }, seed), time } : { text: reply('closedAllNoTime', lang, {}, seed) };
+}
+
+function firstToOpen(places: readonly AssistantPlace[], data: AssistantData): { place?: AssistantPlace; time?: string } {
+  const first = places.filter((p) => p.opensInMin !== undefined).sort((a, b) => a.opensInMin! - b.opensInMin!)[0];
+  return first ? { place: first, time: clockAt(data.now, first.opensInMin!) } : {};
+}
+
 function readRequest(input: string | Chip, conv: Conversation, data: AssistantData, opts: RespondOptions): Request {
   if (typeof input !== 'string' && input.request) return input.request;
   const said = typeof input === 'string' ? input : input.send ?? input.label;
@@ -144,7 +168,10 @@ function readRequest(input: string | Chip, conv: Conversation, data: AssistantDa
 }
 
 function answerFor(r: Request, ctx: Ctx): Answer {
-  if (!hasSlots(r)) return reprompt(r.lang, ctx);
+  // A tapped chip always means something: with no wish left (a dropped filter) it shows picks for now.
+  if (!hasSlots(r)) return ctx.chip ? pickAnswer(r, ctx, 'dish', false) : reprompt(r.lang, ctx);
+  const closed = closedAllLine(r.lang, ctx.data, seedOf(r, ctx.data));
+  if (closed) return { kind: 'closed', text: closed.text, cards: [], chips: [], shown: NOTHING_SHOWN, understood: true };
   if (r.shortcut === 'usual') return usualAnswer(r, ctx);
   if (r.shortcut === 'deals') return dealsAnswer(r, ctx);
   if (isMealRequest(r)) return mealAnswer(r, ctx);
@@ -164,7 +191,9 @@ function pickAnswer(r: Request, ctx: Ctx, kind: 'dish' | 'surprise', retry: bool
   const ranked = rank(cands, r, data);
   const size = kind === 'surprise' ? 1 : PAGE;
   const page = ranked.slice(r.page * size, r.page * size + size);
-  if (!page.length) return noMore(r, ctx, 'dish');
+  if (!page.length) return noMore(r, ctx, refineChips(r, data, 'dish'));
+  // Everything shown so far, so "something else" after "more" skips every page.
+  const seen = ranked.slice(0, r.page * size + page.length);
   const key: ReplyKey = kind === 'surprise' ? 'surprise' : r.craving.length || r.tags.length ? 'picks' : 'picksNow';
   return {
     kind,
@@ -172,17 +201,23 @@ function pickAnswer(r: Request, ctx: Ctx, kind: 'dish' | 'surprise', retry: bool
     cards: page.map(dishCard),
     chips: refineChips(r, data, 'dish'),
     ...(kind === 'dish' && ranked.length > (r.page + 1) * size ? { more: moreChip(r) } : {}),
-    shown: { dishIds: page.map((h) => h.dish.id), branchIds: uniq(page.map((h) => h.dish.branchId)), maxTotalAgorot: Math.max(...page.map((h) => h.dish.entry.priceAgorot)) },
+    shown: { dishIds: seen.map((h) => h.dish.id), branchIds: uniq(seen.map((h) => h.dish.branchId)), maxTotalAgorot: Math.max(...page.map((h) => h.dish.entry.priceAgorot)) },
+    request: r,
     understood: true,
   };
 }
 
-/** "auutrnv" was typed on the wrong keyboard: read it as "שווארמה". */
+/**
+ * "auutrnv" was typed on the wrong keyboard: read it as "שווארמה". Only a strong match counts (whole word,
+ * word start, lexicon), and never one-letter words, so gibberish ("xqxq" → "ס/ס/") is not read as food.
+ */
 function wrongKeyboard(r: Request, ctx: Ctx): Answer | undefined {
   if (!r.craving.length) return undefined;
   for (const alt of layoutAlternatives(ctx.text)) {
     const r2 = understand(alt, ctx.data.placeNames, undefined, ctx.opts.uiLang);
-    if (hasSlots(r2) && retrieve(r2, ctx.data).length) return isMealRequest(r2) ? mealAnswer(r2, ctx) : pickAnswer(r2, ctx, 'dish', false);
+    if (!hasSlots(r2)) continue;
+    if (r2.craving.length && (r2.craving.some((w) => w.length < 2) || ![...cravingMatches(ctx.data, r2.craving).values()].some((m) => m.level <= 3))) continue;
+    if (retrieve(r2, ctx.data).length) return isMealRequest(r2) ? mealAnswer(r2, ctx) : pickAnswer(r2, ctx, 'dish', false);
   }
   return undefined;
 }
@@ -200,14 +235,16 @@ function mealAnswer(r: Request, ctx: Ctx): Answer {
     return pickAnswer(solo, ctx, 'dish', false);
   }
   const page = baskets.slice(r.page * MEAL_PAGE, r.page * MEAL_PAGE + MEAL_PAGE);
-  if (!page.length) return noMore(r, ctx, 'meal');
+  if (!page.length) return noMore(r, ctx, refineChips(r, data, 'meal'));
+  const seen = baskets.slice(0, r.page * MEAL_PAGE + page.length);
   return {
     kind: 'meal',
-    text: reply('meal', r.lang, { people: r.people ?? 1 }, seedOf(r, data)),
+    text: r.people !== undefined ? reply('meal', r.lang, { people: r.people }, seedOf(r, data)) : reply('mealBudget', r.lang, { budget: shekels(r.budgetAgorot ?? 0) }, seedOf(r, data)),
     cards: page.map((basket) => ({ kind: 'meal', basket })),
     chips: refineChips(r, data, 'meal'),
     ...(baskets.length > (r.page + 1) * MEAL_PAGE ? { more: moreChip(r) } : {}),
-    shown: { dishIds: page.flatMap((b) => b.lines.map((l) => l.productId)), branchIds: page.map((b) => b.branchId), maxTotalAgorot: Math.max(...page.map((b) => b.totalAgorot)) },
+    shown: { dishIds: seen.flatMap((b) => b.lines.map((l) => l.productId)), branchIds: seen.map((b) => b.branchId), maxTotalAgorot: Math.max(...page.map((b) => b.totalAgorot)) },
+    request: r,
     understood: true,
   };
 }
@@ -238,91 +275,131 @@ function dealsAnswer(r: Request, ctx: Ctx): Answer {
     deals = deals.filter((d) => dealItems(d).some((id) => match.has(dishKey(d.branchId, id))));
   }
   if (r.budgetAgorot !== undefined) deals = deals.filter((d) => !d.combo || d.combo.priceAgorot <= r.budgetAgorot!);
-  if (!deals.length) return { kind: 'deal', text: reply('dealsNone', r.lang, {}, seedOf(r, data)), cards: [], chips: suggestionChips(r.lang, ctx).slice(0, 3), shown: NOTHING_SHOWN, understood: true };
-  const ordered = roundRobin(deals.sort((a, b) => Number(!a.combo) - Number(!b.combo) || (a.combo?.sortOrder ?? a.promotion!.sortOrder) - (b.combo?.sortOrder ?? b.promotion!.sortOrder)), (d) => d.branchId);
+  if (!deals.length) return { kind: 'deal', text: reply('dealsNone', r.lang, {}, seedOf(r, data)), cards: [], chips: suggestionChips(r.lang, ctx).filter((c) => c.request?.shortcut !== 'deals').slice(0, 3), shown: NOTHING_SHOWN, understood: true };
+  // Combos first; which place leads rotates by day, so no restaurant always opens the list.
+  const sorted = deals.sort((a, b) => Number(!a.combo) - Number(!b.combo) || hashUnit(data.seed, a.branchId) - hashUnit(data.seed, b.branchId) || dealOrder(a) - dealOrder(b));
+  const ordered = roundRobin(sorted, (d) => d.branchId);
   const page = ordered.slice(r.page * PAGE, r.page * PAGE + PAGE);
-  if (!page.length) return noMore(r, ctx, 'deal');
+  if (!page.length) return noMore(r, ctx, refineChips(r, data, 'deal'));
   return {
     kind: 'deal',
     text: reply('deals', r.lang, {}, seedOf(r, data)),
     cards: page.map(dealCard),
     chips: refineChips(r, data, 'deal'),
     ...(ordered.length > (r.page + 1) * PAGE ? { more: moreChip(r) } : {}),
-    shown: { dishIds: [], branchIds: uniq(page.map((d) => d.branchId)) },
+    shown: { dishIds: [], branchIds: uniq(ordered.slice(0, r.page * PAGE + page.length).map((d) => d.branchId)) },
     understood: true,
   };
 }
 
 function usualAnswer(r: Request, ctx: Ctx): Answer {
   const { data, opts } = ctx;
-  if (!opts.signedIn) return { ...popular(r, ctx, 'usualSignedOut'), signIn: true };
-  const usuals = (data.profile?.usuals ?? []).filter((u) => data.places.has(u.branchId)).slice(0, 2);
-  if (!usuals.length) return popular(r, ctx, 'usualNone');
-  return { kind: 'usual', text: reply('usual', r.lang, {}, seedOf(r, data)), cards: usuals.map((usual) => ({ kind: 'usual', usual })), chips: suggestionChips(r.lang, ctx).filter((c) => c.label !== chipLabel('usual', r.lang)).slice(0, 3), shown: { dishIds: [], branchIds: usuals.map((u) => u.branchId) }, understood: true };
+  if (r.page > 0) return noMore(r, ctx, suggestionChips(r.lang, ctx).filter((c) => c.request?.shortcut !== 'usual').slice(0, 3));
+  if (!opts.signedIn) {
+    const a = popular(r, ctx, 'usualSignedOut');
+    return a.kind === 'usual' ? { ...a, signIn: true } : a;
+  }
+  const known = (data.profile?.usuals ?? []).filter((u) => data.places.has(u.branchId));
+  const usuals = known.filter((u) => placeUsable(data.places.get(u.branchId))).slice(0, 2);
+  if (!usuals.length) return known.length ? closedPlaceAnswer(r, ctx, uniq(known.map((u) => u.branchId)).map((id) => data.places.get(id)!)) : popular(r, ctx, 'usualNone');
+  return { kind: 'usual', text: reply('usual', r.lang, {}, seedOf(r, data)), cards: usuals.map((usual) => ({ kind: 'usual', usual })), chips: suggestionChips(r.lang, ctx).filter((c) => c.request?.shortcut !== 'usual').slice(0, 3), shown: { dishIds: [], branchIds: usuals.map((u) => u.branchId) }, understood: true };
 }
 
 function popular(r: Request, ctx: Ctx, key: ReplyKey): Answer {
+  const { data } = ctx;
   const base = emptyRequest(r.lang);
-  const ranked = rank(retrieve(base, ctx.data), base, ctx.data);
+  const ranked = rank(retrieve(base, data), base, data);
   const top = [...ranked.filter((h) => h.dish.entry.mostOrdered), ...ranked.filter((h) => !h.dish.entry.mostOrdered)].slice(0, PAGE);
-  return { kind: 'usual', text: reply(key, r.lang, {}, seedOf(r, ctx.data)), cards: top.map(dishCard), chips: suggestionChips(r.lang, ctx).slice(0, 3), shown: NOTHING_SHOWN, understood: true };
+  if (!top.length) {
+    // Nothing can be ordered: say when the closed places open instead of an empty list.
+    const line = closedLine(r.lang, data, seedOf(r, data), [...data.places.values()].filter((p) => !placeUsable(p)));
+    return { kind: 'closed', text: line.text, cards: [], chips: [], shown: NOTHING_SHOWN, understood: true };
+  }
+  return { kind: 'usual', text: reply(key, r.lang, {}, seedOf(r, data)), cards: top.map(dishCard), chips: suggestionChips(r.lang, ctx).slice(0, 3), shown: NOTHING_SHOWN, understood: true };
 }
 
-type Slot = 'tags' | 'exclude' | 'budget' | 'mode' | 'place';
-
-/** Nothing fits: matches only at closed places → when they open; a wish that blocks → name it and offer to drop it; else reprompt. */
+/** Nothing fits: matches only at closed places → which one and when it opens; a wish that blocks → name it and offer to drop it; else reprompt. */
 function emptyAnswer(r: Request, ctx: Ctx): Answer {
   const { data } = ctx;
   const atClosed = retrieve(r, data, { ...ALL_FILTERS, open: false });
-  if (atClosed.length) return closedAnswer(r, data, Math.min(...atClosed.map((c) => data.places.get(c.dish.branchId)?.opensInMin ?? Number.POSITIVE_INFINITY)), 'closed');
-  for (const slot of ['tags', 'exclude', 'budget', 'mode', 'place'] as const) {
-    const relaxed: Filters = { ...ALL_FILTERS, [slot]: false };
-    if (retrieve(r, data, relaxed).length) return blocked(r, slot, data);
+  if (atClosed.length) return closedPlaceAnswer(r, ctx, uniq(atClosed.map((c) => c.dish.branchId)).map((id) => data.places.get(id)!));
+  return blockedAnswer(r, ctx) ?? reprompt(r.lang, ctx);
+}
+
+/** Some places are open, but what was asked for is at closed ones: name the first to open. */
+function closedPlaceAnswer(r: Request, ctx: Ctx, places: readonly AssistantPlace[]): Answer {
+  const L = r.lang;
+  const { place: first, time } = firstToOpen(places, ctx.data);
+  const place = first ?? places[0]!;
+  const name = place.name[L] ?? place.name.he ?? place.name.en ?? '';
+  const seed = seedOf(r, ctx.data);
+  return { kind: 'closed', text: time ? reply('closed', L, { place: name, time }, seed) : reply('closedNoTime', L, { place: name }, seed), cards: [], chips: suggestionChips(L, ctx).slice(0, 3), shown: NOTHING_SHOWN, understood: true };
+}
+
+/** The wish the latest message added or changed is blamed first; among tags, the one whose removal alone finds something. */
+function blockedAnswer(r: Request, ctx: Ctx): Answer | undefined {
+  const { data } = ctx;
+  const p = ctx.prev?.request;
+  for (const slot of slotOrder(r, p)) {
+    if (slot === 'tags') {
+      if (!r.tags.length) continue;
+      const newest = uniq([...r.tags.filter((t) => !p?.tags.includes(t)).reverse(), ...[...r.tags].reverse()]);
+      const one = newest.find((t) => retrieve({ ...r, tags: r.tags.filter((x) => x !== t) }, data).length > 0);
+      if (one) return blocked(r, 'tags', data, [one]);
+    }
+    if (retrieve(r, data, { ...ALL_FILTERS, [slot]: false }).length) return blocked(r, slot, data);
   }
-  const places = [...data.places.values()];
-  if (!places.some((p) => p.open)) return closedAnswer(r, data, Math.min(...places.map((p) => p.opensInMin ?? Number.POSITIVE_INFINITY)), 'closedAll');
-  return reprompt(r.lang, ctx);
+  return undefined;
 }
 
-function closedAnswer(r: Request, data: AssistantData, minutes: number, key: 'closed' | 'closedAll'): Answer {
-  const time = Number.isFinite(minutes) ? clockAt(data.now, minutes) : '';
-  return { kind: 'closed', text: reply(key, r.lang, { time }, seedOf(r, data)), cards: [], chips: [], shown: NOTHING_SHOWN, understood: true };
+function slotOrder(r: Request, p: Request | undefined): Slot[] {
+  if (!p) return [...SLOTS];
+  const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  const changed: Record<Slot, boolean> = {
+    tags: !same(r.tags, p.tags),
+    exclude: !same(r.exclude, p.exclude),
+    budget: r.budgetAgorot !== p.budgetAgorot || r.maxPriceAgorot !== p.maxPriceAgorot,
+    mode: r.mode !== p.mode,
+    place: !same(r.placeBranchIds, p.placeBranchIds),
+  };
+  return [...SLOTS.filter((s) => changed[s]), ...SLOTS.filter((s) => !changed[s])];
 }
 
-function blocked(r: Request, slot: Slot, data: AssistantData): Answer {
+function blocked(r: Request, slot: Slot, data: AssistantData, tags: readonly DishTag[] = r.tags): Answer {
+  const { key, label } = slotWords(r, slot, data, tags);
   return {
     kind: 'blocked',
-    text: reply('blocked', r.lang, { slot: slotLabel(r, slot, data) }, seedOf(r, data)),
+    text: reply(key, r.lang, { slot: label }, seedOf(r, data)),
     cards: [],
-    chips: [{ label: chipLabel('drop', r.lang), request: dropSlot(r, slot) }],
+    chips: [{ label: chipLabel('drop', r.lang), request: dropSlot(r, slot, tags) }],
     shown: NOTHING_SHOWN,
     understood: true,
   };
 }
 
-function slotLabel(r: Request, slot: Slot, data: AssistantData): string {
+function slotWords(r: Request, slot: Slot, data: AssistantData, tags: readonly DishTag[]): { key: ReplyKey; label: string } {
   const L = r.lang;
   switch (slot) {
     case 'tags':
-      return r.tags.map((t) => TAG_LABELS[t][L]).join(', ');
+      return { key: 'blockedTags', label: tags.map((t) => TAG_LABELS[t][L]).join(', ') };
     case 'exclude': {
       const said = uniq([...r.exclude.tags.map((t) => TAG_LABELS[t][L]), ...r.exclude.words]);
-      return said.length ? `${NO_WORD[L]} ${said.join(', ')}` : chipLabel(r.exclude.branchIds.length ? 'otherPlace' : 'other', L);
+      return said.length ? { key: 'blockedExclude', label: said.join(', ') } : { key: 'blockedOther', label: '' };
     }
     case 'budget':
-      return `₪${Math.round((r.budgetAgorot ?? r.maxPriceAgorot ?? 0) / 100)}`;
+      return { key: 'blockedBudget', label: shekels(r.budgetAgorot ?? r.maxPriceAgorot ?? 0) };
     case 'mode':
-      return r.mode ? MODE_LABELS[r.mode][L] : '';
+      return { key: 'blockedMode', label: r.mode ? MODE_LABELS[r.mode][L] : '' };
     case 'place':
-      return (r.placeBranchIds ?? []).map((id) => data.places.get(id)?.name[L] ?? '').filter(Boolean).join(', ');
+      return { key: 'blockedPlace', label: (r.placeBranchIds ?? []).map((id) => data.places.get(id)?.name[L] ?? '').filter(Boolean).join(', ') };
   }
 }
 
-function dropSlot(r: Request, slot: Slot): Request {
+function dropSlot(r: Request, slot: Slot, tags: readonly DishTag[]): Request {
   const { budgetAgorot: _b, maxPriceAgorot: _m, mode: _mo, placeBranchIds: _p, ...rest } = r;
   switch (slot) {
     case 'tags':
-      return { ...r, tags: [], page: 0 };
+      return { ...r, tags: r.tags.filter((t) => !tags.includes(t)), page: 0 };
     case 'exclude':
       return { ...r, exclude: { tags: [], words: [], dishIds: [], branchIds: [] }, page: 0 };
     case 'budget':
@@ -362,7 +439,7 @@ function refineChips(r: Request, data: AssistantData, kind: 'dish' | 'meal' | 'd
   const L = r.lang;
   const chips: Chip[] = [];
   if (kind !== 'deal') chips.push(sayChip(chipLabel('cheaper', L)));
-  if (kind === 'meal') chips.push(sayChip(peopleLabel((r.people ?? 1) + 2, L)));
+  if (kind === 'meal') chips.push(sayChip(peopleLabel(r.people !== undefined ? r.people + 2 : 2, L)));
   else if (kind === 'dish' && r.people === undefined) chips.push(sayChip(peopleLabel(4, L)));
   chips.push(sayChip(chipLabel(kind === 'dish' ? 'other' : 'otherPlace', L)));
   if (kind !== 'deal' && !r.exclude.tags.includes('meat') && !r.tags.includes('vegetarian') && !r.tags.includes('vegan')) chips.push(sayChip(chipLabel('noMeat', L)));
@@ -370,13 +447,16 @@ function refineChips(r: Request, data: AssistantData, kind: 'dish' | 'meal' | 'd
   return chips.slice(0, 4);
 }
 
-function noMore(r: Request, ctx: Ctx, kind: 'dish' | 'meal' | 'deal'): Answer {
-  return { kind: 'none', text: reply('noMore', r.lang, {}, seedOf(r, ctx.data)), cards: [], chips: refineChips(r, ctx.data, kind), shown: NOTHING_SHOWN, understood: true };
+/** Past the last page: say so, and keep what was shown so "something else" still skips it. */
+function noMore(r: Request, ctx: Ctx, chips: Chip[]): Answer {
+  return { kind: 'none', text: reply('noMore', r.lang, {}, seedOf(r, ctx.data)), cards: [], chips, shown: ctx.prev?.shown ?? NOTHING_SHOWN, understood: true };
 }
 
+const shekels = (agorot: number) => `₪${Math.round(agorot / 100)}`;
 const sayChip = (label: string): Chip => ({ label, send: label });
 const shortcutChip = (shortcut: 'deals' | 'usual', lang: Lang): Chip => ({ label: chipLabel(shortcut, lang), request: { ...emptyRequest(lang), shortcut } });
 const moreChip = (r: Request): Chip => ({ label: chipLabel('more', r.lang), request: { ...r, page: r.page + 1 } });
 const dishCard = (h: Hit): Card => ({ kind: 'dish', branchId: h.dish.branchId, productId: h.dish.id });
 const dealCard = (d: AssistantDeal): Card => ({ kind: 'deal', branchId: d.branchId, dealId: d.id });
 const dealItems = (d: AssistantDeal): string[] => (d.combo ? d.combo.items.map((i) => i.productId) : d.promotion?.productIds ?? []);
+const dealOrder = (d: AssistantDeal): number => d.combo?.sortOrder ?? d.promotion?.sortOrder ?? 0;

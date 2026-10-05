@@ -1,10 +1,10 @@
 /** The home's assistant strip: a time-of-day greeting, up to three ready picks (your usual, the best deal, a pick for now) from different places, and suggestion chips. */
 import type { DishType } from '../dishIndex.js';
 import { dictionaries } from '../i18n/index.js';
-import { clockAt, localHour, type AssistantData } from './data.js';
-import { mealOf, rank } from './rank.js';
+import { localHour, type AssistantData } from './data.js';
+import { hashUnit, mealOf, rank } from './rank.js';
 import { chipLabel, reply, type ReplyKey } from './replies.js';
-import { shortcutChips, type Card, type Chip, type RespondOptions } from './respond.js';
+import { closedAllLine, shortcutChips, type Card, type Chip, type RespondOptions } from './respond.js';
 import { placeUsable, retrieve } from './retrieve.js';
 import { emptyRequest } from './understand.js';
 
@@ -21,12 +21,8 @@ const GREETING: Record<ReturnType<typeof mealOf>, ReplyKey> = { breakfast: 'gree
 export function homeView(data: AssistantData, opts: RespondOptions): HomeView {
   const lang = opts.uiLang;
   const meal = mealOf(localHour(data.now));
-  const places = [...data.places.values()];
-  if (!places.some((p) => p.open)) {
-    const minutes = Math.min(...places.map((p) => p.opensInMin ?? Number.POSITIVE_INFINITY));
-    const time = Number.isFinite(minutes) ? clockAt(data.now, minutes) : '';
-    return { greeting: reply('closedAll', lang, { time }, data.seed), cards: [], chips: [], ...(time ? { closedUntil: time } : {}) };
-  }
+  const closed = closedAllLine(lang, data, data.seed);
+  if (closed) return { greeting: closed.text, cards: [], chips: [], ...(closed.time ? { closedUntil: closed.time } : {}) };
   const cards: Card[] = [];
   const used = new Set<string>();
   const usual = opts.signedIn ? data.profile?.usuals.find((u) => placeUsable(data.places.get(u.branchId))) : undefined;
@@ -36,7 +32,8 @@ export function homeView(data: AssistantData, opts: RespondOptions): HomeView {
   }
   const deal = data.deals
     .filter((d) => placeUsable(data.places.get(d.branchId)) && !used.has(d.branchId))
-    .sort((a, b) => Number(!a.combo) - Number(!b.combo) || Number(!(a.combo?.imagePath ?? a.promotion?.imagePath)) - Number(!(b.combo?.imagePath ?? b.promotion?.imagePath)))[0];
+    // Combos, then ones with a photo; which place wins a tie rotates by day.
+    .sort((a, b) => Number(!a.combo) - Number(!b.combo) || Number(!(a.combo?.imagePath ?? a.promotion?.imagePath)) - Number(!(b.combo?.imagePath ?? b.promotion?.imagePath)) || hashUnit(data.seed, a.branchId) - hashUnit(data.seed, b.branchId))[0];
   if (deal) {
     cards.push({ kind: 'deal', branchId: deal.branchId, dealId: deal.id });
     used.add(deal.branchId);

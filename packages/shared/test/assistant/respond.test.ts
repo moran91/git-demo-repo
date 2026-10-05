@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_CONVERSATION, afterAdd, homeView, rank, respond, retrieve, type AssistantTurn, type Card, type Conversation } from '../../src/index.js';
-import { PLACES, allClosed, fixtureData } from './fixtures.js';
+import { EMPTY_CONVERSATION, afterAdd, homeView, rank, reply, respond, retrieve, type AssistantTurn, type Card, type Conversation, type ReplyKey } from '../../src/index.js';
+import { NOW, PLACES, allClosed, fixtureData } from './fixtures.js';
 
 const data = fixtureData();
 const opts = { signedIn: true, uiLang: 'he' as const };
@@ -164,5 +164,195 @@ describe('homeView', () => {
         expect(t.cards.length, `${uiLang} ${chip.label}`).toBeGreaterThan(0);
       }
     }
+  });
+});
+
+describe('fix round 1', () => {
+  const he = opts;
+  const onDay = (k: number, o: Parameters<typeof fixtureData>[0] = {}) => fixtureData({ ...o, now: new Date(NOW.getTime() + k * 86_400_000) });
+  const closedSome = (ids: string[], opensInMin?: number) => PLACES.map((p) => (ids.includes(p.branchId) ? { ...p, open: false, ...(opensInMin !== undefined ? { opensInMin } : { opensInMin: undefined }) } : p));
+  const noTime = () => PLACES.map((p) => ({ ...p, open: false, opensInMin: undefined }));
+  const brokenTime = /ב־(\.|,|$)|at \.|الساعة \.|بيفتح \./;
+
+  it('1. the usual skips closed places and names when they open', () => {
+    const d = fixtureData({ places: closedSome(['morano', 'abu'], 300) });
+    const t = last(respond(EMPTY_CONVERSATION, 'הרגיל שלי', d, he));
+    expect(t.cards.filter((c) => c.kind === 'usual')).toEqual([]);
+    expect(t.kind).toBe('closed');
+    expect(t.text).toContain('מורנו');
+    expect(t.text).toContain('01:00');
+  });
+
+  it('1. deals and a signed-out usual when everything is closed say when the first place opens', () => {
+    const closed = fixtureData({ places: allClosed() });
+    const deals = last(respond(EMPTY_CONVERSATION, 'מבצעים', closed, he));
+    expect(deals.kind).toBe('closed');
+    expect(deals.text).toContain('22:00');
+    const out = fixtureData({ places: allClosed(), signedIn: false });
+    const usual = last(respond(EMPTY_CONVERSATION, 'הרגיל שלי', out, { signedIn: false, uiLang: 'he' }));
+    expect(usual.kind).toBe('closed');
+    expect(usual.text).toContain('22:00');
+  });
+
+  it('1. a signed-out usual with nothing to show falls back to the closed answer', () => {
+    const places = [...allClosed(), { branchId: 'empty', businessId: 'b-empty', name: { he: 'ריק' }, open: true, modes: ['pickup' as const] }];
+    const d = fixtureData({ places, signedIn: false });
+    const t = last(respond(EMPTY_CONVERSATION, 'הרגיל שלי', d, { signedIn: false, uiLang: 'he' }));
+    expect(t.kind).toBe('closed');
+    expect(t.text).toContain('22:00');
+  });
+
+  it('2. refinement chips work after a wrong-keyboard answer', () => {
+    const c = say('auutrnv');
+    expect(c.last!.request.craving).toEqual(['שווארמה']);
+    for (const label of ['יותר זול', 'משהו אחר']) {
+      const chip = last(c).chips.find((x) => x.label === label)!;
+      const t = last(respond(c, chip, data, opts));
+      expect(t.kind, label).not.toBe('reprompt');
+    }
+  });
+
+  it('3. the tags drop chip drops one blocking tag and never reprompts', () => {
+    const c = say('משהו טבעוני חריף');
+    expect(last(c).kind).toBe('blocked');
+    const drop = last(c).chips[0]!;
+    expect(drop.request!.tags).toHaveLength(1);
+    const t = last(respond(c, drop, data, opts));
+    expect(t.kind).not.toBe('reprompt');
+    expect(t.cards.length).toBeGreaterThan(0);
+  });
+
+  it('3. a drop chip that leaves no slots answers with picks for now', () => {
+    const d = fixtureData({ places: PLACES.filter((p) => p.branchId === 'morano') });
+    const c = respond(EMPTY_CONVERSATION, 'משהו טבעוני', d, opts);
+    expect(last(c).kind).toBe('blocked');
+    const t = last(respond(c, last(c).chips[0]!, d, opts));
+    expect(t.kind).toBe('dish');
+    expect(t.cards.length).toBeGreaterThan(0);
+  });
+
+  it('4. a dish only at a closed place names the place and offers chips', () => {
+    const t = last(say('שניצל'));
+    expect(t.kind).toBe('closed');
+    expect(t.text).toContain('באגט פארס');
+    expect(t.text).toContain('22:00');
+    expect(t.chips.length).toBeGreaterThan(0);
+  });
+
+  it('4. when everything is closed the line is about everything, not one place', () => {
+    const t = last(respond(EMPTY_CONVERSATION, 'פיצה', fixtureData({ places: allClosed() }), he));
+    expect(t.text).toMatch(/הכול|אין כרגע מקום/);
+    expect(t.text).not.toContain('מורנו');
+  });
+
+  it('5. no opening time never leaves a broken line', () => {
+    for (const lang of ['he', 'ar', 'en'] as const) {
+      const o = { signedIn: true, uiLang: lang };
+      const all = fixtureData({ places: noTime() });
+      const msg = lang === 'he' ? 'פיצה' : lang === 'ar' ? 'بيتزا' : 'pizza';
+      const t = last(respond(EMPTY_CONVERSATION, msg, all, o));
+      expect(t.kind).toBe('closed');
+      expect(t.text, lang).not.toMatch(brokenTime);
+      const home = homeView(all, o);
+      expect(home.greeting, lang).not.toMatch(brokenTime);
+      expect(home.closedUntil).toBeUndefined();
+      const one = fixtureData({ places: closedSome(['baguette']) });
+      const s = last(respond(EMPTY_CONVERSATION, lang === 'he' ? 'שניצל' : lang === 'ar' ? 'شنيتسل' : 'schnitzel', one, o));
+      if (s.kind === 'closed') expect(s.text, lang).not.toMatch(brokenTime);
+    }
+    const s = last(respond(EMPTY_CONVERSATION, 'שניצל', fixtureData({ places: closedSome(['baguette']) }), he));
+    expect(s.kind).toBe('closed');
+    expect(s.text).toContain('באגט פארס');
+  });
+
+  it('6. "something else" never repeats anything shown before, across pages and "no more"', () => {
+    const seen = (c: Conversation) => c.turns.flatMap((t) => (t.role === 'assistant' ? ids(t) : []));
+    const c1 = say('משהו חריף', 'עוד');
+    const before = seen(c1);
+    const c2 = respond(c1, 'משהו אחר', data, opts);
+    for (const id of ids(last(c2))) expect(before).not.toContain(id);
+    const p1 = say('pizza', 'cheaper', 'more');
+    expect(last(p1).kind).toBe('none');
+    const shownBefore = seen(p1);
+    const p2 = respond(p1, 'something else', data, opts);
+    for (const id of ids(last(p2))) expect(shownBefore).not.toContain(id);
+  });
+
+  it('7. the home deal and the first deal rotate between places by day', () => {
+    const homeLead = new Set<string>();
+    const dealLead = new Set<string>();
+    for (let k = 0; k < 20; k++) {
+      const d = onDay(k, { signedIn: false });
+      const o = { signedIn: false, uiLang: 'he' as const };
+      const deal = homeView(d, o).cards.find((c) => c.kind === 'deal');
+      if (deal?.kind === 'deal') homeLead.add(deal.branchId);
+      const first = last(respond(EMPTY_CONVERSATION, 'מבצעים', d, o)).cards[0];
+      if (first?.kind === 'deal') dealLead.add(first.branchId);
+    }
+    expect([...homeLead].sort()).toEqual(['burger', 'morano']);
+    expect([...dealLead].sort()).toEqual(['burger', 'morano']);
+  });
+
+  it('8. each blocked slot has its own wording, and the newest wish is blamed first', () => {
+    const c = say('פיצה בלי גבינה', 'יותר זול');
+    const t = last(c);
+    expect(t.kind).toBe('blocked');
+    expect(t.text).toContain('₪');
+    expect(t.text).not.toMatch(/עם בלי|בלי גבינה/);
+    expect(t.chips[0]!.request!.maxPriceAgorot).toBeUndefined();
+    const ar = respond(respond(EMPTY_CONVERSATION, 'بيتزا بدون جبنة', data, { ...opts, uiLang: 'ar' }), 'أرخص', data, { ...opts, uiLang: 'ar' });
+    expect(last(ar).text).not.toContain('مع بدون');
+    const ex = last(say('פיצה בלי גבינה בלי חריף'));
+    expect(ex.kind).toBe('blocked');
+    expect(ex.text).toContain('בלי');
+    expect(ex.text).not.toContain('עם');
+  });
+
+  it('9. every reply is one sentence', () => {
+    const keys: ReplyKey[] = ['picks', 'picksNow', 'meal', 'mealBudget', 'deals', 'dealsNone', 'usual', 'usualNone', 'usualSignedOut', 'surprise', 'place', 'blockedTags', 'blockedExclude', 'blockedOther', 'blockedBudget', 'blockedMode', 'blockedPlace', 'closed', 'closedNoTime', 'closedAll', 'closedAllNoTime', 'noMore', 'reprompt1', 'reprompt2', 'upsell', 'greetMorning', 'greetNoon', 'greetEvening', 'greetNight'];
+    for (const k of keys) for (const lang of ['he', 'ar', 'en'] as const) for (let s = 0; s < 3; s++) {
+      expect(reply(k, lang, { place: 'X', time: '22:00', slot: 'Y', people: 4, budget: '₪50' }, s), `${k} ${lang} ${s}`).not.toMatch(/[.!?؟]\s+\S/);
+    }
+  });
+
+  it('10. "no matching deal" does not offer the deals chip again', () => {
+    const t = last(say('מבצע על סושי'));
+    expect(t.cards).toEqual([]);
+    expect(t.chips.map((c) => c.label)).not.toContain('מה במבצע?');
+  });
+
+  it('11. the place line does not claim a ranking', () => {
+    for (const lang of ['he', 'ar', 'en'] as const) for (let s = 0; s < 3; s++) expect(reply('place', lang, {}, s)).not.toMatch(/הכי|أحسن|الأكثر|Best|Most/);
+  });
+
+  it('12. a reprompt with no cards never says it found something close', () => {
+    for (let k = 0; k < 10; k++) {
+      const d = onDay(k);
+      for (const msg of ['qwzx', 'שדגכשדג', 'ضصثقضصث']) {
+        const t = last(respond(EMPTY_CONVERSATION, msg, d, opts));
+        if (t.kind === 'reprompt' && !t.cards.length) expect(t.text).not.toMatch(/הכי קרוב|أقرب|Closest/);
+      }
+    }
+  });
+
+  it('13. a budget-only meal does not claim a head count', () => {
+    for (let k = 0; k < 6; k++) {
+      const t = last(respond(EMPTY_CONVERSATION, '150', onDay(k), opts));
+      expect(t.kind).toBe('meal');
+      expect(t.text).not.toMatch(/ל־1|ל-1/);
+    }
+  });
+
+  it('14. gibberish read on another keyboard as one-letter words climbs the ladder', () => {
+    for (const g of ['xqxq', 'pqpq']) expect(last(say(g)).kind, g).toBe('reprompt');
+    const c = say('qwzx', 'zzqq', 'xqxq');
+    expect(last(c).kind).toBe('reprompt');
+    expect(last(c).cards).toEqual([]);
+  });
+
+  it('15. "more" after the usual does not repeat the usual cards', () => {
+    const c = say('הרגיל שלי', 'עוד');
+    expect(last(c).cards.filter((x) => x.kind === 'usual')).toEqual([]);
+    expect(last(c).kind).toBe('none');
   });
 });
