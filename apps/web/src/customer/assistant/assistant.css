@@ -279,3 +279,41 @@
 @media (max-width: 599px), (max-height: 700px) {
   .ask__live li:nth-child(n + 4) { display: none; }
 }
+
+/* ---------- The home's assistant ----------
+ * The ask box keeps the old home search's one bold move: a big field lifted over the green band's lower
+ * edge on a butter offset. Under it: suggestion chips, then the greeting and its picks. */
+.assist { position: relative; z-index: 1; display: flex; flex-direction: column; gap: var(--space-4); margin-top: calc(-1 * (var(--space-8) - var(--space-1))); }
+.assist__ask {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 64px;
+  padding-inline: var(--space-4);
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 2px solid var(--color-text);
+  border-radius: 20px;
+  box-shadow: 0 6px 0 var(--color-crave-lift);
+  font: inherit;
+  font-size: 22px;
+  font-weight: 700;
+  text-align: start;
+  cursor: text;
+  transition: border-color var(--duration) var(--ease-out), transform var(--duration-micro) var(--ease-out);
+}
+.assist__ask > svg { flex: none; }
+.assist__ask > span { flex: 1; min-width: 0; opacity: 0.8; }
+.assist__ask:hover { border-color: var(--color-primary); }
+.assist__ask:active { transform: translateY(2px); }
+.assist__ask:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 3px; }
+.assist__chips { margin-top: var(--space-2); }
+.assist__greeting--closed { color: var(--color-text-muted); }
+.assist__wait { display: flex; flex-direction: column; gap: var(--space-3); margin-top: var(--space-2); }
+@media (min-width: 900px) {
+  .assist { width: 100%; max-width: 760px; margin-inline: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .assist__ask { transition: none; }
+}

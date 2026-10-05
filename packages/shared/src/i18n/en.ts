@@ -1327,17 +1327,6 @@ export const en = {
   'dishType.drinks': 'Drinks',
   'dishType.label': 'Dish type',
   'dishType.none': 'None',
-  'cravings.search': 'What are you craving?',
-  'cravings.searchLabel': 'Search dishes',
-  'cravings.clear': 'Clear',
-  'cravings.types': 'Dish types',
-  'cravings.bestSellers': 'Best sellers',
-  'cravings.closedNow': 'Closed now',
-  'cravings.resultsFor': 'Results for “{q}”',
-  'cravings.noResults': 'No dishes match “{q}”. Try another word or pick a type above.',
-  'cravings.add': 'Add {name}',
-  'cravings.from': 'From {price}',
-  'cravings.places': 'Places',
   'translate.auto': 'Auto-translated',
   'admin.nav.operations': 'Operations',
   'admin.nav.accounts': 'Accounts',
@@ -1449,6 +1438,8 @@ export const en = {
   'assistant.loading': 'Menus are still loading.',
   'assistant.toCart': 'To cart',
   'discovery.closedCount': 'Closed now ({count})',
+  'discovery.places': 'Places',
+  'assistant.suggestions': 'Suggestions',
 } as const;
 
 export type TranslationKey = keyof typeof en;

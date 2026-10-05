@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
-import type { DishIndexDoc } from '@qareeb/shared';
 import { db } from '@/lib/firebase';
 
 /**
@@ -34,9 +33,4 @@ export function useBranchIndexDocs<T>(branchIds: string[], docId: 'dishes' | 'de
     }
     return { docs: out, loading: ids.some((id) => !(id in docs)) };
   }, [state, key, docId]);
-}
-
-export function useDishIndexes(branchIds: string[]): { indexes: Map<string, DishIndexDoc>; loading: boolean } {
-  const r = useBranchIndexDocs<DishIndexDoc>(branchIds, 'dishes');
-  return { indexes: r.docs, loading: r.loading };
 }
