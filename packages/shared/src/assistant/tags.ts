@@ -35,7 +35,7 @@ export const TYPE_TERMS: Record<DishType, readonly string[]> = {
   pasta: ['פסטה', 'ספגטי', 'פנה', 'רביולי', 'לזניה', 'פטוצ׳יני', 'פטוציני', 'ניוקי', 'מקרוני', 'pasta', 'spaghetti', 'penne', 'ravioli', 'lasagna', 'lasagne', 'fettuccine', 'gnocchi', 'macaroni', 'معكرونة', 'باستا', 'سباغيتي', 'لازانيا', 'رافيولي'],
   burger: ['המבורגר', 'בורגר', 'burger', 'hamburger', 'cheeseburger', 'برغر', 'همبرغر', 'برجر'],
   shawarma: ['שווארמה', 'שוורמה', 'שאוורמה', 'shawarma', 'shawerma', 'شاورما', 'شاورمة'],
-  hummus: ['חומוס', 'מסבחה', 'פול', 'hummus', 'humus', 'msabbaha', 'حمص', 'مسبحة', 'فول'],
+  hummus: ['חומוס', 'מסבחה', 'hummus', 'humus', 'msabbaha', 'حمص', 'مسبحة', 'فول'],
   sushi: ['סושי', 'מאקי', 'ניגירי', 'סשימי', 'אינסייד', 'רול', 'sushi', 'maki', 'nigiri', 'sashimi', 'roll', 'uramaki', 'سوشي', 'ماكي'],
   pastries: ['מאפה', 'מאפים', 'בורקס', 'בורקה', 'קרואסון', 'מנאקיש', 'מנקיש', 'פטאייר', 'ספיחה', 'burekas', 'pastry', 'pastries', 'croissant', 'manakish', 'manaqish', 'fatayer', 'sfiha', 'مناقيش', 'منقوشة', 'فطاير', 'فطيرة', 'صفيحة', 'معجنات', 'كرواسون'],
   salads: ['סלט', 'סלטים', 'פטוש', 'טבולה', 'salad', 'salads', 'fattoush', 'tabbouleh', 'سلطة', 'سلطات', 'فتوش', 'تبولة'],

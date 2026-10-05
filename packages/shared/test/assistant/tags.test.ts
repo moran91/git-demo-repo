@@ -87,4 +87,17 @@ describe('autoTags', () => {
     expect(wordForms('בקר')).toEqual(['בקר']);
     expect(wordForms('שתה')).toEqual(['שתה']);
   });
+  it('a real drink word on a meat or fish dish does not make it a drink', () => {
+    const beef = autoTags({ name: { en: 'Beef cold cuts' } });
+    expect(beef.tags).toContain('meat');
+    expect(beef.tags).not.toContain('cold_drink');
+    const tuna = autoTags({ name: { en: 'Tuna iced plate' } });
+    expect(tuna.tags).toContain('fish');
+    expect(tuna.tags).not.toContain('cold_drink');
+  });
+  it('כפול (double) is not hummus via the כ prefix', () => {
+    expect(autoTags({ name: { he: 'סלט כפול' } }).dishType).toBe('salads');
+    expect(autoTags({ name: { he: 'שניצל כפול' } }).dishType).not.toBe('hummus');
+    expect(autoTags({ name: { he: 'המבורגר כפול' } }).dishType).toBe('burger');
+  });
 });
