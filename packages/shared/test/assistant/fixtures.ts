@@ -1,4 +1,4 @@
-import { buildAssistantData, prepareDishes, type AssistantData, type AssistantPlace, type DealsIndexDoc, type DishIndexDoc, type DishIndexEntry, type DishTag, type DishType, type Localized, type PairsIndexDoc, type ProfileOrder } from '../../src/index.js';
+import { autoTags, buildAssistantData, prepareDishes, type AssistantData, type AssistantPlace, type DealsIndexDoc, type DishIndexDoc, type DishIndexEntry, type DishTag, type DishType, type Localized, type PairsIndexDoc, type ProfileOrder } from '../../src/index.js';
 
 /** Sunday 4 Oct 2026, 20:00 in Beit Jann (dinner). */
 export const NOW = new Date('2026-10-04T17:00:00.000Z');
@@ -14,7 +14,9 @@ export const PLACES: AssistantPlace[] = [
   { branchId: 'dolce', businessId: 'b-dolce', name: { he: 'דולצ׳ה', ar: 'دولتشي', en: 'Dolce Biscotto' }, open: true, modes: ['delivery'] },
 ];
 
-type D = [id: string, name: Localized, price: number, type: DishType, tags: DishTag[], extra?: Partial<DishIndexEntry>];
+/** `AUTO`: type, tags and serves come from the automatic tagger (autoTags), as for an imported menu. */
+const AUTO = 'auto' as const;
+type D = [id: string, name: Localized, price: number, type: DishType | typeof AUTO, tags: DishTag[] | typeof AUTO, extra?: Partial<DishIndexEntry>];
 const MENUS: Record<string, D[]> = {
   morano: [
     ['m-margherita', { he: 'פיצה מרגריטה', en: 'Margherita pizza', ar: 'بيتزا مارغريتا' }, 4800, 'pizza', ['vegetarian', 'cheese'], { serves: 2, mostOrdered: true, imagePath: 'img/m-margherita.webp' }],
@@ -32,9 +34,12 @@ const MENUS: Record<string, D[]> = {
     ['a-shawarma-spicy', { he: 'שווארמה חריפה', en: 'Spicy shawarma', ar: 'شاورما حارة' }, 4000, 'shawarma', ['spicy', 'meat']],
     ['a-falafel', { he: 'פלאפל', en: 'Falafel', ar: 'فلافل' }, 2200, 'snacks', ['vegetarian', 'vegan']],
     ['a-hummus', { he: 'חומוס', en: 'Hummus', ar: 'حمص' }, 2600, 'hummus', ['vegetarian', 'vegan']],
-    ['a-cola', { he: 'קולה', en: 'Cola', ar: 'كولا' }, 800, 'drinks', ['cold_drink']],
+    // The place's only drink is a big bottle: a meal for 4 needs one or two, not four.
+    ['a-cola', { he: 'קולה 1.5 ליטר', en: 'Cola 1.5L', ar: 'كولا 1.5 لتر' }, 800, AUTO, AUTO],
     ['a-knafeh', { he: 'כנאפה', en: 'Knafeh', ar: 'كنافة' }, 2400, 'desserts', ['sweet']],
     ['a-platter', { he: 'מגש שווארמה משפחתי', en: 'Family shawarma platter' }, 14000, 'shawarma', ['meat', 'sharing'], { serves: 6 }],
+    // Beef by default: no word says meat, the shawarma type does.
+    ['a-shawarma-laffa', { he: 'שווארמה בלאפה', en: 'Shawarma in laffa' }, 4200, AUTO, AUTO],
   ],
   sumo: [
     ['s-salmon-roll', { he: 'רול סלמון', en: 'Salmon roll', ar: 'رول سلمون' }, 4200, 'sushi', ['fish']],
@@ -58,6 +63,7 @@ const MENUS: Record<string, D[]> = {
     ['b-onion-rings', { he: 'טבעות בצל', en: 'Onion rings' }, 1900, 'snacks', ['vegetarian']],
     ['b-sprite', { he: 'ספרייט', en: 'Sprite' }, 900, 'drinks', ['cold_drink']],
     ['b-vegan-burger', { he: 'בורגר טבעוני', en: 'Vegan burger' }, 5000, 'burger', ['vegan', 'vegetarian']],
+    ['b-cheeseburger', { he: 'צ׳יזבורגר', en: 'Cheeseburger' }, 5600, AUTO, AUTO],
   ],
   baguette: [
     ['bg-schnitzel', { he: 'באגט שניצל', en: 'Schnitzel baguette' }, 3900, 'mains', ['chicken']],
@@ -75,7 +81,11 @@ const MENUS: Record<string, D[]> = {
 
 export const INDEXES = new Map<string, DishIndexDoc>(Object.entries(MENUS).map(([branchId, dishes]) => {
   const place = PLACES.find((p) => p.branchId === branchId)!;
-  const entries = Object.fromEntries(dishes.map(([id, name, price, dishType, tags, extra], i): [string, DishIndexEntry] => [id, { name, priceAgorot: price, fromPrice: false, available: true, needsChoice: false, sortOrder: i, dishType, tags, ...extra }]));
+  const entries = Object.fromEntries(dishes.map(([id, name, price, dishType, tags, extra], i): [string, DishIndexEntry] => {
+    const auto = dishType === AUTO || tags === AUTO ? autoTags({ name }) : undefined;
+    const type = dishType === AUTO ? auto!.dishType : dishType;
+    return [id, { name, priceAgorot: price, fromPrice: false, available: true, needsChoice: false, sortOrder: i, ...(type ? { dishType: type } : {}), tags: tags === AUTO ? auto!.tags : tags, ...(auto && auto.serves > 1 ? { serves: auto.serves } : {}), ...extra }];
+  }));
   return [branchId, { branchId, businessId: place.businessId, dishes: entries, updatedAt: '' }];
 }));
 
@@ -100,12 +110,15 @@ export const ORDERS: ProfileOrder[] = [
   { branchId: 'abu', businessId: 'b-abu', placedAt: '2026-09-16T18:00:00.000Z', mode: 'delivery', status: 'rejected', lines: [line('a-platter', 'מגש')] },
 ];
 
-export function fixtureData(opts: { now?: Date; places?: AssistantPlace[]; signedIn?: boolean; cartBranchId?: string } = {}): AssistantData {
+/** `soldOut`: dish ids marked unavailable in the index (a drink ran out). */
+export function fixtureData(opts: { now?: Date; places?: AssistantPlace[]; signedIn?: boolean; cartBranchId?: string; soldOut?: string[] } = {}): AssistantData {
   const places = opts.places ?? PLACES;
+  const soldOut = new Set(opts.soldOut ?? []);
+  const indexes = soldOut.size ? new Map([...INDEXES].map(([b, idx]) => [b, { ...idx, dishes: Object.fromEntries(Object.entries(idx.dishes).map(([id, e]) => [id, soldOut.has(id) ? { ...e, available: false } : e])) }])) : INDEXES;
   return buildAssistantData({
     now: opts.now ?? NOW,
     places,
-    dishes: prepareDishes(places, INDEXES),
+    dishes: prepareDishes(places, indexes),
     deals: DEALS,
     pairs: PAIRS,
     orders: opts.signedIn === false ? undefined : ORDERS,

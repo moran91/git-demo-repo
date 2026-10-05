@@ -100,4 +100,41 @@ describe('autoTags', () => {
     expect(autoTags({ name: { he: 'שניצל כפול' } }).dishType).not.toBe('hummus');
     expect(autoTags({ name: { he: 'המבורגר כפול' } }).dishType).toBe('burger');
   });
+  it('I3. common meat dishes are meat: cheeseburger, laffa shawarma, mansaf, meorav, skewers, kebab', () => {
+    for (const name of [{ he: 'צ׳יזבורגר' }, { he: 'ציזבורגר' }, { he: "צ'יזבורגר" }, { en: 'Cheeseburger' }, { ar: 'تشيز برغر' }]) {
+      const r = autoTags({ name });
+      expect(r.dishType, JSON.stringify(name)).toBe('burger');
+      expect(r.tags, JSON.stringify(name)).toContain('meat');
+      expect(r.tags, JSON.stringify(name)).not.toContain('vegetarian');
+    }
+    for (const name of [{ he: 'שווארמה בלאפה' }, { he: 'מנסף' }, { ar: 'منسف' }, { en: 'Mansaf' }, { he: 'מעורב ירושלמי' }, { he: 'שיפודים' }, { he: 'שיפוד' }, { ar: 'شيش' }, { ar: 'كباب' }, { he: 'קבב' }, { en: 'Kebab' }, { en: 'Shawarma laffa' }, { ar: 'عرايس' }]) {
+      expect(autoTags({ name }).tags, JSON.stringify(name)).toContain('meat');
+    }
+  });
+  it('I3. a skewer or a mixed salad is not meat by that word alone', () => {
+    for (const name of [{ he: 'שיפודי פרגית' }, { ar: 'شيش طاووق' }, { ar: 'شقف دجاج' }, { he: 'סלט מעורב' }]) {
+      expect(autoTags({ name }).tags, JSON.stringify(name)).not.toContain('meat');
+    }
+  });
+  it('I3. burger and shawarma are meat unless chicken, fish, vegetarian or vegan', () => {
+    expect(autoTags({ name: { he: 'שווארמה' } }).tags).toContain('meat');
+    expect(autoTags({ name: { he: 'המבורגר' } }).tags).toContain('meat');
+    for (const name of [{ he: 'שווארמה עוף' }, { en: 'Chicken burger' }, { he: 'בורגר טבעוני' }, { en: 'Veggie burger' }, { he: 'בורגר צמחוני' }, { en: 'Fish burger' }, { ar: 'شاورما دجاج' }]) {
+      expect(autoTags({ name }).tags, JSON.stringify(name)).not.toContain('meat');
+    }
+  });
+  it('I6. a big drink serves more than one: about 0.4 L a person, capped', () => {
+    expect(autoTags({ name: { he: 'קולה 1.5 ליטר' } })).toMatchObject({ dishType: 'drinks', serves: 4 });
+    expect(autoTags({ name: { en: 'Coca-Cola 1.5L' } }).serves).toBe(4);
+    expect(autoTags({ name: { ar: 'كولا 1.5 لتر' } }).serves).toBe(4);
+    expect(autoTags({ name: { he: 'ספרייט ליטר וחצי' } }).serves).toBe(4);
+    expect(autoTags({ name: { he: 'קולה בקבוק גדול' } }).serves).toBe(4);
+    expect(autoTags({ name: { he: 'קולה 2 ליטר' } }).serves).toBe(5);
+    expect(autoTags({ name: { en: 'Pepsi family size' } }).serves).toBe(4);
+    expect(autoTags({ name: { he: 'פחית קולה 330 מ״ל' } }).serves).toBe(1);
+    expect(autoTags({ name: { he: 'מים חצי ליטר' } }).serves).toBe(1);
+    expect(autoTags({ name: { he: 'קולה' } }).serves).toBe(1);
+    // A litre on a dish that is not a drink says nothing about people; a big bottle is not a sharing platter.
+    expect(autoTags({ name: { he: 'קולה 1.5 ליטר' } }).tags).not.toContain('sharing');
+  });
 });

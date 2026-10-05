@@ -41,7 +41,10 @@ export interface AssistantData {
   placeNames: PlaceName[];
   dishes: AssistantDish[];
   dishById: Map<string, AssistantDish>;
+  /** Deals that can be ordered now (dealUsable): every list, chip, pick and boost reads these. */
   deals: AssistantDeal[];
+  /** Dishes (dishKey) in a live promotion: ranked higher and labelled as a deal. A combo member alone is not a deal. */
+  promoted: ReadonlySet<string>;
   pairs: Map<string, Record<string, PairEntry[]>>;
   profile?: Profile;
   cartBranchId?: string;
@@ -87,14 +90,16 @@ export function buildAssistantData(input: { now: Date; places: AssistantPlace[];
   const dishes = input.dishes.filter((d) => places.has(d.branchId));
   const dishById = new Map(dishes.map((d) => [dishKey(d.branchId, d.id), d]));
   const today = toLocal(input.now).date;
-  const deals: AssistantDeal[] = [];
+  const all: AssistantDeal[] = [];
   for (const p of input.places) {
     const d = input.deals?.get(p.branchId);
     if (!d) continue;
-    for (const [id, combo] of Object.entries(d.combos ?? {})) deals.push({ id, branchId: p.branchId, kind: 'combo', combo });
+    for (const [id, combo] of Object.entries(d.combos ?? {})) all.push({ id, branchId: p.branchId, kind: 'combo', combo });
     // endsAt is the last valid day (same rule as lib/promotions.ts).
-    for (const [id, promotion] of Object.entries(d.promotions ?? {})) if (promotion.endsAt >= today) deals.push({ id, branchId: p.branchId, kind: 'promotion', promotion });
+    for (const [id, promotion] of Object.entries(d.promotions ?? {})) if (promotion.endsAt >= today) all.push({ id, branchId: p.branchId, kind: 'promotion', promotion });
   }
+  const deals = all.filter((d) => dealUsable(dishById, d));
+  const promoted = new Set(deals.flatMap((d) => (d.promotion?.productIds ?? []).filter((id) => dishById.has(dishKey(d.branchId, id))).map((id) => dishKey(d.branchId, id))));
   const pairs = new Map<string, Record<string, PairEntry[]>>();
   for (const p of input.places) {
     const doc = input.pairs?.get(p.branchId);
@@ -109,10 +114,20 @@ export function buildAssistantData(input: { now: Date; places: AssistantPlace[];
     dishes,
     dishById,
     deals,
+    promoted,
     pairs,
     ...(profile ? { profile } : {}),
     ...(input.cartBranchId ? { cartBranchId: input.cartBranchId } : {}),
   };
+}
+
+/**
+ * A deal that can be ordered now, by resolveCard's rules: a combo needs every member on the menu (one
+ * sold-out drink and it cannot be ordered); a promotion needs at least one of its dishes.
+ */
+export function dealUsable(dishById: ReadonlyMap<string, AssistantDish>, d: AssistantDeal): boolean {
+  if (d.combo) return d.combo.items.every((i) => dishById.has(dishKey(d.branchId, i.productId)));
+  return (d.promotion?.productIds ?? []).some((id) => dishById.has(dishKey(d.branchId, id)));
 }
 
 export function localHour(now: Date): number {

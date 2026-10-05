@@ -7,7 +7,8 @@ import type { Usual } from './profile.js';
 import type { Card } from './respond.js';
 
 export type ResolvedCard =
-  | { kind: 'dish'; dish: AssistantDish; place: AssistantPlace }
+  /** `inDeal`: the dish is in a live promotion, so the card shows the deal label. */
+  | { kind: 'dish'; dish: AssistantDish; place: AssistantPlace; inDeal: boolean }
   | { kind: 'meal'; basket: MealBasket; place: AssistantPlace; lines: Array<{ line: MealLine; name: Localized; imagePath?: string }> }
   | { kind: 'deal'; deal: AssistantDeal; place: AssistantPlace; itemNames: Localized[] }
   | { kind: 'usual'; usual: Usual; place: AssistantPlace; missing: Localized[] };
@@ -17,7 +18,7 @@ export function resolveCard(card: Card, data: AssistantData): ResolvedCard | nul
     case 'dish': {
       const dish = data.dishById.get(dishKey(card.branchId, card.productId));
       const place = data.places.get(card.branchId);
-      return dish && place ? { kind: 'dish', dish, place } : null;
+      return dish && place ? { kind: 'dish', dish, place, inDeal: data.promoted.has(dishKey(card.branchId, card.productId)) } : null;
     }
     case 'meal': {
       const place = data.places.get(card.basket.branchId);

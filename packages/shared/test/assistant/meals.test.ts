@@ -94,6 +94,26 @@ describe('buildMeals, fix round', () => {
   });
 });
 
+describe('buildMeals, final review', () => {
+  it('I6. "ארוחה ל-4 עד 150" at a place whose only drink is 1.5 L adds one or two bottles, not four', () => {
+    expect(data.dishById.get('abu/a-cola')!.entry.serves).toBe(4);
+    const abu = meals('ארוחה ל-4 עד 150').find((b) => b.branchId === 'abu');
+    expect(abu).toBeDefined();
+    const cola = abu!.lines.find((l) => l.productId === 'a-cola');
+    expect(cola).toBeDefined();
+    expect(cola!.qty).toBeGreaterThanOrEqual(1);
+    expect(cola!.qty).toBeLessThanOrEqual(2);
+  });
+  it('I6. drinks are bought by how many each one serves', () => {
+    const d = fixtureData();
+    const coke = d.dishById.get('morano/m-coke')!;
+    coke.entry = { ...coke.entry, serves: 3 };
+    const r = understand('משהו חריף ל-4 עד 150', d.placeNames);
+    const [b] = buildMeals(r, d, rank(retrieve(r, d), r, d));
+    expect(b!.lines.find((l) => l.productId === 'm-coke')?.qty).toBe(2);
+  });
+});
+
 describe('applyCombos, fix round', () => {
   const deal = (id: string, price: number, items: Array<[string, number]>): AssistantDeal => ({ id, branchId: 'morano', kind: 'combo', combo: { name: { he: id }, priceAgorot: price, items: items.map(([productId, quantity]) => ({ productId, quantity })), sortOrder: 0 } });
   const line = (productId: string, qty: number, unitAgorot: number) => ({ productId, qty, unitAgorot, needsChoice: false });

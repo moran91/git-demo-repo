@@ -1,12 +1,12 @@
 /** The home's assistant strip: a time-of-day greeting, up to three ready picks (your usual, the best deal, a pick for now) from different places, and suggestion chips. */
 import type { DishType } from '../dishIndex.js';
 import { dictionaries } from '../i18n/index.js';
-import { localHour, type AssistantData } from './data.js';
+import { DISH_TYPE_WORDS, localHour, type AssistantData } from './data.js';
 import { hashUnit, mealOf, rank } from './rank.js';
 import { chipLabel, reply, type ReplyKey } from './replies.js';
 import { closedAllLine, shortcutChips, type Card, type Chip, type RespondOptions } from './respond.js';
 import { placeUsable, retrieve } from './retrieve.js';
-import { emptyRequest } from './understand.js';
+import { emptyRequest, type Lang } from './understand.js';
 
 export interface HomeView {
   greeting: string;
@@ -44,11 +44,20 @@ export function homeView(data: AssistantData, opts: RespondOptions): HomeView {
 
   const chips: Chip[] = [{ label: chipLabel(meal, lang), request: r }, ...shortcutChips(lang, data, opts.signedIn)];
   const type = topType(data);
-  if (type) {
-    const label = dictionaries[lang][`dishType.${type}`];
-    chips.push({ label, send: label });
-  }
+  if (type) chips.push(typeChip(type, lang));
   return { greeting: reply(GREETING[meal], lang, {}, data.seed), cards, chips: chips.slice(0, 4) };
+}
+
+const SCRIPT: Record<Lang, RegExp> = { he: /^[\u0590-\u05ff]+$/, ar: /^[\u0600-\u06ff]+$/, en: /^[a-z]+$/ };
+
+/**
+ * The popular-type chip. It carries its request: the label is a UI name ("סמבוסק ומאפים") that would read
+ * as two cravings, so the request asks for the type by the word that names it in the chip's language.
+ */
+export function typeChip(type: DishType, lang: Lang): Chip {
+  const words = DISH_TYPE_WORDS[type].split(' ');
+  const word = words.find((w) => SCRIPT[lang].test(w)) ?? words[0]!;
+  return { label: dictionaries[lang][`dishType.${type}`], request: { ...emptyRequest(lang), craving: [word] } };
 }
 
 function topType(data: AssistantData): DishType | undefined {

@@ -1,7 +1,8 @@
 /**
  * "For 4 under ₪150": a ready basket from ONE place (the cart holds one place). Mains cover the people
- * (serves × qty), then drinks (one each) and sides (one per two) while the budget lasts; a combo
- * replaces its items when it is cheaper. Each place offers its best basket; the best places win.
+ * (serves × qty), then drinks (enough to go round: a big bottle serves several) and sides (one per two)
+ * while the budget lasts; a combo replaces its items when it is cheaper. Each place offers its best
+ * basket; the best places win.
  */
 import type { DishIndexEntry, DishType } from '../dishIndex.js';
 import type { AssistantData, AssistantDeal, AssistantDish } from './data.js';
@@ -90,7 +91,8 @@ export function buildMeals(r: Request, data: AssistantData, ranked: Hit[]): Meal
       };
       // The drink suits the main: a cold one, or a hot one with a pastry or dessert; never the wrong temperature.
       const drink = allDrinks.filter((d) => drinkSuits(d, e.dishType)).sort((x, y) => coldFirst(x, y, e.dishType) || popularThenCheap(x, y))[0];
-      if (e.dishType !== 'drinks') add(drink, people);
+      // Enough to go round: a 1.5 L bottle serves 4 (servesOf), so "for 4" gets one, not four.
+      if (e.dishType !== 'drinks' && drink) add(drink, Math.ceil(people / servesOf(drink.entry)));
       // Sides go with a main, never with a dessert or a coffee ("כנאפה ל-4" gets no falafel).
       if (people >= 2 && isMain(e)) add(sides[0], Math.ceil(people / 2));
       const applied = applyCombos(lines, combos);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_CONVERSATION, afterAdd, formatILS, homeView, rank, reply, respond, retrieve, type AssistantTurn, type Card, type Conversation, type ReplyKey } from '../../src/index.js';
+import { DISH_TYPES, EMPTY_CONVERSATION, afterAdd, dictionaries, emptyRequest, formatILS, homeView, rank, reply, resolveCard, respond, retrieve, type AssistantData, type AssistantTurn, type Card, type Conversation, type ReplyKey } from '../../src/index.js';
 import { NOW, PLACES, allClosed, fixtureData } from './fixtures.js';
 
 const data = fixtureData();
@@ -356,5 +356,79 @@ describe('fix round 1', () => {
     const c = say('הרגיל שלי', 'עוד');
     expect(last(c).cards.filter((x) => x.kind === 'usual')).toEqual([]);
     expect(last(c).kind).toBe('none');
+  });
+});
+
+describe('final review fixes', () => {
+  const he = opts;
+  const resolves = (t: AssistantTurn, d: AssistantData) => t.cards.filter((c) => resolveCard(c, d) !== null).length;
+
+  it('I1. a combo with a sold-out member is not offered: the deals answer has only orderable deals', () => {
+    const d = fixtureData({ soldOut: ['m-coke'] });
+    const t = last(respond(EMPTY_CONVERSATION, 'מה במבצע?', d, he));
+    expect(t.kind).toBe('deal');
+    expect(t.cards.map((c) => (c.kind === 'deal' ? c.dealId : ''))).not.toContain('m-combo-pair');
+    // Every deal announced is a card that shows: the line and its cards agree.
+    expect(t.cards.length).toBeGreaterThan(0);
+    expect(resolves(t, d)).toBe(t.cards.length);
+    expect(d.deals.map((x) => x.id).sort()).toEqual(['b-combo-kids', 'm-promo-pasta']);
+  });
+
+  it('I1. a promotion whose dishes are all gone is not offered, and the home deal pick always shows', () => {
+    const d = fixtureData({ soldOut: ['m-coke', 'm-arrabbiata', 'b-sprite'] });
+    expect(d.deals).toEqual([]);
+    const t = last(respond(EMPTY_CONVERSATION, 'מה במבצע?', d, he));
+    expect(t.cards).toEqual([]);
+    // "No deals now", never a deals line with nothing under it.
+    expect([0, 1, 2].map((k) => reply('deals', 'he', {}, k))).not.toContain(t.text);
+    expect(homeView(d, he).chips.map((c) => c.label)).not.toContain('מה במבצע?');
+    const one = fixtureData({ soldOut: ['m-coke'] });
+    const home = homeView(one, he);
+    for (const c of home.cards) expect(resolveCard(c, one), JSON.stringify(c)).not.toBeNull();
+    expect(home.cards.some((c) => c.kind === 'deal')).toBe(true);
+  });
+
+  it('I2. the home dish-type chip answers that type, in every language', () => {
+    for (const type of DISH_TYPES.filter((x) => x !== 'drinks')) {
+      for (const uiLang of ['he', 'ar', 'en'] as const) {
+        const o = { signedIn: true, uiLang };
+        // Only this type on the menu, so it is the home's popular type.
+        const only = { ...data, dishes: data.dishes.filter((x) => x.entry.dishType === type) };
+        const label = dictionaries[uiLang][`dishType.${type}`];
+        const chip = homeView(only, o).chips.find((c) => c.label === label);
+        expect(chip, `${uiLang} ${type}`).toBeDefined();
+        const t = last(respond(EMPTY_CONVERSATION, chip!, data, o));
+        const at = `${uiLang} ${label} → ${t.kind} "${t.text}"`;
+        expect(t.kind, at).toBe('dish');
+        // A plain "here's what I found", never "no X, but here is" about the chip's own words.
+        expect([0, 1, 2].map((k) => reply('picks', uiLang, {}, k)), at).toContain(t.text);
+        expect(t.cards.length, at).toBeGreaterThan(0);
+        for (const c of t.cards) expect(c.kind === 'dish' && data.dishById.get(`${c.branchId}/${c.productId}`)!.entry.dishType, at).toBe(type);
+      }
+    }
+  });
+
+  it('I3. "no meat" drops an untagged cheeseburger and beef shawarma, keeps the chicken shawarma', () => {
+    const r = { ...emptyRequest('he'), exclude: { tags: ['meat' as const], words: [], dishIds: [], branchIds: [] } };
+    const kept = retrieve(r, data).map((c) => c.dish.id);
+    expect(kept).not.toContain('b-cheeseburger');
+    expect(kept).not.toContain('a-shawarma-laffa');
+    expect(kept).toContain('a-shawarma-chicken');
+    expect(kept).toContain('b-chicken');
+  });
+
+  it('I7. only dishes in a live promotion are boosted, and their card says so', () => {
+    const noDeals: AssistantData = { ...data, deals: [], promoted: new Set() };
+    const points = (d: AssistantData, id: string) => {
+      const r = emptyRequest('he');
+      return rank(retrieve(r, d), r, d).find((h) => h.dish.id === id)!.points;
+    };
+    // A combo member alone is not a deal: no boost, no label.
+    expect(points(data, 'm-margherita')).toBe(points(noDeals, 'm-margherita'));
+    expect(points(data, 'm-arrabbiata')).toBe(points(noDeals, 'm-arrabbiata') + 15);
+    const card = (id: string, d: AssistantData = data) => resolveCard({ kind: 'dish', branchId: 'morano', productId: id }, d);
+    expect(card('m-arrabbiata')).toMatchObject({ kind: 'dish', inDeal: true });
+    expect(card('m-margherita')).toMatchObject({ kind: 'dish', inDeal: false });
+    expect(card('m-arrabbiata', noDeals)).toMatchObject({ kind: 'dish', inDeal: false });
   });
 });

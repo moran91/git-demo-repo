@@ -22,7 +22,7 @@ export const TAG_TERMS: Record<DishTag, readonly string[]> = {
   sweet: ['מתוק', 'מתוקה', 'קינוח', 'קינוחים', 'שוקולד', 'נוטלה', 'וופל', 'גלידה', 'עוגה', 'עוגת', 'כנאפה', 'קנאפה', 'בקלאווה', 'קרפ', 'מלבי', 'sweet', 'dessert', 'chocolate', 'nutella', 'waffle', 'ice cream', 'cake', 'knafeh', 'kunafa', 'baklava', 'crepe', 'حلو', 'حلويات', 'شوكولا', 'شوكولاته', 'نوتيلا', 'وافل', 'بوظة', 'ايس كريم', 'كيك', 'كنافة', 'بقلاوة', 'كريب', 'مهلبية'],
   cold_drink: ['קולה', 'קוקה', 'ספרייט', 'פאנטה', 'זירו', 'מיץ', 'מים', 'סודה', 'לימונדה', 'שייק', 'מילקשייק', 'אייס', 'קר', 'קרה', 'בירה', 'פריגת', 'גרוס', 'סמוזי', 'cola', 'coke', 'sprite', 'fanta', 'juice', 'water', 'soda', 'lemonade', 'shake', 'milkshake', 'iced', 'ice', 'cold', 'beer', 'smoothie', 'slush', 'redbull', 'red bull', 'كولا', 'كوكا', 'سبرايت', 'فانتا', 'عصير', 'مي', 'مياه', 'صودا', 'ليموناضة', 'شيك', 'مثلج', 'بارد', 'باردة', 'سلاش', 'بيرة'],
   hot_drink: ['קפה', 'תה', 'הפוך', 'אספרסו', 'קפוצ׳ינו', 'קפוצינו', 'לאטה', 'שוקו חם', 'סחלב', 'נס קפה', 'coffee', 'tea', 'espresso', 'cappuccino', 'latte', 'americano', 'macchiato', 'hot chocolate', 'sahlab', 'قهوة', 'شاي', 'اسبريسو', 'كابتشينو', 'كابوتشينو', 'لاتيه', 'سحلب', 'نسكافيه'],
-  meat: ['בשר', 'בשרי', 'בקר', 'עגל', 'כבש', 'טלה', 'אנטריקוט', 'סטייק', 'קבב', 'קציצות', 'המבורגר', 'בורגר', 'פפרוני', 'סלמי', 'נקניק', 'נקניקיה', 'נקניקיות', 'קבנוס', 'מרגז', 'כבד', 'meat', 'beef', 'veal', 'lamb', 'steak', 'entrecote', 'kebab', 'kofta', 'burger', 'hamburger', 'pepperoni', 'salami', 'sausage', 'hot dog', 'لحم', 'لحمة', 'عجل', 'غنم', 'خروف', 'ستيك', 'كباب', 'كفتة', 'برغر', 'همبرغر', 'برجر', 'بيبروني', 'سلامي', 'نقانق', 'سجق', 'كبدة'],
+  meat: ['בשר', 'בשרי', 'בקר', 'עגל', 'כבש', 'טלה', 'אנטריקוט', 'סטייק', 'קבב', 'קציצות', 'המבורגר', 'בורגר', 'צ׳יזבורגר', 'ציזבורגר', "צ'יזבורגר", 'מנסף', 'מעורב ירושלמי', 'מעורב בפיתה', 'מעורב בלאפה', 'מנת מעורב', 'שיפוד', 'שיפודים', 'שיפודי', 'שישליק', 'עראיס', 'פפרוני', 'סלמי', 'נקניק', 'נקניקיה', 'נקניקיות', 'קבנוס', 'מרגז', 'כבד', 'meat', 'beef', 'veal', 'lamb', 'steak', 'entrecote', 'kebab', 'kofta', 'burger', 'hamburger', 'cheeseburger', 'mansaf', 'meorav', 'skewer', 'skewers', 'shish', 'shishlik', 'arayes', 'pepperoni', 'salami', 'sausage', 'hot dog', 'لحم', 'لحمة', 'عجل', 'غنم', 'خروف', 'ستيك', 'كباب', 'كفتة', 'برغر', 'همبرغر', 'برجر', 'تشيز برغر', 'تشيزبرغر', 'تشيز برجر', 'منسف', 'شيش', 'شقف', 'عرايس', 'بيبروني', 'سلامي', 'نقانق', 'سجق', 'كبدة'],
   chicken: ['עוף', 'עופות', 'פרגית', 'פרגיות', 'שניצל', 'שניצלונים', 'חזה', 'כנפיים', 'כנפי', 'נאגטס', 'chicken', 'schnitzel', 'wings', 'nuggets', 'taouk', 'دجاج', 'جاج', 'فراخ', 'شنيتسل', 'طاووق', 'اجنحة', 'ناجتس'],
   fish: ['דג', 'דגים', 'סלמון', 'טונה', 'שרימפס', 'לברק', 'דניס', 'fish', 'salmon', 'tuna', 'shrimp', 'shrimps', 'seafood', 'سمك', 'سلمون', 'تونة', 'قريدس', 'جمبري'],
   cheese: ['גבינה', 'גבינות', 'מוצרלה', 'צהובה', 'פטה', 'בולגרית', 'חלומי', 'רוקפור', 'פרמזן', 'צ׳דר', 'צדר', 'cheese', 'mozzarella', 'feta', 'halloumi', 'parmesan', 'cheddar', 'gouda', 'جبنة', 'جبن', 'موزاريلا', 'حلوم', 'فيتا', 'شيدر', 'بارميزان'],
@@ -33,7 +33,7 @@ export const TAG_TERMS: Record<DishTag, readonly string[]> = {
 export const TYPE_TERMS: Record<DishType, readonly string[]> = {
   pizza: ['פיצה', 'פיצות', 'מרגריטה', 'pizza', 'pizzas', 'margherita', 'بيتزا'],
   pasta: ['פסטה', 'ספגטי', 'פנה', 'רביולי', 'לזניה', 'פטוצ׳יני', 'פטוציני', 'ניוקי', 'מקרוני', 'pasta', 'spaghetti', 'penne', 'ravioli', 'lasagna', 'lasagne', 'fettuccine', 'gnocchi', 'macaroni', 'معكرونة', 'باستا', 'سباغيتي', 'لازانيا', 'رافيولي'],
-  burger: ['המבורגר', 'בורגר', 'burger', 'hamburger', 'cheeseburger', 'برغر', 'همبرغر', 'برجر'],
+  burger: ['המבורגר', 'בורגר', 'צ׳יזבורגר', 'ציזבורגר', "צ'יזבורגר", 'burger', 'hamburger', 'cheeseburger', 'برغر', 'همبرغر', 'برجر', 'تشيز برغر', 'تشيزبرغر', 'تشيز برجر'],
   shawarma: ['שווארמה', 'שוורמה', 'שאוורמה', 'shawarma', 'shawerma', 'شاورما', 'شاورمة'],
   hummus: ['חומוס', 'מסבחה', 'hummus', 'humus', 'msabbaha', 'حمص', 'مسبحة', 'فول'],
   sushi: ['סושי', 'מאקי', 'ניגירי', 'סשימי', 'אינסייד', 'רול', 'sushi', 'maki', 'nigiri', 'sashimi', 'roll', 'uramaki', 'سوشي', 'ماكي'],
@@ -70,7 +70,11 @@ export const TAG_LABELS: Record<DishTag, Record<Locale, string>> = {
 export const TAG_MATCHERS = Object.fromEntries(DISH_TAGS.map((t) => [t, termMatcher(TAG_TERMS[t])])) as Record<DishTag, TermMatcher>;
 const TYPE_MATCHERS = Object.fromEntries(DISH_TYPES.map((t) => [t, termMatcher(TYPE_TERMS[t])])) as Record<DishType, TermMatcher>;
 const PEOPLE = termMatcher(PEOPLE_TERMS);
-const GENERIC_MEAT = termMatcher(['המבורגר', 'בורגר', 'burger', 'hamburger', 'برغر', 'همبرغر', 'برجر']);
+/** Meat words that also name chicken or fish dishes ("בורגר עוף", "שיפודי פרגית", "شيش طاووق"): alone they do not make a chicken dish meat. */
+const GENERIC_MEAT = termMatcher(['המבורגר', 'בורגר', 'שיפוד', 'שיפודים', 'שיפודי', 'שישליק', 'burger', 'hamburger', 'skewer', 'skewers', 'shish', 'shishlik', 'برغر', 'همبرغر', 'برجر', 'شيش', 'شقف']);
+/** Types that are meat unless the dish says chicken, fish, vegetarian or vegan ("שווארמה בלאפה", "Cheeseburger"). */
+const MEAT_TYPES: readonly DishType[] = ['burger', 'shawarma'];
+const NOT_MEAT_TAGS: readonly DishTag[] = ['chicken', 'fish', 'vegetarian', 'vegan'];
 const SINGLE_PORTION = termMatcher(['משולש', 'סלייס', 'אישית', 'אישי', 'מיני', 'slice', 'personal', 'mini', 'قطعة', 'شخصية', 'ميني', 'سلايس']);
 const SERVES: Array<readonly [number, TermMatcher]> = [
   [6, termMatcher(['מגש', 'מגשים', 'מסיבה', 'אירוח', 'platter', 'party', 'tray', 'صينية', 'عزومة'])],
@@ -105,8 +109,11 @@ export function autoTags(input: AutoTagInput): AutoTagResult {
   for (const t of DISH_TAGS) if (t !== 'sharing' && countMatches(text, TAG_MATCHERS[t]) > 0) tags.add(t);
   // The menu section names drinks, breakfasts and sweets ("שתייה קרה", "قهوة", "ארוחות בוקר").
   for (const t of ['cold_drink', 'hot_drink', 'breakfast', 'sweet', 'kids'] as const) if (countMatches(cat, TAG_MATCHERS[t]) > 0) tags.add(t);
-  // A burger word alone is not "meat" when the burger is chicken or fish.
-  if (tags.has('meat') && (tags.has('chicken') || tags.has('fish')) && countMatches(text, TAG_MATCHERS.meat) <= countMatches(text, GENERIC_MEAT)) tags.delete('meat');
+  // A burger or skewer word alone is not "meat" when the dish is chicken, fish, vegetarian or vegan.
+  const notMeat = NOT_MEAT_TAGS.some((t) => tags.has(t));
+  if (tags.has('meat') && notMeat && countMatches(text, TAG_MATCHERS.meat) <= countMatches(text, GENERIC_MEAT)) tags.delete('meat');
+  // A burger or shawarma is beef or lamb unless it says otherwise ("Cheeseburger", "שווארמה בלאפה").
+  if (dishType && MEAT_TYPES.includes(dishType) && !notMeat) tags.add('meat');
   // Beef, chicken and fish dishes are not drinks, whatever else their words say.
   if (tags.has('meat') || tags.has('chicken') || tags.has('fish')) for (const t of DRINK_TAGS) tags.delete(t);
   if (tags.has('cold_drink')) tags.delete('hot_drink');
@@ -116,8 +123,9 @@ export function autoTags(input: AutoTagInput): AutoTagResult {
   if (dishType === 'desserts') tags.add('sweet');
   if (tags.has('vegan')) tags.add('vegetarian');
   if (dishType && VEGETARIAN_TYPES.includes(dishType) && !tags.has('meat') && !tags.has('chicken') && !tags.has('fish')) tags.add('vegetarian');
-  const serves = pickServes(name, desc, dishType);
-  if (serves >= 3) tags.add('sharing');
+  const serves = pickServes(name, desc, dishType, dishType === 'drinks' || tags.has('cold_drink') ? `${allText(input.name)} ${allText(input.description)}` : undefined);
+  // A big bottle is shared, but it is not a sharing platter.
+  if (serves >= 3 && dishType !== 'drinks') tags.add('sharing');
   return { tags: DISH_TAGS.filter((t) => tags.has(t)), serves, ...(dishType ? { dishType } : {}) };
 }
 
@@ -135,12 +143,51 @@ function pickType(name: Prepared, cat: Prepared, desc: Prepared): DishType | und
   return best;
 }
 
-function pickServes(name: Prepared, desc: Prepared, dishType: DishType | undefined): number {
+/** `drinkText`: a drink's raw texts, read for its size. */
+function pickServes(name: Prepared, desc: Prepared, dishType: DishType | undefined, drinkText?: string): number {
   const explicit = explicitPeople(name) ?? explicitPeople(desc);
   if (explicit) return explicit;
   for (const [n, m] of SERVES) if (countMatches(name, m) > 0) return n;
+  const litres = drinkText === undefined ? undefined : drinkLitres(drinkText);
+  if (litres !== undefined) return drinkServes(litres);
   if (dishType === 'pizza' && countMatches(name, SINGLE_PORTION) === 0) return 2;
   return 1;
+}
+
+/** A drink serves one person per 0.4 L (a glass and a half), at least 1 and at most 6: 1.5 L → 4, 2 L → 5, a can → 1. */
+const LITRES_PER_PERSON = 0.4;
+const MAX_DRINK_SERVES = 6;
+export function drinkServes(litres: number): number {
+  return Math.min(MAX_DRINK_SERVES, Math.max(1, Math.round(litres / LITRES_PER_PERSON)));
+}
+
+const DRINK_SIZES: Array<readonly [RegExp, (m: RegExpExecArray) => number]> = [
+  // "330 מ״ל", "500ml", "250 مل"
+  [/(\d+(?:[.,]\d+)?)\s*(?:מ["״׳']ל|מל|ml|مل)(?!\p{L})/u, (m) => num(m[1]!) / 1000],
+  // "ליטר וחצי", "لتر ونص", "a litre and a half"
+  [/(?:ליטר\s+וחצי|لتر\s+و\s*(?:نص|نصف)|(?:liter|litre)\s+and\s+a\s+half)/u, () => 1.5],
+  // "חצי ליטר", "نص لتر", "half a litre"
+  [/(?:חצי\s+ליטר|(?:نص|نصف)\s+لتر|half\s+(?:a\s+)?(?:liter|litre))/u, () => 0.5],
+  // "1.5 ליטר", "1.5L", "2 لتر"
+  [/(\d+(?:[.,]\d+)?)\s*(?:ליטר|ל["׳']|liters?|litres?|ltr|lt|l|لتر|ليتر)(?!\p{L})/u, (m) => num(m[1]!)],
+  // "בקבוק גדול", "large bottle", "family size", "قنينة كبيرة": the usual 1.5 L
+  [/(?:בקבוק\s+גדול|(?:large|big)\s+bottle|family\s+size|(?:قنينة|زجاجة|قنينه)\s+كبير[ةه]?)/u, () => 1.5],
+  // A bare "ליטר" / "litre" / "لتر": one litre
+  [/(?:^|\P{L})(?:ליטר|liter|litre|لتر|ليتر)(?!\p{L})/u, () => 1],
+];
+const num = (s: string) => Number(s.replace(',', '.'));
+
+/** A drink's size in litres, read from its texts ("קולה 1.5 ליטר", "Coke 330ml", "ספרייט ליטר וחצי"). */
+export function drinkLitres(text: string): number | undefined {
+  const t = text.replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x660)).toLowerCase();
+  for (const [re, size] of DRINK_SIZES) {
+    const m = re.exec(t);
+    if (m) {
+      const litres = size(m);
+      if (litres > 0 && Number.isFinite(litres)) return litres;
+    }
+  }
+  return undefined;
 }
 
 /** "ל-4", "for 4", "ل4", "4 אנשים", "4 اشخاص" → 4 (2..12). */

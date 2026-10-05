@@ -68,8 +68,8 @@ All modules are pure TypeScript with no React or Firebase, and are unit-tested w
 | `tags.ts` | `DISH_TAGS` and the per-tag lexicon groups. `autoTags(product)` returns `{tags, serves, dishType}` inferred from name, description and category name (all languages) using LEXICON and `vocab`. |
 | `understand.ts` | `understand(text, prev?: Request): Request`. Extracts slots, removes slot tokens, and leaves the remaining words as `craving`. Handles refinements relative to `prev`. |
 | `retrieve.ts` | `candidates(request, data, now)`: available dishes at open places that offer a usable mode, after hard filters (place, tags, exclusions, max item price). |
-| `rank.ts` | `score(dish, request, ctx)`: craving `matchScore` (reused), tag fit, profile affinity (the signed-in customer's own order history), popularity (`mostOrdered`), time of day, a deal boost. Results are diversified by place with `rankDishes`-style round robin and a daily seed. |
-| `mealBuilder.ts` | `buildMeals(request, data)`: for each open place, a basket where the sum of `serves × qty` ≥ people and the total ≤ budget. Mains first, then drinks and sides while budget remains. A combo is used when it is cheaper than its items. Returns the best 2 baskets from different places. |
+| `rank.ts` | `score(dish, request, ctx)`: craving `matchScore` (reused), tag fit, profile affinity (the signed-in customer's own order history), popularity (`mostOrdered`), time of day, a deal boost (dishes in a live promotion; a combo member alone is not on offer). Results are diversified by place with a round robin and a daily seed. |
+| `mealBuilder.ts` | `buildMeals(request, data)`: for each open place, a basket where the sum of `serves × qty` ≥ people and the total ≤ budget. Mains first, then drinks (`ceil(people / serves)`: `autoTags` reads a drink's size at about 0.4 L a person, so a 1.5 L bottle serves 4) and sides while budget remains. A combo is used when it is cheaper than its items. Returns the best 2 baskets from different places. |
 | `upsell.ts` | `upsellFor(addedLine, cart, data)`: the best pair from the nightly pairs, otherwise rules by dish type (main → drink/side/dessert). One card. Suppressed after 2 skips in a conversation. |
 | `profile.ts` | `buildProfile(orders)`: usual per place (most repeated line set), favourite types and places, median spend, usual mode. Rebuilds a usual at current prices and flags missing or sold-out lines. |
 | `replies.ts` | Reply templates, 3+ wordings each, in he/ar/en, chosen by a seeded pick so a reply never repeats back to back. |
@@ -147,7 +147,7 @@ interface Request {
 - Run on qareeb-dev only after the owner approves the dry-run page.
 
 ## 5. Selling rules
-- Deals get a ranking boost and are always labelled as deals. Ranking is otherwise neutral between places, with daily-seeded rotation, apart from the signed-in customer's own history (profile affinity).
+- Deals get a ranking boost and are always labelled as deals: a dish in a live promotion is boosted and its card carries the deal badge. Only orderable deals are offered (a combo needs every member on the menu, a promotion at least one of its dishes). Ranking is otherwise neutral between places, with daily-seeded rotation, apart from the signed-in customer's own history (profile affinity).
 - Customers never see "saves ₪X" on combos or meals, only the combo price. This is the owner rule: the original price is shown to the owner only. `savingsAgorot` stays engine-internal.
 - Prices in chat use the app's money formatter, the same one used across the app.
 - One upsell card after an add. It never appears for a different place than the cart's, and stops after 2 skips in a conversation.

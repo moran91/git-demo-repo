@@ -25,12 +25,6 @@ export function hashUnit(seed: number, id: string): number {
   return ((h >>> 0) % 10000) / 10000;
 }
 
-export function dealProductIds(data: AssistantData): Set<string> {
-  const ids = new Set<string>();
-  for (const d of data.deals) for (const id of d.combo ? d.combo.items.map((i) => i.productId) : d.promotion?.productIds ?? []) ids.add(dishKey(d.branchId, id));
-  return ids;
-}
-
 export const popularThenCheap = (a: AssistantDish, b: AssistantDish) => Number(!!b.entry.mostOrdered) - Number(!!a.entry.mostOrdered) || a.entry.priceAgorot - b.entry.priceAgorot;
 
 const CHEAP_WEIGHT = 1000;
@@ -38,7 +32,6 @@ const CHEAP_WEIGHT = 1000;
 export function rank(cands: Candidate[], r: Request, data: AssistantData): Hit[] {
   const meal = r.meal ?? mealOf(localHour(data.now));
   const prof = data.profile;
-  const deals = dealProductIds(data);
   const maxPrice = Math.max(1, ...cands.map((c) => c.dish.entry.priceAgorot));
   const hits = cands.map(({ dish, match }): Hit => {
     const e = dish.entry;
@@ -53,7 +46,8 @@ export function rank(cands: Candidate[], r: Request, data: AssistantData): Hit[]
       if (prof.favoriteBranches.includes(dish.branchId)) points += 20;
       if (prof.orderedProductIds.includes(dish.id)) points += 25;
     }
-    if (deals.has(dishKey(dish.branchId, dish.id))) points += 15;
+    // Only a dish in a live promotion: its card carries the deal label (spec §5). A combo member alone is not on offer.
+    if (data.promoted.has(dishKey(dish.branchId, dish.id))) points += 15;
     if (data.cartBranchId === dish.branchId) points += 20;
     // Drinks and sides are not a meal: with no craving, tag or drink asked for, mains lead (also when price leads).
     if (!r.craving.length && !r.tags.length && (e.dishType === 'drinks' || e.dishType === 'snacks')) points -= r.cheap ? CHEAP_WEIGHT + 100 : 200;

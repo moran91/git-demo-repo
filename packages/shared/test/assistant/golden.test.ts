@@ -57,6 +57,10 @@ interface Case {
   textHas?: string[];
   textLacks?: string[];
   data?: () => AssistantData;
+  /** What `data` changes, for the test title. */
+  note?: string;
+  /** In meal cards, at most this many of each listed product ("ל-4" is not four 1.5 L bottles). */
+  maxQty?: Record<string, number>;
   signedIn?: boolean;
 }
 
@@ -421,6 +425,14 @@ const CASES: Case[] = [
   { say: 'auutrnv', kind: 'dish', includes: 'a-shawarma-chicken' },
   { say: 'באגט', kind: 'closed', textHas: ['באגט פארס'] },
   { say: 'baguette schnitzel', kind: 'closed', textHas: ['Baguette Pars'] },
+
+  // Final review: diet filters on untagged meat, sold-out deal members, big bottles
+  { say: ['שווארמה', 'בלי בשר'], kind: 'dish', excludeTags: ['meat'], includes: 'a-shawarma-chicken', excludes: ['a-shawarma-laffa', 'a-shawarma-spicy', 'a-platter'] },
+  { say: ['המבורגר', 'בלי בשר'], kind: 'dish', excludeTags: ['meat'], excludes: ['b-cheeseburger', 'b-classic'], noCardTags: ['meat'] },
+  { say: 'צ׳יזבורגר', kind: 'dish', first: 'b-cheeseburger' },
+  { say: 'cheeseburger', kind: 'dish', first: 'b-cheeseburger' },
+  { say: 'מה במבצע?', kind: 'deal', data: () => fixtureData({ soldOut: ['m-coke'] }), note: 'coke sold out', excludes: ['m-combo-pair'], includesAll: ['m-promo-pasta', 'b-combo-kids'], cards: 2 },
+  { say: 'ארוחה ל-4 עד 150 מאבו סלים', kind: 'meal', people: 4, branch: 'abu', maxQty: { 'a-cola': 2 } },
 ];
 
 const fixture = fixtureData();
@@ -440,7 +452,7 @@ function cardIds(c: Card): string[] {
 
 describe('golden set', () => {
   for (const c of CASES) {
-    const title = [c.say].flat().join(' → ') + (c.thenChip !== undefined ? ` → chip ${c.thenChip}` : '') + (c.data ? ' (deal places closed)' : '');
+    const title = [c.say].flat().join(' → ') + (c.thenChip !== undefined ? ` → chip ${c.thenChip}` : '') + (c.data ? ` (${c.note ?? 'deal places closed'})` : '');
     it(title, () => {
       const data = c.data?.() ?? fixture;
       const opts = { signedIn: c.signedIn ?? true, uiLang: 'he' as const };
@@ -508,6 +520,11 @@ describe('golden set', () => {
         const now = turn.cards.flatMap(freshIds);
         expect(now.length, at).toBeGreaterThan(0);
         for (const id of now) expect(before, at).not.toContain(id);
+      }
+      for (const [id, n] of Object.entries(c.maxQty ?? {})) {
+        const lines = turn.cards.flatMap((x) => (x.kind === 'meal' ? x.basket.lines : [])).filter((l) => l.productId === id);
+        expect(lines.length, at).toBeGreaterThan(0);
+        for (const l of lines) expect(l.qty, at).toBeLessThanOrEqual(n);
       }
       for (const s of c.textHas ?? []) expect(turn.text, at).toContain(s);
       for (const s of c.textLacks ?? []) expect(turn.text, at).not.toContain(s);

@@ -23,7 +23,7 @@ describe('data', () => {
 describe('retrieve', () => {
   it('matches the craving across languages at open places only', () => {
     expect(ids(req('פיצה'))).toEqual(['m-family', 'm-margherita', 'm-pepperoni', 'm-spicy-family']);
-    expect(ids(req('شاورما'))).toEqual(['a-platter', 'a-shawarma-chicken', 'a-shawarma-spicy']);
+    expect(ids(req('شاورما'))).toEqual(['a-platter', 'a-shawarma-chicken', 'a-shawarma-laffa', 'a-shawarma-spicy']);
     expect(ids(req('באגט'))).toEqual([]);
     expect(retrieve(req('באגט'), data, { ...ALL_FILTERS, open: false }).map((c) => c.dish.id)).toEqual(['bg-schnitzel']);
   });
