@@ -3,3 +3,7 @@ export * from './tags.js';
 export * from './ownership.js';
 export * from './pairs.js';
 export * from './understand.js';
+export * from './profile.js';
+export * from './data.js';
+export * from './retrieve.js';
+export * from './rank.js';
