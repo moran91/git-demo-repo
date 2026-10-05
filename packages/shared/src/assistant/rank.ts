@@ -53,6 +53,8 @@ export function rank(cands: Candidate[], r: Request, data: AssistantData): Hit[]
     }
     if (deals.has(dishKey(dish.branchId, dish.id))) points += 15;
     if (data.cartBranchId === dish.branchId) points += 20;
+    // Drinks and sides are not a meal: with no craving, tag or drink asked for, mains lead.
+    if (!r.craving.length && !r.tags.length && (e.dishType === 'drinks' || e.dishType === 'snacks')) points -= 200;
     if (r.cheap) points += Math.round((1 - e.priceAgorot / maxPrice) * 150);
     if (r.shortcut === 'surprise') points += Math.round(hashUnit(data.seed, dish.id) * 80);
     return { dish, match, points };

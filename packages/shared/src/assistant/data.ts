@@ -3,11 +3,10 @@
  * customer's own orders and the clock. Dish texts are prepared for search once per index snapshot
  * (prepareDishes); the rest is cheap and rebuilt as time passes (buildAssistantData).
  */
-import { DISH_TYPES, daySeed, type DealsIndexCombo, type DealsIndexDoc, type DealsIndexPromotion, type DishIndexDoc, type DishIndexEntry, type DishType, type PairEntry, type PairsIndexDoc } from '../dishIndex.js';
+import { daySeed, type DealsIndexCombo, type DealsIndexDoc, type DealsIndexPromotion, type DishIndexDoc, type DishIndexEntry, type DishType, type PairEntry, type PairsIndexDoc } from '../dishIndex.js';
 import { toLocal } from '../hours.js';
-import { dictionaries } from '../i18n/index.js';
 import { prepareFields, type PreparedFields } from '../search/index.js';
-import { LOCALES, type FulfillmentMode, type Localized } from '../types.js';
+import type { FulfillmentMode, Localized } from '../types.js';
 import { allText } from './tags.js';
 import { buildProfile, type Profile, type ProfileOrder } from './profile.js';
 import type { PlaceName } from './understand.js';
@@ -50,8 +49,25 @@ export interface AssistantData {
 
 export const dishKey = (branchId: string, productId: string) => `${branchId}/${productId}`;
 
-/** Dish-type names in all three languages, so "פיצה" or "بيتزا" also finds pizzas whose name lacks the word. */
-export const DISH_TYPE_WORDS = Object.fromEntries(DISH_TYPES.map((dt) => [dt, LOCALES.map((l) => dictionaries[l][`dishType.${dt}`]).join(' ')])) as Record<DishType, string>;
+/**
+ * What each dish type is called when searching, in every language. Deliberately not the UI labels:
+ * "Fries & snacks" would make every snack a match for "fries", and "Sambusak & pastries" every pastry a
+ * match for "sambusak". Only words that name the whole type belong here.
+ */
+export const DISH_TYPE_WORDS: Record<DishType, string> = {
+  pizza: 'פיצה pizza بيتزا',
+  pasta: 'פסטה pasta باستا',
+  burger: 'המבורגר בורגר burger برغر',
+  shawarma: 'שווארמה shawarma شاورما',
+  hummus: 'חומוס hummus حمص',
+  sushi: 'סושי sushi سوشي',
+  pastries: 'מאפים pastries معجنات',
+  salads: 'סלט סלטים salad salads سلطة سلطات',
+  mains: 'עיקריות mains أطباق رئيسية',
+  snacks: 'נשנושים snacks مقبلات',
+  desserts: 'קינוחים desserts حلويات',
+  drinks: 'שתייה משקאות drinks مشروبات',
+};
 
 export function prepareDishes(places: ReadonlyArray<Pick<AssistantPlace, 'branchId' | 'name'>>, indexes: ReadonlyMap<string, DishIndexDoc>): AssistantDish[] {
   const out: AssistantDish[] = [];
@@ -103,8 +119,8 @@ export function localHour(now: Date): number {
   return Math.floor(toLocal(now).minutes / 60);
 }
 
-/** Wall-clock "HH:MM" in Asia/Jerusalem, `minutes` from now. */
+/** Wall-clock "HH:MM" in Asia/Jerusalem, `minutes` from now. Adds to the instant, so DST changes are right. */
 export function clockAt(now: Date, minutes: number): string {
-  const m = (((toLocal(now).minutes + Math.round(minutes)) % 1440) + 1440) % 1440;
+  const m = toLocal(new Date(now.getTime() + Math.round(minutes) * 60_000)).minutes;
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
