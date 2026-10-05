@@ -68,3 +68,8 @@ export function countMatches(t: Prepared, m: TermMatcher): number {
 export function isIn(word: string | undefined, set: ReadonlySet<string>): boolean {
   return !!word && wordForms(word).some((f) => set.has(f));
 }
+
+/** First occurrences, in order. */
+export function uniq<T>(xs: readonly T[]): T[] {
+  return [...new Set(xs)];
+}
