@@ -33,6 +33,8 @@ export interface Request {
   /** Per-dish ceiling, from "cheaper" after dish picks. */
   maxPriceAgorot?: number;
   cheap?: boolean;
+  /** "Something warm": a hot dish or drink (no cold drinks, salads, sushi or desserts). */
+  warm?: boolean;
   mode?: FulfillmentMode;
   placeBranchIds?: string[];
   meal?: Meal;
@@ -74,7 +76,13 @@ export function detectLang(text: string): Lang {
 }
 
 export function hasSlots(r: Request): boolean {
-  return r.craving.length > 0 || r.tags.length > 0 || r.exclude.tags.length > 0 || r.exclude.words.length > 0 || r.people !== undefined || r.budgetAgorot !== undefined || r.maxPriceAgorot !== undefined || !!r.cheap || !!r.mode || !!r.placeBranchIds?.length || !!r.meal || !!r.shortcut;
+  return r.craving.length > 0 || r.tags.length > 0 || r.exclude.tags.length > 0 || r.exclude.words.length > 0 || r.exclude.dishIds.length > 0 || r.exclude.branchIds.length > 0 || r.people !== undefined || r.budgetAgorot !== undefined || r.maxPriceAgorot !== undefined || !!r.cheap || !!r.warm || !!r.mode || !!r.placeBranchIds?.length || !!r.meal || !!r.shortcut;
+}
+
+/** A message with no wish of its own that still asks for ideas: "אני רעב", "what's open", "בא לי משהו טוב". */
+export function wantsIdeas(text: string): boolean {
+  const tokens = tokenize(text);
+  return tokens.some((t) => isIn(t, V.HUNGRY)) || eat(tokens, tokens.map(() => false), V.HUNGRY_PHRASES);
 }
 
 export function isMealRequest(r: Request): boolean {
@@ -118,17 +126,20 @@ export function understand(text: string, places: readonly PlaceName[], prev?: Pr
   if (eat(tokens, used, V.CHEAP)) r.cheap = true;
   for (const [mode, list] of V.MODES) if (!r.mode && eat(tokens, used, list)) r.mode = mode;
   for (const [meal, list] of V.MEALS) if (!r.meal && eat(tokens, used, list)) r.meal = meal;
-  // 7. Single-word wishes.
+  // 7. Single-word wishes, "something warm", and words naming a whole kind of dish ("משהו לשתות").
   for (const [tag, list] of V.REQUEST_TAGS) while (eat(tokens, used, list)) addTo(r.tags, tag);
-  // 8. Filler.
+  while (eat(tokens, used, V.WARM)) r.warm = true;
+  const kinds: string[] = [];
+  for (const [word, list] of V.TYPE_WISHES) while (eat(tokens, used, list)) addTo(kinds, word[lang]);
+  // 8. Filler (also with a prefix: "ומשביע"), and hunger words ("רעב", "what's open"), which ask for ideas, not a dish.
   tokens.forEach((t, i) => {
-    if (!used[i] && V.STOP.has(t)) used[i] = true;
+    if (!used[i] && (isIn(t, V.STOP) || isIn(t, V.HUNGRY))) used[i] = true;
   });
   // 9. Places.
   const placeIds = findPlaces(tokens, used, places);
   if (placeIds) r.placeBranchIds = placeIds;
   // 10. The rest is the craving, unless it is only "more" or "something else".
-  r.craving = tokens.filter((_, i) => !used[i]);
+  r.craving = [...tokens.filter((_, i) => !used[i]), ...kinds.flatMap((w) => tokenize(w))];
   if (r.craving.length && r.craving.every((w) => V.MORE.has(w))) {
     r.craving = [];
     refine = refine ?? 'more';
@@ -156,6 +167,7 @@ function mergeWithPrevious(r: Request, prev: Previous, refine: Refine | undefine
     people: r.people ?? p.people,
     budgetAgorot: r.budgetAgorot ?? p.budgetAgorot,
     cheap: r.cheap || p.cheap,
+    warm: r.warm || p.warm,
     mode: r.mode ?? p.mode,
     meal: r.meal ?? p.meal,
     page: 0,
@@ -192,9 +204,16 @@ function eat(tokens: string[], used: boolean[], list: Phrase[]): boolean {
   return eatAt(tokens, used, list) >= 0;
 }
 
+/** The tag a negated word excludes as a whole: only words that name the tag itself ("בשר", "חריף"), never one dish ("קולה", "שוקולד"). */
 function tagOf(word: string): DishTag | undefined {
   const forms = wordForms(word);
-  return DISH_TAGS.find((t) => forms.some((f) => TAG_MATCHERS[t].words.has(f))) ?? V.ARABIZI_TAG_WORDS.find(([, words]) => words.has(word))?.[0];
+  return V.EXCLUDE_TAG_WORDS.find(([, words]) => forms.some((f) => words.has(f)))?.[0];
+}
+
+/** A whole word the tagger knows (וופל), so its first letter is not read as "and". */
+function isTagWord(word: string): boolean {
+  const forms = wordForms(word);
+  return DISH_TAGS.some((t) => forms.some((f) => TAG_MATCHERS[t].words.has(f)));
 }
 
 /** First index at or after `k` that is not an intensifier ("too", "מדי", "כל כך", "كتير"). */
@@ -207,6 +226,15 @@ function skipIntensifiers(tokens: string[], k: number): number {
   }
 }
 
+/** After a negation, also past "want" words: "לא רוצה חריף", "don't want spicy", "ما بدي حار". */
+function skipToNegated(tokens: string[], k: number): number {
+  for (;;) {
+    const next = skipIntensifiers(tokens, k);
+    if (isIn(tokens[next], V.NOT_WANT)) k = next + 1;
+    else return next;
+  }
+}
+
 /** "ועגבניה" and "وبندورة" carry "and" as a one-letter prefix. */
 const andPrefixed = (t: string | undefined): boolean => !!t && /^[ו\u0648]/.test(t) && t.length >= 4;
 
@@ -215,13 +243,13 @@ function negate(tokens: string[], used: boolean[], r: Request): void {
   const free = (k: number) => k < tokens.length && !used[k] && !V.STOP.has(tokens[k]!) && !/^\d+$/.test(tokens[k]!) && !isIn(tokens[k], V.NEGATION);
   for (let i = 0; i < tokens.length; i++) {
     if (used[i] || !isIn(tokens[i], V.NEGATION)) continue;
-    let k = skipIntensifiers(tokens, i + 1);
+    let k = skipToNegated(tokens, i + 1);
     if (!free(k)) continue;
     for (let j = i; j < k; j++) used[j] = true;
     let chained = false;
     for (;;) {
       const t = tokens[k]!;
-      const word = chained && andPrefixed(t) && !tagOf(t) ? t.slice(1) : t;
+      const word = chained && andPrefixed(t) && !isTagWord(t) && !tagOf(t) ? t.slice(1) : t;
       const tag = tagOf(word);
       if (tag) addTo(r.exclude.tags, tag);
       addTo(r.exclude.words, word);
@@ -293,6 +321,18 @@ function readNumbers(tokens: string[], used: boolean[], r: Request, budgetEnds: 
   }
 }
 
+/** A food word, also misspelled ("burgr" is a burger, not the place Burger Basil): naming a place with it needs "from". */
+const foodWordMemo = new Map<string, boolean>();
+function isFoodWord(w: string): boolean {
+  let known = foodWordMemo.get(w);
+  if (known === undefined) {
+    const q = parseQuery(`${w} `)?.words[0];
+    known = wordForms(w).some((f) => FOOD_WORDS.has(f)) || (!!q && (q.meanings.length > 0 || q.typoMeanings.length > 0));
+    foodWordMemo.set(w, known);
+  }
+  return known;
+}
+
 interface PreparedPlace {
   branchId: string;
   fields: PreparedFields;
@@ -325,7 +365,7 @@ function findPlaces(tokens: string[], used: boolean[], places: readonly PlaceNam
       const fromPrefix = first.startsWith('מ');
       if (/^[מבל][֐-׿]{2,}$/.test(first) && (fromPrefix || !wordForms(first).some((f) => FOOD_WORDS.has(f)))) variants.push({ words: [first.slice(1), ...span.slice(1)], from: fromPrefix });
       for (const v of variants) {
-        if (!v.from && v.words.some((w) => wordForms(w).some((f) => FOOD_WORDS.has(f)))) continue;
+        if (!v.from && v.words.some(isFoodWord)) continue;
         const q = parseQuery(`${v.words.join(' ')} `);
         if (!q) continue;
         const hits = prepared.filter((p) => {

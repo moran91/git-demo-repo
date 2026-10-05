@@ -20,6 +20,8 @@ export interface MealLine {
 }
 export interface MealBasket {
   branchId: string;
+  /** The main the basket is built around (also when a combo now holds it): "something else" skips it. */
+  anchorId: string;
   lines: MealLine[];
   totalAgorot: number;
   serves: number;
@@ -50,11 +52,14 @@ export function buildMeals(r: Request, data: AssistantData, ranked: Hit[]): Meal
   const out: MealBasket[] = [];
   // Dessert or drink only places are not a meal, unless the customer asked for one of those.
   const askedForExtras = r.craving.length > 0 || r.tags.some((t) => EXTRAS_TAGS.includes(t));
+  // A kids meal feeds a child, so it anchors a basket only when kids were asked for.
+  const mainsOf = (hits: Hit[]) => hits.filter((h) => isMain(h.dish.entry) && (r.tags.includes('kids') || !(h.dish.entry.tags ?? []).includes('kids')));
+  // "Pizza and cola for 2": a place with only the cola is not a meal while another place has the pizza.
+  const someMains = ranked.some((h) => placeUsable(data.places.get(h.dish.branchId), r.mode) && mainsOf([h]).length > 0);
   for (const [branchId, hits] of byBranch) {
     if (!placeUsable(data.places.get(branchId), r.mode)) continue;
-    // A kids meal feeds a child, so it anchors a basket only when kids were asked for.
-    const mains = hits.filter((h) => isMain(h.dish.entry) && (r.tags.includes('kids') || !(h.dish.entry.tags ?? []).includes('kids')));
-    const anchors = (mains.length ? mains : askedForExtras ? hits : []).slice(0, ANCHORS);
+    const mains = mainsOf(hits);
+    const anchors = (mains.length ? mains : askedForExtras && !someMains ? hits : []).slice(0, ANCHORS);
     // Drinks and sides come from the whole menu of the place, minus what the customer excluded.
     const extras = retrieve({ ...emptyRequest(r.lang), exclude: r.exclude, ...(r.mode ? { mode: r.mode } : {}), placeBranchIds: [branchId] }, data)
       .map((c) => c.dish)
@@ -81,10 +86,11 @@ export function buildMeals(r: Request, data: AssistantData, ranked: Hit[]): Meal
       // The drink suits the main: a cold one, or a hot one with a pastry or dessert; never the wrong temperature.
       const drink = allDrinks.filter((d) => drinkSuits(d, e.dishType)).sort((x, y) => coldFirst(x, y, e.dishType) || popularThenCheap(x, y))[0];
       if (e.dishType !== 'drinks') add(drink, people);
-      if (people >= 2 && e.dishType !== 'snacks') add(sides[0], Math.ceil(people / 2));
+      // Sides go with a main, never with a dessert or a coffee ("כנאפה ל-4" gets no falafel).
+      if (people >= 2 && isMain(e)) add(sides[0], Math.ceil(people / 2));
       const applied = applyCombos(lines, combos);
       const finalTotal = applied.lines.reduce((s, l) => s + l.qty * l.unitAgorot, 0);
-      const basket: MealBasket = { branchId, lines: applied.lines, totalAgorot: finalTotal, serves: qty * servesOf(e), savingsAgorot: applied.savings, points: (r.cheap ? -finalTotal / 100 : a.points) + applied.savings / 1000 };
+      const basket: MealBasket = { branchId, anchorId: a.dish.id, lines: applied.lines, totalAgorot: finalTotal, serves: qty * servesOf(e), savingsAgorot: applied.savings, points: (r.cheap ? -finalTotal / 100 : a.points) + applied.savings / 1000 };
       if (!best || basket.points > best.points || (basket.points === best.points && basket.totalAgorot < best.totalAgorot)) best = basket;
     }
     if (best) out.push(best);

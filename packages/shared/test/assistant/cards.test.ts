@@ -3,7 +3,7 @@ import { buildAssistantData, prepareDishes, resolveCard, type MealBasket } from 
 import { DEALS, INDEXES, NOW, PLACES, fixtureData } from './fixtures.js';
 
 const data = fixtureData();
-const basket: MealBasket = { branchId: 'morano', lines: [{ productId: 'm-margherita', qty: 1, unitAgorot: 4800, needsChoice: false }, { productId: 'm-combo-pair', comboId: 'm-combo-pair', qty: 1, unitAgorot: 6000, needsChoice: true }], totalAgorot: 10800, serves: 2, savingsAgorot: 0, points: 0 };
+const basket: MealBasket = { branchId: 'morano', anchorId: 'm-margherita', lines: [{ productId: 'm-margherita', qty: 1, unitAgorot: 4800, needsChoice: false }, { productId: 'm-combo-pair', comboId: 'm-combo-pair', qty: 1, unitAgorot: 6000, needsChoice: true }], totalAgorot: 10800, serves: 2, savingsAgorot: 0, points: 0 };
 
 describe('resolveCard', () => {
   it('resolves every kind', () => {

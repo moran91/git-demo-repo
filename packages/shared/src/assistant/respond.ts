@@ -10,10 +10,10 @@ import { buildMeals, type MealBasket } from './mealBuilder.js';
 import type { Usual } from './profile.js';
 import { hashUnit, mealOf, rank, roundRobin, type Hit } from './rank.js';
 import { MODE_LABELS, chipLabel, peopleLabel, reply, replyNot, type ReplyKey } from './replies.js';
-import { ALL_FILTERS, cravingMatches, placeUsable, retrieve } from './retrieve.js';
+import { ALL_FILTERS, cravingMatches, isKnownFood, placeUsable, retrieve } from './retrieve.js';
 import { TAG_LABELS, type DishTag } from './tags.js';
-import { tokenize, uniq } from './text.js';
-import { emptyRequest, hasSlots, isMealRequest, understand, type Lang, type Previous, type Request, type Shown } from './understand.js';
+import { tokenize, uniq, wordForms } from './text.js';
+import { emptyRequest, hasSlots, isMealRequest, understand, wantsIdeas, type Lang, type Previous, type Request, type Shown } from './understand.js';
 import { upsellFor } from './upsell.js';
 
 export type Card =
@@ -169,7 +169,8 @@ function readRequest(input: string | Chip, conv: Conversation, data: AssistantDa
 
 function answerFor(r: Request, ctx: Ctx): Answer {
   // A tapped chip always means something: with no wish left (a dropped filter) it shows picks for now.
-  if (!hasSlots(r)) return ctx.chip ? pickAnswer(r, ctx, 'dish', false) : reprompt(r.lang, ctx);
+  // So do "I'm hungry" and its follow-ups ("עוד"), which name no dish but ask for ideas.
+  if (!hasSlots(r)) return ctx.chip || r.page > 0 || wantsIdeas(ctx.text) ? pickAnswer(r, ctx, 'dish', false) : reprompt(r.lang, ctx);
   const closed = closedAllLine(r.lang, ctx.data, seedOf(r, ctx.data));
   if (closed) return { kind: 'closed', text: closed.text, cards: [], chips: [], shown: NOTHING_SHOWN, understood: true };
   if (r.shortcut === 'usual') return usualAnswer(r, ctx);
@@ -186,9 +187,8 @@ function seedOf(r: Request, data: AssistantData): number {
 
 function pickAnswer(r: Request, ctx: Ctx, kind: 'dish' | 'surprise', retry: boolean): Answer {
   const { data } = ctx;
-  const cands = retrieve(r, data);
-  if (!cands.length) return (retry && wrongKeyboard(r, ctx)) || emptyAnswer(r, ctx);
-  const ranked = rank(cands, r, data);
+  const ranked = rankedFor(r, data);
+  if (!ranked.length) return (retry && wrongKeyboard(r, ctx)) || emptyAnswer(r, ctx);
   const size = kind === 'surprise' ? 1 : PAGE;
   const page = ranked.slice(r.page * size, r.page * size + size);
   if (!page.length) return noMore(r, ctx, refineChips(r, data, 'dish'));
@@ -208,6 +208,41 @@ function pickAnswer(r: Request, ctx: Ctx, kind: 'dish' | 'surprise', retry: bool
 }
 
 /**
+ * Ranked dishes for a request. When no dish is everything named ("פיצה עם קולה", "חומוס ופלאפל",
+ * "coffee and cake"), each named thing that matches by spelling takes turns in the list; a word that
+ * matches nothing ("שווארמה בפיתה") is left out. Empty when nothing fits.
+ */
+function rankedFor(r: Request, data: AssistantData): Hit[] {
+  const cands = retrieve(r, data);
+  if (cands.length || r.craving.length < 2) return rank(cands, r, data);
+  const lists: Hit[][] = [];
+  for (const word of r.craving) {
+    // "ופלאפל", "وكولا": the form that matches best ("وكولا" sits inside "شوكولاتة", "كولا" is the cola).
+    let form: string | undefined;
+    let best = 4;
+    for (const f of wordForms(word)) {
+      const level = Math.min(4, ...[...cravingMatches(data, [f]).values()].map((m) => m.level));
+      if (f.length >= 2 && level < best) [form, best] = [f, level];
+    }
+    if (!form) continue;
+    const one = { ...r, craving: [form] };
+    const hits = rank(retrieve(one, data), one, data);
+    if (hits.length) lists.push(hits);
+  }
+  const out: Hit[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; lists.some((l) => i < l.length); i++) {
+    for (const l of lists) {
+      const h = l[i];
+      if (!h || seen.has(dishKey(h.dish.branchId, h.dish.id))) continue;
+      seen.add(dishKey(h.dish.branchId, h.dish.id));
+      out.push(h);
+    }
+  }
+  return out;
+}
+
+/**
  * "auutrnv" was typed on the wrong keyboard: read it as "שווארמה". Only a strong match counts (whole word,
  * word start, lexicon), and never one-letter words, so gibberish ("xqxq" → "ס/ס/") is not read as food.
  */
@@ -224,10 +259,12 @@ function wrongKeyboard(r: Request, ctx: Ctx): Answer | undefined {
 
 function mealAnswer(r: Request, ctx: Ctx): Answer {
   const { data } = ctx;
-  const cands = retrieve(r, data);
-  if (!cands.length) return wrongKeyboard(r, ctx) ?? emptyAnswer(r, ctx);
-  const baskets = buildMeals(r, data, rank(cands, r, data));
+  const ranked = rankedFor(r, data);
+  if (!ranked.length) return wrongKeyboard(r, ctx) ?? emptyAnswer(r, ctx);
+  const baskets = buildMeals(r, data, ranked);
   if (!baskets.length) {
+    const why = mealBlocked(r, ctx);
+    if (why) return why;
     if (r.budgetAgorot !== undefined) return blocked(r, 'budget', data);
     if (r.tags.length) return blocked(r, 'tags', data);
     // Nothing to name (e.g. only a dessert place is open): show the dishes that fit.
@@ -243,10 +280,41 @@ function mealAnswer(r: Request, ctx: Ctx): Answer {
     cards: page.map((basket) => ({ kind: 'meal', basket })),
     chips: refineChips(r, data, 'meal'),
     ...(baskets.length > (r.page + 1) * MEAL_PAGE ? { more: moreChip(r) } : {}),
-    shown: { dishIds: seen.flatMap((b) => b.lines.map((l) => l.productId)), branchIds: seen.map((b) => b.branchId), maxTotalAgorot: Math.max(...page.map((b) => b.totalAgorot)) },
+    // "Something else" skips the mains shown, not their drink and side: the next basket still gets a drink.
+    shown: { dishIds: seen.map((b) => b.anchorId), branchIds: seen.map((b) => b.branchId), maxTotalAgorot: Math.max(...page.map((b) => b.totalAgorot)) },
     request: r,
     understood: true,
   };
+}
+
+/**
+ * No basket: blame the wish whose removal alone gives one, the one the latest message changed first.
+ * After "something else" that is what was already shown, never a tag the customer kept from before.
+ */
+function mealBlocked(r: Request, ctx: Ctx): Answer | undefined {
+  const { data } = ctx;
+  for (const slot of slotOrder(r, ctx.prev?.request)) {
+    if (!slotSet(r, slot)) continue;
+    const loose = dropSlot(r, slot, r.tags);
+    if (buildMeals(loose, data, rank(retrieve(loose, data), loose, data)).length) return blocked(r, slot, data);
+  }
+  return undefined;
+}
+
+function slotSet(r: Request, slot: Slot): boolean {
+  const x = r.exclude;
+  switch (slot) {
+    case 'tags':
+      return r.tags.length > 0;
+    case 'exclude':
+      return x.tags.length + x.words.length + x.dishIds.length + x.branchIds.length > 0;
+    case 'budget':
+      return r.budgetAgorot !== undefined || r.maxPriceAgorot !== undefined;
+    case 'mode':
+      return !!r.mode;
+    case 'place':
+      return !!r.placeBranchIds?.length;
+  }
 }
 
 function placeAnswer(r: Request, ctx: Ctx): Answer {
@@ -275,7 +343,15 @@ function dealsAnswer(r: Request, ctx: Ctx): Answer {
     deals = deals.filter((d) => dealItems(d).some((id) => match.has(dishKey(d.branchId, id))));
   }
   if (r.budgetAgorot !== undefined) deals = deals.filter((d) => !d.combo || d.combo.priceAgorot <= r.budgetAgorot!);
-  if (!deals.length) return { kind: 'deal', text: reply('dealsNone', r.lang, {}, seedOf(r, data)), cards: [], chips: suggestionChips(r.lang, ctx).filter((c) => c.request?.shortcut !== 'deals').slice(0, 3), shown: NOTHING_SHOWN, understood: true };
+  if (!deals.length) {
+    // The deals are there but their places are closed: say which one opens first, and when.
+    const closedAt = r.craving.length || r.tags.length ? [] : uniq(data.deals.filter((d) => {
+      const p = data.places.get(d.branchId);
+      return !!p && !p.open && (!r.placeBranchIds?.length || r.placeBranchIds.includes(d.branchId)) && !r.exclude.branchIds.includes(d.branchId);
+    }).map((d) => d.branchId));
+    if (closedAt.length) return closedPlaceAnswer(r, ctx, closedAt.map((id) => data.places.get(id)!));
+    return { kind: 'deal', text: reply('dealsNone', r.lang, {}, seedOf(r, data)), cards: [], chips: suggestionChips(r.lang, ctx).filter((c) => c.request?.shortcut !== 'deals').slice(0, 3), shown: NOTHING_SHOWN, understood: true };
+  }
   // Combos first; which place leads rotates by day, so no restaurant always opens the list.
   const sorted = deals.sort((a, b) => Number(!a.combo) - Number(!b.combo) || hashUnit(data.seed, a.branchId) - hashUnit(data.seed, b.branchId) || dealOrder(a) - dealOrder(b));
   const ordered = roundRobin(sorted, (d) => d.branchId);
@@ -323,7 +399,15 @@ function emptyAnswer(r: Request, ctx: Ctx): Answer {
   const { data } = ctx;
   const atClosed = retrieve(r, data, { ...ALL_FILTERS, open: false });
   if (atClosed.length) return closedPlaceAnswer(r, ctx, uniq(atClosed.map((c) => c.dish.branchId)).map((id) => data.places.get(id)!));
-  return blockedAnswer(r, ctx) ?? reprompt(r.lang, ctx);
+  return blockedAnswer(r, ctx) ?? notOnMenu(r, ctx) ?? reprompt(r.lang, ctx);
+}
+
+/** "מיץ", "water", "بوظة": a food the customer named clearly that no place sells. Say so, rather than "I didn't get that". */
+function notOnMenu(r: Request, ctx: Ctx): Answer | undefined {
+  if (!r.craving.length || !r.craving.every(isKnownFood)) return undefined;
+  const typed = ctx.text.split(/\s+/).filter((w) => w && tokenize(w).some((t) => r.craving.includes(t)));
+  const label = (typed.length ? typed : r.craving).join(' ').replace(/[?!.,؟]+$/u, '');
+  return { kind: 'blocked', text: reply('blockedTags', r.lang, { slot: label }, seedOf(r, ctx.data)), cards: [], chips: suggestionChips(r.lang, ctx).slice(0, 3), shown: NOTHING_SHOWN, request: r, understood: true };
 }
 
 /** Some places are open, but what was asked for is at closed ones: name the first to open. */
