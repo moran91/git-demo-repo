@@ -5,9 +5,11 @@
  */
 import type { DishIndexEntry, DishType } from '../dishIndex.js';
 import type { AssistantData, AssistantDeal, AssistantDish } from './data.js';
-import { popularThenCheap, type Hit } from './rank.js';
-import { retrieve } from './retrieve.js';
+import type { DishTag } from './tags.js';
+import { hashUnit, popularThenCheap, type Hit } from './rank.js';
+import { placeUsable, retrieve } from './retrieve.js';
 import { emptyRequest, type Request } from './understand.js';
+import { drinkSuits } from './upsell.js';
 
 export interface MealLine {
   productId: string;
@@ -27,6 +29,9 @@ export interface MealBasket {
 
 const MAIN_TYPES: readonly DishType[] = ['pizza', 'pasta', 'burger', 'shawarma', 'hummus', 'sushi', 'mains', 'pastries', 'salads'];
 const ANCHORS = 4;
+const DIET_TAGS: readonly DishTag[] = ['vegan', 'vegetarian', 'gluten_free'];
+/** Tags that say the customer wants a dessert or a drink itself, so a place with only those can answer. */
+const EXTRAS_TAGS: readonly DishTag[] = ['sweet', 'cold_drink', 'hot_drink'];
 
 export function servesOf(e: DishIndexEntry): number {
   return e.serves ?? (e.dishType === 'pizza' ? 2 : 1);
@@ -43,15 +48,21 @@ export function buildMeals(r: Request, data: AssistantData, ranked: Hit[]): Meal
   const byBranch = new Map<string, Hit[]>();
   for (const h of ranked) byBranch.set(h.dish.branchId, [...(byBranch.get(h.dish.branchId) ?? []), h]);
   const out: MealBasket[] = [];
+  // Dessert or drink only places are not a meal, unless the customer asked for one of those.
+  const askedForExtras = r.craving.length > 0 || r.tags.some((t) => EXTRAS_TAGS.includes(t));
   for (const [branchId, hits] of byBranch) {
-    const mains = hits.filter((h) => isMain(h.dish.entry));
-    const anchors = (mains.length ? mains : hits).slice(0, ANCHORS);
+    if (!placeUsable(data.places.get(branchId), r.mode)) continue;
+    // A kids meal feeds a child, so it anchors a basket only when kids were asked for.
+    const mains = hits.filter((h) => isMain(h.dish.entry) && (r.tags.includes('kids') || !(h.dish.entry.tags ?? []).includes('kids')));
+    const anchors = (mains.length ? mains : askedForExtras ? hits : []).slice(0, ANCHORS);
     // Drinks and sides come from the whole menu of the place, minus what the customer excluded.
     const extras = retrieve({ ...emptyRequest(r.lang), exclude: r.exclude, ...(r.mode ? { mode: r.mode } : {}), placeBranchIds: [branchId] }, data)
       .map((c) => c.dish)
       .filter((d) => !d.entry.needsChoice);
-    const drinks = extras.filter((d) => d.entry.dishType === 'drinks').sort((a, b) => coldFirst(a, b) || popularThenCheap(a, b));
-    const sides = extras.filter((d) => d.entry.dishType === 'snacks').sort(popularThenCheap);
+    const allDrinks = extras.filter((d) => d.entry.dishType === 'drinks');
+    // A side must carry every diet tag that was asked for ("vegan" does not get onion rings).
+    const dietTags = r.tags.filter((t) => DIET_TAGS.includes(t));
+    const sides = extras.filter((d) => d.entry.dishType === 'snacks' && dietTags.every((t) => (d.entry.tags ?? []).includes(t))).sort(popularThenCheap);
     const combos = data.deals.filter((d) => d.branchId === branchId && d.combo);
     let best: MealBasket | undefined;
     for (const a of anchors) {
@@ -67,7 +78,9 @@ export function buildMeals(r: Request, data: AssistantData, ranked: Hit[]): Meal
         lines.push({ productId: d.id, qty: fit, unitAgorot: d.entry.priceAgorot, needsChoice: false });
         total += fit * d.entry.priceAgorot;
       };
-      if (e.dishType !== 'drinks') add(drinks[0], people);
+      // The drink suits the main: a cold one, or a hot one with a pastry or dessert; never the wrong temperature.
+      const drink = allDrinks.filter((d) => drinkSuits(d, e.dishType)).sort((x, y) => coldFirst(x, y, e.dishType) || popularThenCheap(x, y))[0];
+      if (e.dishType !== 'drinks') add(drink, people);
       if (people >= 2 && e.dishType !== 'snacks') add(sides[0], Math.ceil(people / 2));
       const applied = applyCombos(lines, combos);
       const finalTotal = applied.lines.reduce((s, l) => s + l.qty * l.unitAgorot, 0);
@@ -76,33 +89,45 @@ export function buildMeals(r: Request, data: AssistantData, ranked: Hit[]): Meal
     }
     if (best) out.push(best);
   }
-  return out.sort((x, y) => y.points - x.points || x.totalAgorot - y.totalAgorot);
+  // Equal places take turns by the daily seed.
+  return out.sort((x, y) => y.points - x.points || x.totalAgorot - y.totalAgorot || hashUnit(data.seed, x.branchId) - hashUnit(data.seed, y.branchId));
 }
 
-const coldFirst = (a: AssistantDish, b: AssistantDish) => Number((b.entry.tags ?? []).includes('cold_drink')) - Number((a.entry.tags ?? []).includes('cold_drink'));
+const coldFirst = (a: AssistantDish, b: AssistantDish, anchor: DishType | undefined) => {
+  const want = anchor === 'pastries' || anchor === 'desserts' ? 'hot_drink' : 'cold_drink';
+  return Number((b.entry.tags ?? []).includes(want)) - Number((a.entry.tags ?? []).includes(want));
+};
+
+/** What a combo takes from the basket, per product: two rows of the same product (two sizes) need that many units. */
+function needs(items: ReadonlyArray<{ productId: string; quantity: number }>): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const it of items) m.set(it.productId, (m.get(it.productId) ?? 0) + it.quantity);
+  return m;
+}
 
 export function applyCombos(lines: MealLine[], combos: AssistantDeal[]): { lines: MealLine[]; savings: number } {
   let work = lines.map((l) => ({ ...l }));
   let savings = 0;
-  for (let round = 0; round < 5; round++) {
+  // Every round turns at least one unit of some line into a combo, so quantities only fall and this ends.
+  for (;;) {
     let pick: { deal: AssistantDeal; saving: number } | undefined;
     for (const d of combos) {
       const c = d.combo!;
       let value = 0;
       let ok = true;
-      for (const it of c.items) {
-        const l = work.find((x) => x.productId === it.productId && !x.comboId);
-        if (!l || l.qty < it.quantity) {
+      for (const [productId, quantity] of needs(c.items)) {
+        const l = work.find((x) => x.productId === productId && !x.comboId);
+        if (!l || l.qty < quantity) {
           ok = false;
           break;
         }
-        value += it.quantity * l.unitAgorot;
+        value += quantity * l.unitAgorot;
       }
       const saving = value - c.priceAgorot;
       if (ok && saving > 0 && (!pick || saving > pick.saving)) pick = { deal: d, saving };
     }
     if (!pick) break;
-    for (const it of pick.deal.combo!.items) work.find((x) => x.productId === it.productId && !x.comboId)!.qty -= it.quantity;
+    for (const [productId, quantity] of needs(pick.deal.combo!.items)) work.find((x) => x.productId === productId && !x.comboId)!.qty -= quantity;
     work = work.filter((l) => l.qty > 0);
     const existing = work.find((l) => l.comboId === pick!.deal.id);
     if (existing) existing.qty += 1;

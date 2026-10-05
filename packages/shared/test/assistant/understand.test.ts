@@ -59,6 +59,14 @@ describe('understand', () => {
     expect(u('מה במבצע?').shortcut).toBe('deals');
   });
 
+  it('"meal" words are filler, not a dish to search for', () => {
+    expect(u('ארוחה ל-4 עד 150')).toMatchObject({ craving: [], people: 4, budgetAgorot: 15000 });
+    expect(u('meal for 3 vegetarian')).toMatchObject({ craving: [], people: 3, tags: ['vegetarian'] });
+    expect(u('وجبة ل 4')).toMatchObject({ craving: [], people: 4 });
+    expect(u('wajbe la 2')).toMatchObject({ craving: [], people: 2 });
+    expect(u('ארוחת ילדים')).toMatchObject({ craving: [] });
+  });
+
   it('places by name, with or without "from"; a food word alone is not a place', () => {
     expect(u('ממורנו').placeBranchIds).toEqual(['morano']);
     expect(u('something from morano').placeBranchIds).toEqual(['morano']);
