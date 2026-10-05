@@ -98,7 +98,7 @@ async function uploadFrom(url: string, path: string): Promise<boolean> {
 }
 const ext = (name: string) => (name.split('.').pop() ?? 'png').toLowerCase().replace('jpeg', 'jpg');
 
-let totals = { stores: 0, products: 0, photos: 0, invalid: 0 };
+const totals = { stores: 0, products: 0, photos: 0, invalid: 0 };
 for (const [sid, { store, items }] of Object.entries(stores)) {
   if (SKIP.has(sid) || (ONLY && ONLY !== sid)) continue;
   const bizId = `1m-${sid}`;
