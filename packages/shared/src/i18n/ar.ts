@@ -1414,6 +1414,7 @@ export const ar: Dictionary = {
   'assistant.reorder': 'اطلب مرة ثانية',
   'assistant.deal': 'عرض',
   'assistant.missing': 'مش متوفر هلا: {names}',
+  'assistant.goneNow': 'هاد مش متوفر هلا، جرّب إشي ثاني.',
   'assistant.signIn': 'تسجيل الدخول',
   'assistant.loading': 'القوائم لسا عم تتحمّل.',
   'assistant.toCart': 'للسلة',

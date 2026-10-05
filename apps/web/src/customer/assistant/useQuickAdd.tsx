@@ -3,6 +3,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import {
   applyQuickAdd,
   availableFulfillmentModes,
+  dishKey,
   makeId,
   needsChoice,
   pickMode,
@@ -36,6 +37,13 @@ interface Ready { line: CartLine; lineMeta: CartState['lineMeta'][string] }
 interface LoadedCombo { combo: Combo; products: ReadonlyMap<string, Product> }
 
 export interface QuickItem { productId: string; comboId?: string; qty: number }
+
+/** Thrown when what a card offers is gone (sold out, archived) since the index was read. */
+class Gone extends Error {
+  constructor(readonly keys: string[]) {
+    super('unavailable');
+  }
+}
 export interface QuickAdd {
   /** The branch whose add is running (loading, or waiting on the replace confirm), for the card's busy state. */
   busy: string | null;
@@ -50,6 +58,8 @@ export interface QuickAdd {
    * customer cancelled the replace confirm (nothing happened, so nothing to announce).
    */
   addUsual: (branch: PublicBranch, usual: Usual) => Promise<{ added: boolean; dropped: Localized[] }>;
+  /** Products and combos (dishKey) an add found gone: their cards are no longer shown. */
+  gone: ReadonlySet<string>;
   /** The sheets and the replace-cart confirm; render once on the page. */
   layer: ReactNode;
 }
@@ -70,6 +80,7 @@ export function useQuickAdd(cityId: string, usualMode?: FulfillmentMode): QuickA
   const [busy, setBusy] = useState<string | null>(null);
   const [queue, setQueue] = useState<Sheet[]>([]);
   const [replace, setReplace] = useState<{ answer: (yes: boolean) => void } | null>(null);
+  const [gone, setGone] = useState<ReadonlySet<string>>(() => new Set());
   const running = useRef(false);
 
   const loadProduct = async (branchId: string, id: string): Promise<Product | null> => {
@@ -144,8 +155,12 @@ export function useQuickAdd(cityId: string, usualMode?: FulfillmentMode): QuickA
     setBusy(branchId);
     try {
       return await work();
-    } catch {
-      toast(t('common.errorGeneric'), 'danger');
+    } catch (e) {
+      if (e instanceof Gone) {
+        // The card was stale: say so plainly and drop it, rather than a generic error.
+        setGone((g) => new Set([...g, ...e.keys]));
+        toast(t('assistant.goneNow'));
+      } else toast(t('common.errorGeneric'), 'danger');
       return none;
     } finally {
       running.current = false;
@@ -160,18 +175,25 @@ export function useQuickAdd(cityId: string, usualMode?: FulfillmentMode): QuickA
       const loaded = await Promise.all(items.map(async (it) => (it.comboId ? { it, combo: await loadCombo(branch.id, it.comboId) } : { it, product: await loadProduct(branch.id, it.productId) })));
       const ready: Ready[] = [];
       const sheets: Sheet[] = [];
+      const missing: string[] = [];
       for (const x of loaded) {
         const n = Math.max(1, x.it.qty);
         if ('combo' in x) {
           const c = x.combo;
           const r = c ? planCombo(c.combo, c.products, n) : null;
-          if (!c || !r || r.status === 'gone') throw new Error('unavailable');
+          if (!c || !r || r.status === 'gone') {
+            missing.push(dishKey(branch.id, x.it.comboId!));
+            continue;
+          }
           if (r.status === 'ready') ready.push(comboReady(c, r.line, business));
           else sheets.push(comboSheet(c, business, branch, mode));
           continue;
         }
         const product = x.product;
-        if (!product || product.archived || !product.available) throw new Error('unavailable');
+        if (!product || product.archived || !product.available) {
+          missing.push(dishKey(branch.id, x.it.productId));
+          continue;
+        }
         // Each one can be chosen differently (two pizzas, two toppings), so one sheet per unit.
         if (needsChoice(product)) {
           for (let i = 0; i < n; i++) sheets.push(productSheet(product, business, branch, mode));
@@ -181,6 +203,8 @@ export function useQuickAdd(cityId: string, usualMode?: FulfillmentMode): QuickA
         if (priceLine(product, { ...line, lineId: '' }).problem) sheets.push(productSheet(product, business, branch, mode));
         else ready.push(productReady(product, line));
       }
+      // Nothing is added when any of it is gone: a meal missing its main is not the meal offered.
+      if (missing.length) throw new Gone(missing);
       return { added: await applyQuickAdd({ businessId: business.id, branchId: branch.id }, ready, sheets, effects(business, branch, mode)) };
     });
 
@@ -231,5 +255,5 @@ export function useQuickAdd(cityId: string, usualMode?: FulfillmentMode): QuickA
       />
     </>
   );
-  return { busy, addItems, addUsual, layer };
+  return { busy, addItems, addUsual, gone, layer };
 }

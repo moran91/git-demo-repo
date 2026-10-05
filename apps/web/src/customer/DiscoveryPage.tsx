@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { evaluateOpen } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
 import { discoveryStore } from '@/lib/city';
@@ -78,7 +78,7 @@ export function DiscoveryPage() {
               // Nothing open: the closed ones are all there is, so they start unfolded.
               <details className="places-closed" open={openNow.length === 0}>
                 <summary>
-                  <span>{t('discovery.closedCount', { count: closedNow.length })}</span>
+                  <span>{withNumber(t('discovery.closedCount', { count: COUNT_MARK }), closedNow.length)}</span>
                   <Icon name="chevronDown" size={20} />
                 </summary>
                 <ul className="place-list">{closedNow.map(row)}</ul>
@@ -89,6 +89,15 @@ export function DiscoveryPage() {
       </section>
     </div>
   );
+}
+
+/** Stands in for a number in a translated text, so the number can be rendered on its own. */
+const COUNT_MARK = '\u2063';
+
+/** A translated text with its number isolated left to right ("סגורים כעת (3)"). */
+function withNumber(text: string, n: number): ReactNode {
+  const [before, after = ''] = text.split(COUNT_MARK);
+  return <>{before}<bdi dir="ltr">{n}</bdi>{after}</>;
 }
 
 /** Orderable now, and the rest (paused first, then closed); the query order is kept within each group. */

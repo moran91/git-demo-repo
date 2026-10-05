@@ -1436,6 +1436,7 @@ export const en = {
   'assistant.reorder': 'Order again',
   'assistant.deal': 'Deal',
   'assistant.missing': 'Not available now: {names}',
+  'assistant.goneNow': 'That is not available now, try something else.',
   'assistant.signIn': 'Sign in',
   'assistant.loading': 'Menus are still loading.',
   'assistant.toCart': 'To cart',

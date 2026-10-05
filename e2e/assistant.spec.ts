@@ -138,6 +138,8 @@ test('places: open first, a paused place folds into the closed row', async ({ pa
     const places = page.locator('.places');
     const closed = places.locator('details.places-closed');
     await expect(closed.locator('summary')).toHaveText('סגורים כעת (1)');
+    // The count is a number: isolated left to right, like every number in the app.
+    await expect(closed.locator('summary bdi[dir="ltr"]')).toHaveText('1');
     await expect(places.locator(':scope > .place-list .place-row')).toHaveCount(1);
     await expect(places.locator(':scope > .place-list')).toContainText('סניף ראשי');
     await expect(closed).not.toHaveAttribute('open');
@@ -147,5 +149,34 @@ test('places: open first, a paused place folds into the closed row', async ({ pa
     await expect(page.getByRole('region', { name: 'עוזר' }).locator('.ac').filter({ hasText: 'סניף חורפיש' })).toHaveCount(0);
   } finally {
     await pause(false);
+  }
+});
+
+test('a dish on promotion is labelled as a deal; the same dish at the other branch is not', async ({ page }) => {
+  await page.goto('/ask');
+  await ask(page, 'שווארמה');
+  const cards = page.locator('.ac--dish').filter({ hasText: 'שווארמה' });
+  await expect(cards.filter({ hasText: 'סניף ראשי' }).first().locator('.ac__badge')).toContainText('מבצע');
+  await expect(cards.filter({ hasText: 'סניף חורפיש' }).first()).toBeVisible();
+  await expect(cards.filter({ hasText: 'סניף חורפיש' }).first().locator('.ac__badge')).toHaveCount(0);
+});
+
+test('a dish gone since it was shown: a short "not available" toast, and its card goes', async ({ page }) => {
+  const path = 'publicBranches/br-abu-salim-main/products/p-fries';
+  // Only the public product changes, as when it sells out after the index snapshot was read.
+  const setAvailable = (available: boolean) =>
+    fetch(`${FS}/${path}?updateMask.fieldPaths=available`, { method: 'PATCH', headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { available: { booleanValue: available } } }) });
+  await page.goto('/ask');
+  await ask(page, 'צ׳יפס');
+  const card = page.locator('.ac--dish').filter({ hasText: 'סניף ראשי' }).filter({ hasText: 'צ׳יפס' });
+  await expect(card.first()).toBeVisible();
+  expect((await setAvailable(false)).ok).toBe(true);
+  try {
+    await card.first().getByRole('button', { name: /הוספת/ }).click();
+    await expect(page.locator('.toast').last()).toHaveText('זה כבר לא זמין, נסו משהו אחר.');
+    await expect(card).toHaveCount(0);
+    expect(await cartBranch(page)).toBeNull();
+  } finally {
+    await setAvailable(true);
   }
 });

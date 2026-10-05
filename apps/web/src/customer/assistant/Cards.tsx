@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { formatGrams, resolveCard, type AssistantData, type AssistantPlace, type Card, type ResolvedCard } from '@qareeb/shared';
+import { dishKey, formatGrams, resolveCard, type AssistantData, type AssistantPlace, type Card, type ResolvedCard } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
 import { clockIn, money } from '@/lib/format';
 import { Badge } from '@/design/components';
@@ -49,7 +49,7 @@ export function bidi(text: string): ReactNode {
 export function AssistantCard({ card, data, branches, quick, onDropped }: { card: Card; data: AssistantData; branches: ReadonlyMap<string, PublicBranch>; quick: QuickAdd; onDropped?: (names: string[]) => void }) {
   const r = resolveCard(card, data);
   const branch = r ? branches.get(r.place.branchId) : undefined;
-  if (!r || !branch) return null;
+  if (!r || !branch || isGone(card, quick.gone)) return null;
   // Another branch of the same business is listed too: name the branch, or two cards read the same.
   let showBranch = false;
   for (const b of branches.values()) if (b.businessId === branch.businessId && b.id !== branch.id) showBranch = true;
@@ -58,6 +58,17 @@ export function AssistantCard({ card, data, branches, quick, onDropped }: { card
     case 'meal': return <MealCard r={r} branch={branch} showBranch={showBranch} quick={quick} />;
     case 'deal': return <DealCard r={r} branch={branch} showBranch={showBranch} quick={quick} />;
     case 'usual': return <UsualCard r={r} branch={branch} showBranch={showBranch} quick={quick} {...(onDropped ? { onDropped } : {})} />;
+  }
+}
+
+/** A card holding something an add found gone (sold out since the index was read): dropped until the page reloads. */
+function isGone(card: Card, gone: ReadonlySet<string>): boolean {
+  if (!gone.size) return false;
+  switch (card.kind) {
+    case 'dish': return gone.has(dishKey(card.branchId, card.productId));
+    case 'deal': return gone.has(dishKey(card.branchId, card.dealId));
+    case 'meal': return card.basket.lines.some((l) => gone.has(dishKey(card.basket.branchId, l.comboId ?? l.productId)));
+    case 'usual': return false;
   }
 }
 
@@ -101,6 +112,7 @@ function DishCard({ r, branch, showBranch, quick }: Props<'dish'>) {
     <article className={place.open ? 'ac ac--dish' : 'ac ac--dish ac--closed'}>
       <StorageImage path={dish.entry.imagePath} alt="" square fallbackLabel="" fallbackMark={name} className="ac__img" />
       <div className="ac__body">
+        {r.inDeal ? <span className="ac__badge"><Badge tone="accent" icon="tag">{t('assistant.deal')}</Badge></span> : null}
         <h3 className="ac__name">{name}</h3>
         <PlaceLink place={place} branch={branch} showBranch={showBranch} />
         <Price agorot={dish.entry.priceAgorot} from={dish.entry.fromPrice} />
