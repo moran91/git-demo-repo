@@ -9,3 +9,7 @@ export * from './retrieve.js';
 export * from './rank.js';
 export * from './mealBuilder.js';
 export * from './upsell.js';
+export * from './replies.js';
+export * from './respond.js';
+export * from './home.js';
+export * from './cards.js';
