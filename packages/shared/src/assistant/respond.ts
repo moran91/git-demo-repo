@@ -241,8 +241,8 @@ function answerable(p: Request, data: AssistantData): Request | undefined {
 
 interface Parts {
   requests: Request[];
-  /** Craving words of things asked for that no place has ("hot dog" in "hot dog and fries"). */
-  missing: string[][];
+  /** Things asked for that no place has, as typed ("hot dog" in "fries and hot dog"). */
+  missing: string[];
 }
 
 /**
@@ -252,13 +252,13 @@ interface Parts {
  */
 function parts(r: Request, data: AssistantData): Parts {
   const groups = r.groups ?? [];
-  const raw = groups.length > 1 ? groups.map((g) => partOf(r, g, groups)) : [r];
+  const raw = groups.length > 1 ? groups.map((g) => ({ p: partOf(r, g, groups), said: g.said })) : [{ p: r, said: '' }];
   const requests: Request[] = [];
-  const missing: string[][] = [];
-  for (const p of raw) {
+  const missing: string[] = [];
+  for (const { p, said } of raw) {
     const q = answerable(p, data);
     if (q) requests.push(q);
-    else missing.push(p.craving);
+    else missing.push(said);
   }
   return requests.length ? { requests, missing } : { requests: [r], missing: [] };
 }
@@ -319,7 +319,7 @@ function mealAnswer(r: Request, ctx: Ctx): Answer {
   const seen = baskets.slice(0, r.page * MEAL_PAGE + page.length);
   return {
     kind: 'meal',
-    text: partialLine(r, ctx) ?? (r.people !== undefined ? reply('meal', r.lang, { people: r.people }, seedOf(r, data)) : reply('mealBudget', r.lang, { budget: shekels(r.budgetAgorot ?? 0) }, seedOf(r, data))),
+    text: partialLine(r, ctx, true) ?? (r.people !== undefined ? reply('meal', r.lang, { people: r.people }, seedOf(r, data)) : reply('mealBudget', r.lang, { budget: shekels(r.budgetAgorot ?? 0) }, seedOf(r, data))),
     cards: page.map((basket) => ({ kind: 'meal', basket })),
     chips: refineChips(r, data, 'meal'),
     ...(baskets.length > (r.page + 1) * MEAL_PAGE ? { more: moreChip(r) } : {}),
@@ -458,20 +458,36 @@ function notOnMenu(r: Request, ctx: Ctx): Answer | undefined {
   // Every word a known food, or a two-word name with a known food in it ("hot dog", "מרק עוף").
   const known = r.craving.every(isKnownFood) || (r.craving.length > 1 && r.craving.some(isKnownFood));
   if (!known) return undefined;
-  const label = (r.groups?.length ? r.groups.map((g) => g.craving) : [r.craving]).map((w) => typedLabel(w, ctx.text)).join(', ');
+  const label = r.groups?.length ? r.groups.map((g) => g.said).join(', ') : typedLabel(r.craving, ctx.text);
   return { kind: 'blocked', text: reply('blockedTags', r.lang, { slot: label }, seedOf(r, ctx.data)), cards: [], chips: suggestionChips(r.lang, ctx).slice(0, 3), shown: NOTHING_SHOWN, request: r, understood: true };
 }
 
-/** The words as the customer typed them ("ice cream", not the folded "ice cream"/"עופ"). */
+/**
+ * One thing's words as the customer typed them ("מרק עוף", not the folded "עופ"), in order and each once,
+ * without a joining "and" prefix. A message that does not hold them (a refinement) falls back to the words.
+ */
 function typedLabel(words: readonly string[], text: string): string {
-  const typed = text.split(/\s+/).filter((w) => w && tokenize(w).some((t) => words.includes(t) || words.includes(t.slice(1))));
-  return (typed.length ? typed : words).join(' ').replace(/[?!.,؟]+$/u, '');
+  const typed: string[] = [];
+  for (const raw of text.split(/\s+/)) {
+    const w = raw.replace(/[?!.,;:؟،]+$/u, '');
+    const t = tokenize(w)[0];
+    if (!t) continue;
+    const label = words.includes(t) ? w : words.includes(t.slice(1)) && /^[ו\u0648]/.test(w) ? w.slice(1) : undefined;
+    if (label && !typed.includes(label)) typed.push(label);
+  }
+  return (typed.length ? typed : words).join(' ');
 }
 
-/** The line over the cards: says which asked-for thing no place has ("No hot dog right now, but here's the rest:"). */
-function partialLine(r: Request, ctx: Ctx): string | undefined {
+/**
+ * The line over the cards when an asked-for thing is missing: one sentence naming it, and for a meal
+ * still saying who it is for ("אין כרגע hot dog, אבל הנה ארוחה ל־2:").
+ */
+function partialLine(r: Request, ctx: Ctx, meal = false): string | undefined {
   const { missing } = parts(r, ctx.data);
-  return missing.length ? reply('partial', r.lang, { missing: missing.map((m) => typedLabel(m, ctx.text)).join(', ') }, seedOf(r, ctx.data)) : undefined;
+  if (!missing.length) return undefined;
+  const vars = { missing: missing.join(', '), people: r.people ?? 1, budget: shekels(r.budgetAgorot ?? 0) };
+  const key: ReplyKey = !meal ? 'partial' : r.people !== undefined ? 'mealPartial' : 'mealBudgetPartial';
+  return reply(key, r.lang, vars, seedOf(r, ctx.data));
 }
 
 /** Some places are open, but what was asked for is at closed ones: name the first to open. */

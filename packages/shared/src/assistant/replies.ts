@@ -4,7 +4,7 @@ import type { Lang, Meal } from './understand.js';
 
 /** One short sentence per wording. `closed`/`closedNoTime` name the place (no card does); blocked lines are per slot so each reads naturally. */
 export type ReplyKey =
-  | 'picks' | 'picksNow' | 'partial' | 'meal' | 'mealBudget' | 'deals' | 'dealsNone' | 'usual' | 'usualNone' | 'usualSignedOut' | 'surprise' | 'place'
+  | 'picks' | 'picksNow' | 'partial' | 'mealPartial' | 'mealBudgetPartial' | 'meal' | 'mealBudget' | 'deals' | 'dealsNone' | 'usual' | 'usualNone' | 'usualSignedOut' | 'surprise' | 'place'
   | 'blockedTags' | 'blockedExclude' | 'blockedOther' | 'blockedBudget' | 'blockedMode' | 'blockedPlace'
   | 'closed' | 'closedNoTime' | 'closedAll' | 'closedAllNoTime' | 'noMore' | 'reprompt1' | 'reprompt2' | 'upsell'
   | 'greetMorning' | 'greetNoon' | 'greetEvening' | 'greetNight';
@@ -13,6 +13,8 @@ const R: Record<ReplyKey, Record<Lang, readonly string[]>> = {
   picks: { he: ['הנה מה שמצאתי:', 'אלה נראים מתאימים:', 'מה דעתכם על אלה?'], ar: ['هاي اللي لقيته:', 'هدول ممكن يعجبوك:', 'شو رأيك بهدول؟'], en: ["Here's what I found:", 'These look right:', 'How about these?'] },
   picksNow: { he: ['כמה רעיונות לעכשיו:', 'מה שהולך עכשיו:', 'שווה לנסות:'], ar: ['شوية أفكار لهلا:', 'اقتراحات لهلا:', 'جرّب هدول:'], en: ['A few ideas for now:', 'Good picks right now:', 'Worth a try:'] },
   partial: { he: ['אין כרגע {missing}, אבל יש את אלה:', 'את {missing} לא מצאתי, הנה השאר:', 'אין {missing} עכשיו, אבל יש:'], ar: ['ما في هلا {missing}، بس في هدول:', 'ما لقيت {missing}، هاد الباقي:', 'ما في {missing} هلا، بس في:'], en: ["No {missing} right now, but here's the rest:", "Couldn't find {missing}, here's the rest:", 'No {missing} now, but here you go:'] },
+  mealPartial: { he: ['אין כרגע {missing}, אבל הנה ארוחה ל־{people}:', 'את {missing} לא מצאתי, הנה ארוחה ל־{people}:', 'אין {missing} עכשיו, אבל יש ארוחה ל־{people}:'], ar: ['ما في هلا {missing}، بس هاي وجبة لـ{people}:', 'ما لقيت {missing}، هاي وجبة لـ{people}:', 'ما في {missing} هلا، بس في وجبة لـ{people}:'], en: ["No {missing} right now, but here's a meal for {people}:", "Couldn't find {missing}, here's a meal for {people}:", 'No {missing} now, but here is a meal for {people}:'] },
+  mealBudgetPartial: { he: ['אין כרגע {missing}, אבל הנה ארוחה עד {budget}:', 'את {missing} לא מצאתי, הנה ארוחה עד {budget}:', 'אין {missing} עכשיו, אבל יש ארוחה עד {budget}:'], ar: ['ما في هلا {missing}، بس هاي وجبة لحد {budget}:', 'ما لقيت {missing}، هاي وجبة لحد {budget}:', 'ما في {missing} هلا، بس في وجبة لحد {budget}:'], en: ["No {missing} right now, but here's a meal under {budget}:", "Couldn't find {missing}, here's a meal under {budget}:", 'No {missing} now, but here is a meal under {budget}:'] },
   meal: { he: ['ארוחה ל־{people}:', 'ככה מסתדרים ל־{people}:', 'מוכן ל־{people}:'], ar: ['وجبة لـ{people}:', 'هيك بتزبط لـ{people}:', 'جاهزة لـ{people}:'], en: ['A meal for {people}:', "Here's how {people} can eat:", 'Ready for {people}:'] },
   mealBudget: { he: ['ארוחה עד {budget}:', 'מה שנכנס ב־{budget}:', 'מוכן עד {budget}:'], ar: ['وجبة لحد {budget}:', 'اللي بيزبط بـ{budget}:', 'جاهزة لحد {budget}:'], en: ['A meal under {budget}:', 'What fits in {budget}:', 'Ready under {budget}:'] },
   deals: { he: ['המבצעים עכשיו:', 'יש מבצעים:', 'שווה עכשיו:'], ar: ['العروض هلا:', 'في عروض:', 'هاي العروض:'], en: ['Deals right now:', 'On offer now:', 'Worth it now:'] },

@@ -51,6 +51,8 @@ export interface Request {
 
 export interface CravingGroup {
   craving: string[];
+  /** The group's words as typed, in order, without a joining "and" prefix ("פטריות" from "ופטריות"): for naming it. */
+  said: string;
   /** Wishes said with this thing only (diet wishes stay on the whole request). */
   tags: DishTag[];
   warm?: boolean;
@@ -179,7 +181,7 @@ export function understand(text: string, places: readonly PlaceName[], prev?: Pr
   const placeIds = findPlaces(tokens, used, places);
   if (placeIds) r.placeBranchIds = placeIds;
   // 10. The rest is the craving, unless it is only "more" or "something else".
-  const groups = splitGroups(tokens, used, marks, cuts);
+  const groups = splitGroups(text, tokens, used, marks, cuts);
   if (groups.length > 1) {
     r.groups = groups;
     r.craving = groups.flatMap((g) => g.craving);
@@ -212,9 +214,13 @@ function mergeWithPrevious(r: Request, prev: Previous, refine: Refine | undefine
   const cold = r.tags.includes('cold_drink');
   const hot = !!r.warm || r.tags.includes('hot_drink');
   const kept = p.tags.filter((t) => !(cold && t === 'hot_drink') && !(hot && t === 'cold_drink'));
+  // Inside the things asked for, the temperature swaps: "פיצה ושתייה קרה" then "משהו חם" wants a hot drink.
+  const swap = (t: DishTag): DishTag => (hot && t === 'cold_drink' ? 'hot_drink' : cold && t === 'hot_drink' ? 'cold_drink' : t);
+  const groups = p.groups?.map(({ warm, ...g }) => ({ ...g, tags: uniq(g.tags.map(swap)), ...(warm && !cold ? { warm } : {}) }));
   const m: Request = {
     ...p,
-    tags: uniq([...kept, ...r.tags]).filter((t) => !exclude.tags.includes(t)),
+    tags: uniq([...kept, ...r.tags, ...(groups ?? []).flatMap((g) => g.tags)]).filter((t) => !exclude.tags.includes(t)),
+    ...(groups ? { groups } : {}),
     exclude,
     people: r.people ?? p.people,
     budgetAgorot: r.budgetAgorot ?? p.budgetAgorot,
@@ -509,8 +515,10 @@ function joinerCuts(tokens: string[], used: boolean[], wish: (at: number, m: Omi
  * The craving split into the things asked for, cut at joiner words and at an "and" prefix. Each group
  * gets the words, dish-type wishes and taste/temperature wishes said inside it. One group (or none) means one thing.
  */
-function splitGroups(tokens: string[], used: boolean[], marks: readonly Mark[], cuts: Cuts): CravingGroup[] {
-  const starts = new Set(marks.map((m) => m.at));
+function splitGroups(text: string, tokens: string[], used: boolean[], marks: readonly Mark[], cuts: Cuts): CravingGroup[] {
+  const starts = new Set(marks.filter((m) => !m.kind).map((m) => m.at));
+  const kindStarts = new Set(marks.filter((m) => m.kind).map((m) => m.at));
+  const typed = typedWords(text, tokens.length);
   const groupOf: number[] = [];
   const word: string[] = [];
   let g = 0;
@@ -521,8 +529,10 @@ function splitGroups(tokens: string[], used: boolean[], marks: readonly Mark[], 
       g++;
       return;
     }
-    // A new thing starts at an "and"-prefixed word that is a craving word, starts a wish, or is "ומשהו".
-    const prefixed = i > 0 && (!used[i] || starts.has(i) || V.SOMETHING.has(t.slice(1))) && andJoins(t);
+    // A new thing starts at an "and"-prefixed craving word, dish-type wish ("ושתייה קרה", "ומשהו לשתות") or "ומשהו".
+    // A taste or temperature word alone ("וחריף", "וקרה") is a wish on the thing before it.
+    const startsThing = !used[i] || kindStarts.has(i) || V.SOMETHING.has(t.slice(1)) || (starts.has(i) && isDishWord(t.slice(1)));
+    const prefixed = i > 0 && startsThing && andJoins(t);
     if (prefixed) g++;
     groupOf.push(g);
     word.push(prefixed ? t.slice(1) : t);
@@ -536,9 +546,34 @@ function splitGroups(tokens: string[], used: boolean[], marks: readonly Mark[], 
     if (mine.some((m) => m.cold) && coldIsDrink(craving, tags)) tags.push('cold_drink');
     const warm = mine.some((m) => m.warm);
     if (!craving.length && !tags.length && !warm) continue;
-    out.push({ craving, tags, ...(warm ? { warm: true } : {}) });
+    const own = idx.filter((i) => !used[i]);
+    out.push({ craving, said: saidOf(typed, own, word), tags, ...(warm ? { warm: true } : {}) });
   }
   return out;
+}
+
+/** Which typed word (split on spaces) each token came from, or null when they do not line up. */
+function typedWords(text: string, count: number): { words: string[]; of: number[] } | null {
+  const words = text.split(/\s+/).filter(Boolean);
+  const of: number[] = [];
+  words.forEach((w, k) => tokenize(w).forEach(() => of.push(k)));
+  return of.length === count ? { words, of } : null;
+}
+
+/** The typed words of these tokens, in order, each once, without a joining "and" prefix and end punctuation. */
+function saidOf(typed: ReturnType<typeof typedWords>, idx: readonly number[], word: readonly string[]): string {
+  if (!typed) return idx.map((i) => word[i]).join(' ');
+  const seen = new Set<number>();
+  const out: string[] = [];
+  for (const i of idx) {
+    const k = typed.of[i]!;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    const w = typed.words[k]!.replace(/[?!.,;:؟،]+$/u, '');
+    // The token lost its "and" (ופטריות → פטריות): so does the typed word.
+    out.push(word[i] !== tokenize(w)[0] && /^[ו\u0648]/.test(w) ? w.slice(1) : w);
+  }
+  return out.join(' ');
 }
 
 function addTo<T>(list: T[], v: T): void {

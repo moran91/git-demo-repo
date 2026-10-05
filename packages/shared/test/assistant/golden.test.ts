@@ -142,7 +142,15 @@ const CASES: Case[] = [
   { say: 'ice cream or cake', kind: 'dish', groups: 2, cardTypes: ['desserts'], excludes: ['bl-iced-coffee'], textHas: ['ice cream'] },
   { say: 'עוגת גבינה וקפה', kind: 'dish', groups: 2, cardTypes: ['drinks'], excludes: ['dl-chocolate-cake', 'md-cheese'], textHas: ['עוגת גבינה'] },
   { say: 'מרק עוף עם לחם', kind: 'blocked', cards: 0, excludes: ['a-shawarma-chicken', 'b-chicken'] },
-  { say: 'hot dog and fries ל-2', kind: 'meal', people: 2, excludes: ['m-spicy-family', 'a-shawarma-spicy'] },
+  { say: 'hot dog and fries ל-2', kind: 'meal', people: 2, excludes: ['m-spicy-family', 'a-shawarma-spicy'], textHas: ['hot dog', 'ל־2'] },
+  { say: 'fries and hot dog', kind: 'dish', includes: 'm-fries', textHas: ['hot dog'], textLacks: ['and', 'fries'] },
+  { say: 'פיצה ופטריות', kind: 'dish', cardTypes: ['pizza'], textHas: ['פטריות'], textLacks: ['ופטריות'] },
+  { say: 'קפה וחלב', kind: 'dish', cardTypes: ['drinks'], textHas: ['חלב'], textLacks: ['וחלב'] },
+  { say: 'حمص وفول', kind: 'dish', includes: 'a-hummus', textLacks: ['وفول'] },
+  { say: 'chocolate milk and chocolate cake', kind: 'dish', includes: 'dl-chocolate-cake', textHas: ['chocolate milk'], textLacks: ['milk chocolate', 'cake'] },
+  { say: 'hot dog and hot chocolate', kind: 'blocked', cards: 0, textHas: ['hot dog, hot chocolate'], textLacks: ['hot hot'] },
+  { say: 'שווארמה וחריף', kind: 'dish', groups: 0, tags: ['spicy'], cardTypes: ['shawarma'], includes: 'a-shawarma-spicy' },
+  { say: ['פיצה ושתייה קרה', 'משהו חם'], kind: 'dish', groups: 2, hasTypes: ['pizza', 'drinks'], noCardTags: ['cold_drink'] },
 
   // "With" a side is two things; "with" a topping is the same dish
   { say: 'شاورما مع بطاطا', kind: 'dish', includesAll: ['a-shawarma-chicken', 'm-fries'] },
@@ -509,7 +517,7 @@ describe('golden set', () => {
 
 describe('golden copy', () => {
   it('Arabic says "now" one way (هلا), never هلأ', () => {
-    const keys: ReplyKey[] = ['picks', 'picksNow', 'partial', 'meal', 'mealBudget', 'deals', 'dealsNone', 'usual', 'usualNone', 'usualSignedOut', 'surprise', 'place', 'blockedTags', 'blockedExclude', 'blockedOther', 'blockedBudget', 'blockedMode', 'blockedPlace', 'closed', 'closedNoTime', 'closedAll', 'closedAllNoTime', 'noMore', 'reprompt1', 'reprompt2', 'upsell'];
+    const keys: ReplyKey[] = ['picks', 'picksNow', 'partial', 'mealPartial', 'mealBudgetPartial', 'meal', 'mealBudget', 'deals', 'dealsNone', 'usual', 'usualNone', 'usualSignedOut', 'surprise', 'place', 'blockedTags', 'blockedExclude', 'blockedOther', 'blockedBudget', 'blockedMode', 'blockedPlace', 'closed', 'closedNoTime', 'closedAll', 'closedAllNoTime', 'noMore', 'reprompt1', 'reprompt2', 'upsell'];
     for (const k of keys) for (let s = 0; s < 3; s++) expect(reply(k, 'ar', { place: 'x', time: '10:00', slot: 'x', people: 2, budget: '₪50' }, s), k).not.toContain('هلأ');
   });
 });
