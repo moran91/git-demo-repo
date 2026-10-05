@@ -94,47 +94,6 @@ export function matchesQuery(haystack: string, query: string): boolean {
   return q.split(' ').every((w) => h.includes(w));
 }
 
-export interface DishHit {
-  id: string;
-  branchId: string;
-  /** The place can take an order right now (open, not paused). */
-  open: boolean;
-  entry: DishIndexEntry;
-}
-
-/**
- * Neutral ranking. Orderable places first; within them one dish per place in turn (round robin), so
- * no restaurant fills the top of the list. Which place leads rotates with `seed` (the day), and the
- * place already in the customer's cart leads while it is open. Each place keeps its own menu order.
- */
-export function rankDishes<T extends DishHit>(hits: T[], opts: { seed: number; pinBranchId?: string }): T[] {
-  const byBranch = new Map<string, T[]>();
-  for (const h of hits) {
-    const list = byBranch.get(h.branchId) ?? [];
-    list.push(h);
-    byBranch.set(h.branchId, list);
-  }
-  for (const list of byBranch.values()) list.sort((a, b) => a.entry.sortOrder - b.entry.sortOrder || a.id.localeCompare(b.id));
-  const ids = [...byBranch.keys()].sort();
-  const n = ids.length;
-  const rotated = n ? ids.map((_, i) => ids[(i + (((opts.seed % n) + n) % n)) % n]!) : [];
-  const open = rotated.filter((b) => byBranch.get(b)![0]!.open);
-  const closed = rotated.filter((b) => !byBranch.get(b)![0]!.open);
-  if (opts.pinBranchId && open.includes(opts.pinBranchId)) {
-    open.splice(open.indexOf(opts.pinBranchId), 1);
-    open.unshift(opts.pinBranchId);
-  }
-  const roundRobin = (branches: string[]) => {
-    const out: T[] = [];
-    const queues = branches.map((b) => [...byBranch.get(b)!]);
-    // The pinned place gets all its dishes first; the rest share the list in turn.
-    if (opts.pinBranchId && branches[0] === opts.pinBranchId) out.push(...queues.shift()!);
-    while (queues.some((q) => q.length)) for (const q of queues) if (q.length) out.push(q.shift()!);
-    return out;
-  };
-  return [...roundRobin(open), ...roundRobin(closed)];
-}
-
 /** Day number used as the rotation seed, so the order is stable within a day. */
 export function daySeed(now: Date): number {
   return Math.floor(now.getTime() / 86_400_000);
