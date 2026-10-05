@@ -33,8 +33,10 @@ export interface Request {
   /** Per-dish ceiling, from "cheaper" after dish picks. */
   maxPriceAgorot?: number;
   cheap?: boolean;
-  /** "Something warm": a hot dish or drink (no cold drinks, salads, sushi or desserts). */
+  /** "Something warm": a hot dish or drink (no cold drinks, salads, sushi or desserts). A wish of the tags slot. */
   warm?: boolean;
+  /** The craving words were joined ("פיצה עם קולה", "pizza and sushi"): two things, so each may be answered alone. */
+  joined?: boolean;
   mode?: FulfillmentMode;
   placeBranchIds?: string[];
   meal?: Meal;
@@ -129,9 +131,12 @@ export function understand(text: string, places: readonly PlaceName[], prev?: Pr
   // 7. Single-word wishes, "something warm", and words naming a whole kind of dish ("משהו לשתות").
   for (const [tag, list] of V.REQUEST_TAGS) while (eat(tokens, used, list)) addTo(r.tags, tag);
   while (eat(tokens, used, V.WARM)) r.warm = true;
+  let cold = false;
+  while (eat(tokens, used, V.COLD)) cold = true;
   const kinds: string[] = [];
   for (const [word, list] of V.TYPE_WISHES) while (eat(tokens, used, list)) addTo(kinds, word[lang]);
   // 8. Filler (also with a prefix: "ומשביע"), and hunger words ("רעב", "what's open"), which ask for ideas, not a dish.
+  const joiner = tokens.some((t, i) => !used[i] && V.JOIN.has(t));
   tokens.forEach((t, i) => {
     if (!used[i] && (isIn(t, V.STOP) || isIn(t, V.HUNGRY))) used[i] = true;
   });
@@ -140,6 +145,8 @@ export function understand(text: string, places: readonly PlaceName[], prev?: Pr
   if (placeIds) r.placeBranchIds = placeIds;
   // 10. The rest is the craving, unless it is only "more" or "something else".
   r.craving = [...tokens.filter((_, i) => !used[i]), ...kinds.flatMap((w) => tokenize(w))];
+  if (r.craving.length > 1 && (joiner || r.craving.slice(1).some(andPrefixed))) r.joined = true;
+  if (cold && ((!r.craving.length && !r.tags.length) || r.craving.some((w) => isIn(w, V.DRINK_WORDS)))) addTo(r.tags, 'cold_drink');
   if (r.craving.length && r.craving.every((w) => V.MORE.has(w))) {
     r.craving = [];
     refine = refine ?? 'more';
@@ -160,14 +167,18 @@ function mergeWithPrevious(r: Request, prev: Previous, refine: Refine | undefine
     dishIds: [...p.exclude.dishIds],
     branchIds: [...p.exclude.branchIds],
   };
+  // Hot and cold replace each other: "משהו חם" then "משהו קר" wants cold now.
+  const cold = r.tags.includes('cold_drink');
+  const hot = !!r.warm || r.tags.includes('hot_drink');
+  const kept = p.tags.filter((t) => !(cold && t === 'hot_drink') && !(hot && t === 'cold_drink'));
   const m: Request = {
     ...p,
-    tags: uniq([...p.tags, ...r.tags]).filter((t) => !exclude.tags.includes(t)),
+    tags: uniq([...kept, ...r.tags]).filter((t) => !exclude.tags.includes(t)),
     exclude,
     people: r.people ?? p.people,
     budgetAgorot: r.budgetAgorot ?? p.budgetAgorot,
     cheap: r.cheap || p.cheap,
-    warm: r.warm || p.warm,
+    warm: cold ? undefined : r.warm || p.warm,
     mode: r.mode ?? p.mode,
     meal: r.meal ?? p.meal,
     page: 0,

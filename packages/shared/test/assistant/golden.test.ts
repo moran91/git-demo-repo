@@ -32,6 +32,8 @@ interface Case {
   lang?: Lang;
   includes?: string;
   includesAll?: string[];
+  /** Each group has at least one id among the cards ("פיצה עם קולה" shows a cola). */
+  includesAny?: string[][];
   first?: string;
   excludes?: string[];
   branch?: string;
@@ -44,6 +46,10 @@ interface Case {
   /** No dish card carries any of these tags. */
   noCardTags?: DishTag[];
   cards?: number;
+  /** Dish cards go from cheapest up. */
+  sortedByPrice?: boolean;
+  /** After the messages, tap this chip of the last turn; the assertions are about the turn it gives. */
+  thenChip?: number;
   /** No card of the last turn was on the previous assistant turn (for meals: no main it was built around). */
   fresh?: boolean;
   textHas?: string[];
@@ -54,6 +60,8 @@ interface Case {
 
 /** Morano and Burger Basil (the two places with deals) closed; everything else open. */
 const dealPlacesClosed = () => fixtureData({ places: PLACES.map((p) => (p.branchId === 'morano' || p.branchId === 'burger' ? { ...p, open: false, opensInMin: 90 } : p)) });
+
+const WARM_TYPES: DishType[] = ['pizza', 'pasta', 'burger', 'shawarma', 'hummus', 'mains', 'pastries', 'snacks', 'drinks'];
 
 const CASES: Case[] = [
   // Cravings in four languages
@@ -107,13 +115,22 @@ const CASES: Case[] = [
   { say: 'פיצה משפחתית', kind: 'dish', includes: 'm-family', noPeople: true },
 
   // Two things in one message
-  { say: 'פיצה עם קולה', kind: 'dish', hasTypes: ['pizza', 'drinks'] },
+  { say: 'פיצה עם קולה', kind: 'dish', hasTypes: ['pizza', 'drinks'], includesAny: [['m-coke', 'a-cola']] },
+  { say: 'pizza and sushi', kind: 'dish', hasTypes: ['pizza', 'sushi'], includes: 'm-margherita' },
   { say: 'חומוס ופלאפל', kind: 'dish', includesAll: ['a-hummus', 'a-falafel'] },
-  { say: 'קפה ועוגה', kind: 'dish', hasTypes: ['drinks', 'desserts'] },
-  { say: 'coffee and cake', kind: 'dish', hasTypes: ['drinks', 'desserts'] },
+  { say: 'קפה ועוגה', kind: 'dish', hasTypes: ['drinks', 'desserts'], includesAny: [['m-espresso', 'bl-cappuccino', 'bl-iced-coffee'], ['dl-chocolate-cake', 'dl-gf-cake']] },
+  { say: 'coffee and cake', kind: 'dish', hasTypes: ['drinks', 'desserts'], includesAny: [['m-espresso', 'bl-cappuccino', 'bl-iced-coffee'], ['dl-chocolate-cake', 'dl-gf-cake']] },
   { say: 'شاورما وكولا', kind: 'dish', hasTypes: ['shawarma', 'drinks'] },
   { say: 'שווארמה בפיתה', kind: 'dish', includes: 'a-shawarma-chicken', cardTypes: ['shawarma'] },
   { say: 'פיצה וקולה ל-2', kind: 'meal', people: 2, branch: 'morano', excludes: ['a-cola'] },
+
+  // A dish name of two words is not two dishes: no answer made of each word alone
+  { say: 'hot dog', kind: 'blocked', cards: 0, textHas: ['hot dog'] },
+  { say: 'ice cream', kind: 'blocked', cards: 0, textHas: ['ice cream'] },
+  { say: 'עוגת גבינה', kind: 'blocked', cards: 0, textHas: ['עוגת גבינה'] },
+  { say: 'chocolate milk', kind: 'blocked', cards: 0 },
+  { say: 'מרק עוף', kind: 'blocked', cards: 0, textHas: ['מרק עוף'] },
+  { say: 'חומוס ופלאפל ל-4 במשלוח ממורנו', kind: 'blocked', textHas: ['מורנו'], textLacks: ['חומוס'] },
   { say: 'פיזה', kind: 'dish', includes: 'm-margherita', excludes: ['s-platter'] },
   { say: 'שווארמה עם צ׳יפס', kind: 'dish', includesAll: ['a-shawarma-chicken', 'm-fries'] },
   { say: 'כנאפה ל-4', kind: 'meal', people: 4, includes: 'a-knafeh', excludes: ['a-falafel'] },
@@ -130,7 +147,18 @@ const CASES: Case[] = [
   { say: 'משהו לנשנש', kind: 'dish', cardTypes: ['snacks'] },
   { say: 'a snack', kind: 'dish', cardTypes: ['snacks'] },
   { say: 'משהו חם', kind: 'dish', craving: [], noCardTags: ['cold_drink', 'sweet'], cardTypes: ['pizza', 'pasta', 'burger', 'shawarma', 'hummus', 'mains', 'pastries', 'snacks', 'drinks'] },
-  { say: 'something warm', kind: 'dish', craving: [], noCardTags: ['cold_drink', 'sweet'], cardTypes: ['pizza', 'pasta', 'burger', 'shawarma', 'hummus', 'mains', 'pastries', 'snacks', 'drinks'] },
+  { say: 'something warm', kind: 'dish', craving: [], noCardTags: ['cold_drink', 'sweet'], cardTypes: WARM_TYPES },
+  { say: 'סושי חם', kind: 'blocked', textHas: ['חם'], textLacks: ['סושי'] },
+  { say: 'סושי חם', thenChip: 0, kind: 'dish', cardTypes: ['sushi'] },
+  { say: 'סלט חם', kind: 'blocked', textHas: ['חם'], textLacks: ['סלט'] },
+  { say: 'קינוח חם', kind: 'blocked', textHas: ['חם'], textLacks: ['מתוק'] },
+  { say: 'קינוח חם', thenChip: 0, kind: 'dish', allTagged: 'sweet', cards: 3 },
+  { say: ['משהו חם', 'משהו קר'], kind: 'dish', allTagged: 'cold_drink', cardTypes: ['drinks'] },
+  { say: ['משהו קר', 'משהו חם'], kind: 'dish', noCardTags: ['cold_drink'], cardTypes: WARM_TYPES },
+  { say: ['שתייה חמה', 'שתייה קרה'], kind: 'dish', tags: ['cold_drink'], allTagged: 'cold_drink' },
+  { say: 'סלט קר', kind: 'dish', tags: [], includes: 'bl-greek-salad' },
+  { say: 'פיצה קרה', kind: 'dish', tags: [], includes: 'm-margherita' },
+  { say: 'cold pizza', kind: 'dish', tags: [], includes: 'm-margherita' },
   { say: 'something hot', kind: 'dish', noCardTags: ['cold_drink', 'sweet'], cardTypes: ['pizza', 'pasta', 'burger', 'shawarma', 'hummus', 'mains', 'pastries', 'snacks', 'drinks'] },
   { say: 'اشي سخن', kind: 'dish', craving: [], noCardTags: ['cold_drink', 'sweet'], cardTypes: ['pizza', 'pasta', 'burger', 'shawarma', 'hummus', 'mains', 'pastries', 'snacks', 'drinks'] },
 
@@ -149,26 +177,26 @@ const CASES: Case[] = [
   { say: 'sushi la 2 la7ad 100', kind: 'meal', people: 2, budget: 10000, branch: 'sumo' },
 
   // Hungry, no dish named: ideas for now
-  { say: 'אני רעב', kind: 'dish', cards: 3 },
-  { say: 'רעבים', kind: 'dish', cards: 3 },
-  { say: 'בא לי משהו טוב', kind: 'dish', cards: 3 },
-  { say: 'מה יש לאכול?', kind: 'dish', cards: 3 },
-  { say: 'מה פתוח עכשיו?', kind: 'dish', cards: 3 },
-  { say: "i'm hungry", kind: 'dish', cards: 3 },
-  { say: 'what should i eat', kind: 'dish', cards: 3 },
-  { say: "what's open", kind: 'dish', cards: 3 },
-  { say: 'جوعان', kind: 'dish', cards: 3 },
-  { say: 'شو في اكل', kind: 'dish', cards: 3 },
-  { say: 'ju3an', kind: 'dish', cards: 3 },
-  { say: 'bdi akel', kind: 'dish', cards: 3 },
-  { say: 'מה מומלץ?', kind: 'dish', cards: 3 },
-  { say: 'מה הכי מוזמן', kind: 'dish', cards: 3 },
-  { say: 'what do you recommend', kind: 'dish', cards: 3 },
-  { say: 'الأكثر طلبا', kind: 'dish', cards: 3 },
-  { say: 'شو بتنصح', kind: 'dish', cards: 3 },
-  { say: 'شو في هلا', kind: 'dish', cards: 3 },
-  { say: 'מה יש?', kind: 'dish', cards: 3 },
-  { say: 'what do you have', kind: 'dish', cards: 3 },
+  { say: 'אני רעב', kind: 'dish', cards: 3, craving: [], tags: [] },
+  { say: 'רעבים', kind: 'dish', cards: 3, craving: [], tags: [] },
+  { say: 'בא לי משהו טוב', kind: 'dish', cards: 3, craving: [], tags: [] },
+  { say: 'מה יש לאכול?', kind: 'dish', cards: 3, craving: [], tags: [] },
+  { say: 'מה פתוח עכשיו?', kind: 'dish', cards: 3, craving: [], tags: [] },
+  { say: "i'm hungry", kind: 'dish', cards: 3, craving: [], tags: [] },
+  { say: 'what should i eat', kind: 'dish', cards: 3, craving: [], tags: [] },
+  { say: "what's open", kind: 'dish', cards: 3, craving: [], tags: [] },
+  { say: 'جوعان', kind: 'dish', cards: 3, craving: [], tags: [] },
+  { say: 'شو في اكل', kind: 'dish', cards: 3, craving: [], tags: [] },
+  { say: 'ju3an', kind: 'dish', cards: 3, craving: [], tags: [] },
+  { say: 'bdi akel', kind: 'dish', cards: 3, craving: [], tags: [] },
+  { say: 'מה מומלץ?', kind: 'dish', cards: 3, craving: [], tags: [] },
+  { say: 'מה הכי מוזמן', kind: 'dish', cards: 3, craving: [], tags: [] },
+  { say: 'what do you recommend', kind: 'dish', cards: 3, craving: [], tags: [] },
+  { say: 'الأكثر طلبا', kind: 'dish', cards: 3, craving: [], tags: [] },
+  { say: 'شو بتنصح', kind: 'dish', cards: 3, craving: [], tags: [] },
+  { say: 'شو في هلا', kind: 'dish', cards: 3, craving: [], tags: [] },
+  { say: 'מה יש?', kind: 'dish', cards: 3, craving: [], tags: [] },
+  { say: 'what do you have', kind: 'dish', cards: 3, craving: [], tags: [] },
 
   // Taste and diet wishes
   { say: 'משהו חריף', kind: 'dish', tags: ['spicy'], craving: [], allTagged: 'spicy' },
@@ -211,17 +239,21 @@ const CASES: Case[] = [
   { say: 'pizza bla la7me', kind: 'dish', craving: ['pizza'], excludeTags: ['meat'], excludes: ['m-pepperoni'] },
   { say: 'pizza bidun la7me', kind: 'dish', craving: ['pizza'], excludeTags: ['meat'], excludes: ['m-pepperoni'] },
   { say: 'شاورما بدون لحم', kind: 'dish', excludeTags: ['meat'], includes: 'a-shawarma-chicken', excludes: ['a-shawarma-spicy', 'a-platter'] },
-  { say: 'לא חריף', kind: 'dish', excludeTags: ['spicy'] },
-  { say: 'לא רוצה חריף', kind: 'dish', excludeTags: ['spicy'], tags: [], craving: [] },
-  { say: "i don't want spicy", kind: 'dish', excludeTags: ['spicy'], tags: [], craving: [] },
-  { say: 'ما بدي حار', kind: 'dish', excludeTags: ['spicy'], tags: [], craving: [] },
-  { say: 'ma bade 7ar', kind: 'dish', excludeTags: ['spicy'], tags: [], craving: [] },
+  { say: 'לא חריף', kind: 'dish', excludeTags: ['spicy'], noCardTags: ['spicy'] },
+  { say: 'לא רוצה חריף', kind: 'dish', excludeTags: ['spicy'], tags: [], craving: [], noCardTags: ['spicy'] },
+  { say: "i don't want spicy", kind: 'dish', excludeTags: ['spicy'], tags: [], craving: [], noCardTags: ['spicy'] },
+  { say: 'ما بدي حار', kind: 'dish', excludeTags: ['spicy'], tags: [], craving: [], noCardTags: ['spicy'] },
+  { say: 'ma bade 7ar', kind: 'dish', excludeTags: ['spicy'], tags: [], craving: [], noCardTags: ['spicy'] },
   { say: 'not spicy shawarma', kind: 'dish', excludeTags: ['spicy'], excludes: ['a-shawarma-spicy'] },
-  { say: 'בלי גבינה', kind: 'dish', excludeTags: ['cheese'] },
+  { say: 'בלי גבינה', kind: 'dish', excludeTags: ['cheese'], noCardTags: ['cheese'] },
   { say: 'בלי בצל', kind: 'dish', excludes: ['b-onion-rings'] },
   { say: 'פיצה בלי פטריות', kind: 'dish', craving: ['פיצה'], includes: 'm-margherita' },
   { say: 'חריף אבל לא בשר', kind: 'dish', tags: ['spicy'], excludeTags: ['meat'], craving: [], excludes: ['a-shawarma-spicy'] },
   { say: 'בלי קולה', kind: 'dish', keepTags: ['cold_drink'], excludes: ['m-coke', 'a-cola'] },
+  { say: 'עוגה בלי קולה', kind: 'dish', includes: 'dl-chocolate-cake' },
+  { say: 'cake without cola', kind: 'dish', includes: 'dl-chocolate-cake' },
+  { say: 'no chili shawarma', kind: 'dish', excludeTags: ['spicy'], excludes: ['a-shawarma-spicy'], includes: 'a-shawarma-chicken' },
+  { say: 'שווארמה בלי צ׳ילי', kind: 'dish', excludeTags: ['spicy'], excludes: ['a-shawarma-spicy'], includes: 'a-shawarma-chicken' },
   { say: 'ל-4 בלי קולה', kind: 'meal', people: 4, keepTags: ['cold_drink'], excludes: ['m-coke', 'a-cola'] },
 
   // People and budget
@@ -267,10 +299,10 @@ const CASES: Case[] = [
   { say: 'ל-6 עד 30', kind: 'blocked', people: 6, budget: 3000, cards: 0, textHas: ['₪30'] },
 
   // Cheap
-  { say: 'זול', kind: 'dish', cheap: true },
-  { say: 'הכי זול', kind: 'dish', cheap: true },
+  { say: 'זול', kind: 'dish', cheap: true, sortedByPrice: true, noCardTags: ['cold_drink', 'hot_drink'] },
+  { say: 'הכי זול', kind: 'dish', cheap: true, sortedByPrice: true, noCardTags: ['cold_drink', 'hot_drink'] },
   { say: 'cheapest pizza', kind: 'dish', cheap: true, first: 'm-margherita' },
-  { say: 'ارخص اشي', kind: 'dish', cheap: true },
+  { say: 'ارخص اشي', kind: 'dish', cheap: true, sortedByPrice: true },
   { say: 'משהו זול ומשביע', kind: 'dish', cheap: true, craving: [] },
 
   // Mode
@@ -312,9 +344,10 @@ const CASES: Case[] = [
   { say: 'pasta deal', kind: 'deal', shortcut: 'deals', includes: 'm-promo-pasta' },
   { say: 'عرض على بيتزا', kind: 'deal', shortcut: 'deals', craving: ['بيتزا'], first: 'm-combo-pair' },
   { say: 'deal on pizza', kind: 'deal', shortcut: 'deals', craving: ['pizza'], first: 'm-combo-pair' },
-  { say: 'מבצעים', kind: 'closed', data: dealPlacesClosed, textHas: ['21:30'], cards: 0 },
-  { say: 'deals', kind: 'closed', data: dealPlacesClosed, textHas: ['21:30'], cards: 0 },
-  { say: 'شو في عروض', kind: 'closed', data: dealPlacesClosed, textHas: ['21:30'], cards: 0 },
+  { say: 'מבצעים', kind: 'closed', data: dealPlacesClosed, textHas: ['מורנו', '21:30'], cards: 0 },
+  { say: 'deals', kind: 'closed', data: dealPlacesClosed, textHas: ['Morano', '21:30'], cards: 0 },
+  { say: 'شو في عروض', kind: 'closed', data: dealPlacesClosed, textHas: ['مورانو', '21:30'], cards: 0 },
+  { say: 'מבצע על פיצה', kind: 'closed', data: dealPlacesClosed, textHas: ['מורנו', '21:30'], cards: 0 },
 
   // Time of day
   { say: 'ארוחת בוקר', kind: 'dish', meal: 'breakfast', firstTagIn: ['breakfast', 'hot_drink'] },
@@ -372,12 +405,13 @@ function cardIds(c: Card): string[] {
 
 describe('golden set', () => {
   for (const c of CASES) {
-    const title = [c.say].flat().join(' → ') + (c.data ? ' (deal places closed)' : '');
+    const title = [c.say].flat().join(' → ') + (c.thenChip !== undefined ? ` → chip ${c.thenChip}` : '') + (c.data ? ' (deal places closed)' : '');
     it(title, () => {
       const data = c.data?.() ?? fixture;
       const opts = { signedIn: c.signedIn ?? true, uiLang: 'he' as const };
       let conv: Conversation = EMPTY_CONVERSATION;
       for (const s of [c.say].flat()) conv = respond(conv, s, data, opts);
+      if (c.thenChip !== undefined) conv = respond(conv, (conv.turns.at(-1) as AssistantTurn).chips[c.thenChip]!, data, opts);
       const assistant = conv.turns.filter((t): t is AssistantTurn => t.role === 'assistant');
       const turn = assistant.at(-1)!;
       const r = conv.last?.request;
@@ -406,6 +440,7 @@ describe('golden set', () => {
       if (c.lang) expect(r?.lang, at).toBe(c.lang);
       if (c.includes) expect(ids, at).toContain(c.includes);
       for (const x of c.includesAll ?? []) expect(ids, at).toContain(x);
+      for (const group of c.includesAny ?? []) expect(ids.some((x) => group.includes(x)), `one of [${group.join(', ')}] in ${at}`).toBe(true);
       if (c.first) expect(ids[0], at).toBe(c.first);
       for (const x of c.excludes ?? []) expect(ids, at).not.toContain(x);
       if (c.branch) expect(turn.cards[0], at).toMatchObject({ kind: 'meal', basket: { branchId: c.branch } });
@@ -414,6 +449,11 @@ describe('golden set', () => {
       if (c.cardTypes) {
         expect(dishCards.length, at).toBeGreaterThan(0);
         for (const card of dishCards) expect(c.cardTypes, at).toContain(entryOf(card).dishType);
+      }
+      if (c.sortedByPrice) {
+        const prices = dishCards.map((x) => entryOf(x).priceAgorot);
+        expect(prices.length, at).toBeGreaterThan(1);
+        expect(prices, at).toEqual([...prices].sort((a, b) => a - b));
       }
       for (const t of c.hasTypes ?? []) expect(dishCards.map((x) => entryOf(x).dishType), at).toContain(t);
       if (c.noCardTags) {

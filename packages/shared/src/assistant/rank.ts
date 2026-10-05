@@ -33,6 +33,8 @@ export function dealProductIds(data: AssistantData): Set<string> {
 
 export const popularThenCheap = (a: AssistantDish, b: AssistantDish) => Number(!!b.entry.mostOrdered) - Number(!!a.entry.mostOrdered) || a.entry.priceAgorot - b.entry.priceAgorot;
 
+const CHEAP_WEIGHT = 1000;
+
 export function rank(cands: Candidate[], r: Request, data: AssistantData): Hit[] {
   const meal = r.meal ?? mealOf(localHour(data.now));
   const prof = data.profile;
@@ -53,9 +55,10 @@ export function rank(cands: Candidate[], r: Request, data: AssistantData): Hit[]
     }
     if (deals.has(dishKey(dish.branchId, dish.id))) points += 15;
     if (data.cartBranchId === dish.branchId) points += 20;
-    // Drinks and sides are not a meal: with no craving, tag or drink asked for, mains lead.
-    if (!r.craving.length && !r.tags.length && (e.dishType === 'drinks' || e.dishType === 'snacks')) points -= 200;
-    if (r.cheap) points += Math.round((1 - e.priceAgorot / maxPrice) * 150);
+    // Drinks and sides are not a meal: with no craving, tag or drink asked for, mains lead (also when price leads).
+    if (!r.craving.length && !r.tags.length && (e.dishType === 'drinks' || e.dishType === 'snacks')) points -= r.cheap ? CHEAP_WEIGHT + 100 : 200;
+    // "Cheap" orders by price: 10% of the price range outweighs popularity, photos and history.
+    if (r.cheap) points += Math.round((1 - e.priceAgorot / maxPrice) * CHEAP_WEIGHT);
     if (r.shortcut === 'surprise') points += Math.round(hashUnit(data.seed, dish.id) * 80);
     return { dish, match, points };
   });

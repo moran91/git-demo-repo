@@ -4,7 +4,7 @@
  */
 import { normalizeSearch } from '../dishIndex.js';
 import type { FulfillmentMode } from '../types.js';
-import { TAG_TERMS, type DishTag } from './tags.js';
+import { TAG_TERMS, TYPE_TERMS, type DishTag } from './tags.js';
 import { foldAll, tokenize } from './text.js';
 
 export type Meal = 'breakfast' | 'lunch' | 'dinner' | 'late';
@@ -41,7 +41,7 @@ export const REQUEST_TAGS: Array<readonly [DishTag, Phrase[]]> = [
   ['kids', phrases(TAG_TERMS.kids)],
   ['healthy', phrases([...TAG_TERMS.healthy, 'קליל', 'קלילה', 'קלילים', 'קלילות', 'خفيف', 'خفيفة'])],
   ['sweet', phrases(['מתוק', 'מתוקה', 'מתוקים', 'קינוח', 'קינוחים', 'sweet', 'sweets', 'dessert', 'desserts', 'حلو', 'حلويات', 'تحلاية', 'ديزرت', '7elo', '7elwe', '7ilo', '7elou', '7lo'])],
-  ['cold_drink', phrases(['שתייה קרה', 'שתיה קרה', 'משקה קר', 'משהו קר לשתות', 'cold drink', 'something cold to drink', 'מה קר', 'משהו קר', 'something cold', 'מה יש קר', 'مشروب بارد', 'اشي بارد', 'شي بارد', 'eshi bared', 'shi bared', 'קר', 'קרה', 'קרים', 'קרות', 'cold', 'iced', 'بارد', 'باردة', 'bared'])],
+  ['cold_drink', phrases(['שתייה קרה', 'שתיה קרה', 'משקה קר', 'משהו קר לשתות', 'cold drink', 'something cold to drink', 'מה קר', 'משהו קר', 'something cold', 'מה יש קר', 'مشروب بارد', 'اشي بارد', 'شي بارد', 'eshi bared', 'shi bared'])],
   ['hot_drink', phrases(['שתייה חמה', 'שתיה חמה', 'משקה חם', 'hot drink', 'something hot to drink', 'something warm to drink', 'مشروب ساخن', 'مشروب سخن'])],
   ['sharing', phrases(['לשתף', 'לחלוק', 'to share', 'sharing', 'للمشاركة'])],
 ];
@@ -98,6 +98,17 @@ export const WE = set(['אנחנו', 'אנו', 'we', 'احنا', 'نحن', 'ehna
 export const WARM = phrases(['חם', 'חמה', 'חמים', 'חמימה', 'חמימים', 'משהו חם', 'warm', 'something warm', 'سخن', 'سخنة', 'ساخن', 'ساخنة', 'دافي', 'دافئ', 's5en', 'sokhn']);
 
 /**
+ * A lone cold word: a cold drink when nothing else is asked for ("קר") or the craving is a drink ("קפה קר",
+ * "iced coffee"); beside a dish ("סלט קר", "cold pizza") it is how the dish is served and is not a filter.
+ */
+export const COLD = phrases(['קר', 'קרה', 'קרים', 'קרות', 'cold', 'iced', 'بارد', 'باردة', 'bared']);
+/** Words that name a drink, so a cold word next to them asks for a cold drink. */
+export const DRINK_WORDS = set([...TYPE_TERMS.drinks, ...TAG_TERMS.cold_drink, ...TAG_TERMS.hot_drink, 'שתייה', 'مشروبات', 'drinks', 'ahwe', '2ahwe', 'qahwa']);
+
+/** Words that join two things asked for: "פיצה עם קולה", "pizza and sushi", "حمص وفلافل" (also the ו/و prefix). */
+export const JOIN = set(['and', 'or', '&', '+', 'plus', 'with', 'w', 'wa', 'ו', 'و', 'או', 'עם', 'مع', 'او']);
+
+/**
  * Wishes that name a whole kind of dish with a verb or a loose word ("משהו לשתות", "בא לי לנשנש",
  * "بدي اشرب"): they become that type's search word, in the customer's language.
  */
@@ -124,6 +135,6 @@ export const EXCLUDE_TAG_WORDS: Array<readonly [DishTag, Set<string>]> = [
   ['chicken', set(['עוף', 'עופות', 'chicken', 'دجاج', 'جاج', 'فراخ', 'djaj', 'jaj', 'djej', 'dajaj'])],
   ['fish', set(['דג', 'דגים', 'fish', 'seafood', 'سمك', 'اسماك', 'أسماك', 'samak', 'samake', 'sameke'])],
   ['cheese', set(['גבינה', 'גבינות', 'cheese', 'cheeses', 'جبنة', 'جبنه', 'جبن', 'اجبان', 'jebne', 'jebneh', 'jibne', 'jibneh', 'jebna'])],
-  ['spicy', set(['חריף', 'חריפה', 'חריפים', 'חריפות', 'harif', 'spicy', 'حار', 'حارة', 'حاره', 'حراق', '7ar', '7ara', 'harr'])],
+  ['spicy', set(['חריף', 'חריפה', 'חריפים', 'חריפות', 'צ׳ילי', 'צילי', 'חלפיניו', 'חלפניו', 'harif', 'harrif', 'hareef', 'spicy', 'chili', 'chilli', 'chilly', 'jalapeno', 'jalapeño', 'jalapenos', 'حار', 'حارة', 'حاره', 'حراق', 'شطة', 'شطه', '7ar', '7ara', '7aar', 'harr'])],
   ['sweet', set(['מתוק', 'מתוקה', 'מתוקים', 'sweet', 'sweets', 'حلو', 'حلوة', 'حلويات'])],
 ];

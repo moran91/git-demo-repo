@@ -56,14 +56,19 @@ export function buildMeals(r: Request, data: AssistantData, ranked: Hit[]): Meal
   const mainsOf = (hits: Hit[]) => hits.filter((h) => isMain(h.dish.entry) && (r.tags.includes('kids') || !(h.dish.entry.tags ?? []).includes('kids')));
   // "Pizza and cola for 2": a place with only the cola is not a meal while another place has the pizza.
   const someMains = ranked.some((h) => placeUsable(data.places.get(h.dish.branchId), r.mode) && mainsOf([h]).length > 0);
+  // Drinks and sides come from the whole menu of each place, minus what the customer excluded (one pass for all places).
+  const extrasByBranch = new Map<string, AssistantDish[]>();
+  for (const c of retrieve({ ...emptyRequest(r.lang), exclude: r.exclude, ...(r.mode ? { mode: r.mode } : {}), placeBranchIds: [...byBranch.keys()] }, data)) {
+    if (c.dish.entry.needsChoice) continue;
+    const list = extrasByBranch.get(c.dish.branchId);
+    if (list) list.push(c.dish);
+    else extrasByBranch.set(c.dish.branchId, [c.dish]);
+  }
   for (const [branchId, hits] of byBranch) {
     if (!placeUsable(data.places.get(branchId), r.mode)) continue;
     const mains = mainsOf(hits);
     const anchors = (mains.length ? mains : askedForExtras && !someMains ? hits : []).slice(0, ANCHORS);
-    // Drinks and sides come from the whole menu of the place, minus what the customer excluded.
-    const extras = retrieve({ ...emptyRequest(r.lang), exclude: r.exclude, ...(r.mode ? { mode: r.mode } : {}), placeBranchIds: [branchId] }, data)
-      .map((c) => c.dish)
-      .filter((d) => !d.entry.needsChoice);
+    const extras = extrasByBranch.get(branchId) ?? [];
     const allDrinks = extras.filter((d) => d.entry.dishType === 'drinks');
     // A side must carry every diet tag that was asked for ("vegan" does not get onion rings).
     const dietTags = r.tags.filter((t) => DIET_TAGS.includes(t));

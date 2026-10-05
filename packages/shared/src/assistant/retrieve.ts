@@ -2,11 +2,12 @@
  * Dishes that fit a request. Each filter can be switched off on its own, so an empty answer can name
  * the wish that blocked it ("nothing vegan open right now") instead of a dead end.
  */
-import { expandQueryWord, matchScore, parseQuery, type SearchQuery } from '../search/index.js';
+import { expandQueryWord, matchScore, parseQuery } from '../search/index.js';
 import type { DishType } from '../dishIndex.js';
 import type { FulfillmentMode } from '../types.js';
-import type { AssistantData, AssistantDish, AssistantPlace } from './data.js';
-import { wordForms } from './text.js';
+import { DISH_TYPE_WORDS, type AssistantData, type AssistantDish, type AssistantPlace } from './data.js';
+import { TYPE_TERMS } from './tags.js';
+import { foldAll, wordForms } from './text.js';
 import type { Request } from './understand.js';
 import { CRAVING_FAMILIES } from './vocab.js';
 
@@ -75,9 +76,44 @@ function cravingVariants(craving: readonly string[]): Variant[] {
   return out;
 }
 
-/** A word the food word list knows ("בירה", "water"): it is not a typo, so it never stands for a dish that only sounds like it. */
+/** Words that name a kind of dish ("פיצה", "pizza", "קינוחים"), from the tagger and the search type words. */
+const TYPE_WORDS = new Set(foldAll([...Object.values(TYPE_TERMS).flat(), ...Object.values(DISH_TYPE_WORDS).flatMap((w) => w.split(' '))]));
+
+/** A word naming a kind of dish ("שווארמה", "pizza"). */
+export function isDishWord(word: string): boolean {
+  return wordForms(word).some((f) => TYPE_WORDS.has(f));
+}
+
+/** A word the food word list or the dish types know ("בירה", "water", "pizza"): not a typo, so it never stands for a dish that only sounds like it. */
 export function isKnownFood(word: string): boolean {
-  return wordForms(word).some((f) => expandQueryWord(f).length > 1);
+  return isDishWord(word) || wordForms(word).some((f) => expandQueryWord(f).length > 1);
+}
+
+const strongMemo = new WeakMap<AssistantData, Map<string, number>>();
+
+/**
+ * The best level (0–3) at which a single word names some dish by spelling, else 4. Only dishes whose name
+ * holds the word or one of its translations are scored, so this is cheap enough to try every word form.
+ */
+export function strongLevel(data: AssistantData, word: string): number {
+  let byWord = strongMemo.get(data);
+  if (!byWord) strongMemo.set(data, (byWord = new Map()));
+  const hit = byWord.get(word);
+  if (hit !== undefined) return hit;
+  const query = parseQuery(`${word} `);
+  const bare = [word, ...(word.length >= 4 && word.startsWith('ה') ? [word.slice(1)] : []), ...(word.length >= 5 && word.startsWith('ال') ? [word.slice(2)] : [])];
+  const needles = [...new Set(bare.flatMap((w) => expandQueryWord(w)))];
+  let best = 4;
+  if (query) {
+    for (const dish of data.dishes) {
+      if (!needles.some((x) => dish.search.name.includes(x))) continue;
+      const m = matchScore(query, dish.search);
+      if (m && m.level < best) best = m.level;
+      if (best === 0) break;
+    }
+  }
+  byWord.set(word, best);
+  return best;
 }
 
 export type CravingMatches = Map<AssistantDish, { level: number; score: number }>;
@@ -118,9 +154,15 @@ export function cravingMatches(data: AssistantData, craving: readonly string[]):
   return out;
 }
 
+/** The dishes an excluded word names: its best spelling tier (never sound or typo look-alikes). */
+function excludedBy(data: AssistantData, word: string): Set<AssistantDish> {
+  return new Set([...cravingMatches(data, [word])].filter(([, m]) => tierOf(m.level) <= 1).map(([d]) => d));
+}
+
 export function retrieve(r: Request, data: AssistantData, f: Filters = ALL_FILTERS): Candidate[] {
   const matches = r.craving.length ? cravingMatches(data, r.craving) : null;
-  const excludeQueries = f.exclude ? r.exclude.words.map((w) => parseQuery(`${w} `)).filter((q): q is SearchQuery => !!q) : [];
+  // An excluded word drops the dishes it names best ("קולה" is the cola, not the "cola" inside "chocolate"), and any dish whose description says it.
+  const excluded = f.exclude ? r.exclude.words.map((w) => ({ named: excludedBy(data, w), query: parseQuery(`${w} `) })) : [];
   const out: Candidate[] = [];
   for (const dish of data.dishes) {
     const place = data.places.get(dish.branchId);
@@ -138,9 +180,10 @@ export function retrieve(r: Request, data: AssistantData, f: Filters = ALL_FILTE
     const m = matches?.get(dish);
     if (matches && !m) continue;
     // The costly check comes last: it only runs for dishes that already fit everything else.
-    if (excludeQueries.some((q) => {
-      const x = matchScore(q, dish.search);
-      return x !== null && x.level <= WEAK_LEVEL;
+    if (excluded.some(({ named, query }) => {
+      if (named.has(dish)) return true;
+      const x = query && matchScore(query, dish.search);
+      return !!x && x.level === WEAK_LEVEL;
     })) continue;
     out.push({ dish, match: m?.score ?? 0 });
   }

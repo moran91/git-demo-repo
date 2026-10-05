@@ -10,7 +10,7 @@ import { buildMeals, type MealBasket } from './mealBuilder.js';
 import type { Usual } from './profile.js';
 import { hashUnit, mealOf, rank, roundRobin, type Hit } from './rank.js';
 import { MODE_LABELS, chipLabel, peopleLabel, reply, replyNot, type ReplyKey } from './replies.js';
-import { ALL_FILTERS, cravingMatches, isKnownFood, placeUsable, retrieve } from './retrieve.js';
+import { ALL_FILTERS, cravingMatches, isDishWord, isKnownFood, placeUsable, retrieve, strongLevel, type Candidate, type Filters } from './retrieve.js';
 import { TAG_LABELS, type DishTag } from './tags.js';
 import { tokenize, uniq, wordForms } from './text.js';
 import { emptyRequest, hasSlots, isMealRequest, understand, wantsIdeas, type Lang, type Previous, type Request, type Shown } from './understand.js';
@@ -208,27 +208,40 @@ function pickAnswer(r: Request, ctx: Ctx, kind: 'dish' | 'surprise', retry: bool
 }
 
 /**
- * Ranked dishes for a request. When no dish is everything named ("פיצה עם קולה", "חומוס ופלאפל",
- * "coffee and cake"), each named thing that matches by spelling takes turns in the list; a word that
- * matches nothing ("שווארמה בפיתה") is left out. Empty when nothing fits.
+ * What to look for. A request whose words no dish has all of is answered in parts only when it can be:
+ * joined words ("פיצה עם קולה", "pizza and sushi") are each a thing of their own; a word that names
+ * nothing beside a dish word ("שווארמה בפיתה") is dropped. A two-word name ("hot dog", "מרק עוף") stays
+ * whole, so it gets an honest "not on the menu", never each word's dishes.
  */
-function rankedFor(r: Request, data: AssistantData): Hit[] {
-  const cands = retrieve(r, data);
-  if (cands.length || r.craving.length < 2) return rank(cands, r, data);
-  const lists: Hit[][] = [];
-  for (const word of r.craving) {
-    // "ופלאפל", "وكولا": the form that matches best ("وكولا" sits inside "شوكولاتة", "كولا" is the cola).
+function parts(r: Request, data: AssistantData): Request[] {
+  if (r.craving.length < 2 || cravingMatches(data, r.craving).size) return [r];
+  // Each word in its best form ("ופלאפל" → "פלאפל", "وكولا" → "كولا"): the bare word first, a whole-word match ends the search.
+  const forms = r.craving.map((word) => {
     let form: string | undefined;
     let best = 4;
     for (const f of wordForms(word)) {
-      const level = Math.min(4, ...[...cravingMatches(data, [f]).values()].map((m) => m.level));
-      if (f.length >= 2 && level < best) [form, best] = [f, level];
+      if (f.length < 2) continue;
+      const level = strongLevel(data, f);
+      if (level < best) [form, best] = [f, level];
+      if (best <= 1) break;
     }
-    if (!form) continue;
-    const one = { ...r, craving: [form] };
-    const hits = rank(retrieve(one, data), one, data);
-    if (hits.length) lists.push(hits);
-  }
+    return form;
+  });
+  const named = forms.filter((f): f is string => !!f);
+  if (r.joined) return named.map((f) => ({ ...r, craving: [f] }));
+  if (named.length && named.length < forms.length && named.some(isDishWord)) return [{ ...r, craving: named }];
+  return [r];
+}
+
+/** Dishes that fit, over all parts (unranked: for "is there anything" checks). */
+function candidates(r: Request, data: AssistantData, f: Filters = ALL_FILTERS): Candidate[] {
+  return parts(r, data).flatMap((p) => retrieve(p, data, f));
+}
+
+/** Ranked dishes for a request; parts take turns, so "פיצה עם קולה" shows both. Empty when nothing fits. */
+function rankedFor(r: Request, data: AssistantData, f: Filters = ALL_FILTERS): Hit[] {
+  const lists = parts(r, data).map((p) => rank(retrieve(p, data, f), p, data));
+  if (lists.length === 1) return lists[0]!;
   const out: Hit[] = [];
   const seen = new Set<string>();
   for (let i = 0; lists.some((l) => i < l.length); i++) {
@@ -266,7 +279,7 @@ function mealAnswer(r: Request, ctx: Ctx): Answer {
     const why = mealBlocked(r, ctx);
     if (why) return why;
     if (r.budgetAgorot !== undefined) return blocked(r, 'budget', data);
-    if (r.tags.length) return blocked(r, 'tags', data);
+    if (wishesOf(r).length) return blocked(r, 'tags', data);
     // Nothing to name (e.g. only a dessert place is open): show the dishes that fit.
     const { people: _p, ...solo } = r;
     return pickAnswer(solo, ctx, 'dish', false);
@@ -295,8 +308,9 @@ function mealBlocked(r: Request, ctx: Ctx): Answer | undefined {
   const { data } = ctx;
   for (const slot of slotOrder(r, ctx.prev?.request)) {
     if (!slotSet(r, slot)) continue;
-    const loose = dropSlot(r, slot, r.tags);
-    if (buildMeals(loose, data, rank(retrieve(loose, data), loose, data)).length) return blocked(r, slot, data);
+    const loose = dropSlot(r, slot, wishesOf(r));
+    if (!candidates(loose, data).length) continue;
+    if (buildMeals(loose, data, rankedFor(loose, data)).length) return blocked(r, slot, data);
   }
   return undefined;
 }
@@ -305,7 +319,7 @@ function slotSet(r: Request, slot: Slot): boolean {
   const x = r.exclude;
   switch (slot) {
     case 'tags':
-      return r.tags.length > 0;
+      return wishesOf(r).length > 0;
     case 'exclude':
       return x.tags.length + x.words.length + x.dishIds.length + x.branchIds.length > 0;
     case 'budget':
@@ -337,18 +351,23 @@ function placeAnswer(r: Request, ctx: Ctx): Answer {
 function dealsAnswer(r: Request, ctx: Ctx): Answer {
   const { data } = ctx;
   let deals = data.deals.filter((d) => placeUsable(data.places.get(d.branchId), r.mode) && (!r.placeBranchIds?.length || r.placeBranchIds.includes(d.branchId)) && !r.exclude.branchIds.includes(d.branchId));
-  if (r.craving.length || r.tags.length) {
-    const { shortcut: _s, people: _p, budgetAgorot: _b, ...rest } = r;
-    const match = new Set(retrieve(rest, data).map((c) => dishKey(c.dish.branchId, c.dish.id)));
-    deals = deals.filter((d) => dealItems(d).some((id) => match.has(dishKey(d.branchId, id))));
-  }
+  const { shortcut: _s, people: _p, budgetAgorot: _b, ...rest } = r;
+  const wanted = r.craving.length > 0 || r.tags.length > 0;
+  // Deals holding a dish that fits the craving ("מבצע על פיצה"), at open places or, with `open` off, at any.
+  const fits = (list: AssistantDeal[], f: Filters) => {
+    if (!wanted) return list;
+    const match = new Set(candidates(rest, data, f).map((c) => dishKey(c.dish.branchId, c.dish.id)));
+    return list.filter((d) => dealItems(d).some((id) => match.has(dishKey(d.branchId, id))));
+  };
+  deals = fits(deals, ALL_FILTERS);
   if (r.budgetAgorot !== undefined) deals = deals.filter((d) => !d.combo || d.combo.priceAgorot <= r.budgetAgorot!);
   if (!deals.length) {
     // The deals are there but their places are closed: say which one opens first, and when.
-    const closedAt = r.craving.length || r.tags.length ? [] : uniq(data.deals.filter((d) => {
+    const atClosed = data.deals.filter((d) => {
       const p = data.places.get(d.branchId);
       return !!p && !p.open && (!r.placeBranchIds?.length || r.placeBranchIds.includes(d.branchId)) && !r.exclude.branchIds.includes(d.branchId);
-    }).map((d) => d.branchId));
+    });
+    const closedAt = uniq(fits(atClosed, { ...ALL_FILTERS, open: false }).map((d) => d.branchId));
     if (closedAt.length) return closedPlaceAnswer(r, ctx, closedAt.map((id) => data.places.get(id)!));
     return { kind: 'deal', text: reply('dealsNone', r.lang, {}, seedOf(r, data)), cards: [], chips: suggestionChips(r.lang, ctx).filter((c) => c.request?.shortcut !== 'deals').slice(0, 3), shown: NOTHING_SHOWN, understood: true };
   }
@@ -397,14 +416,18 @@ function popular(r: Request, ctx: Ctx, key: ReplyKey): Answer {
 /** Nothing fits: matches only at closed places → which one and when it opens; a wish that blocks → name it and offer to drop it; else reprompt. */
 function emptyAnswer(r: Request, ctx: Ctx): Answer {
   const { data } = ctx;
-  const atClosed = retrieve(r, data, { ...ALL_FILTERS, open: false });
+  const atClosed = candidates(r, data, { ...ALL_FILTERS, open: false });
   if (atClosed.length) return closedPlaceAnswer(r, ctx, uniq(atClosed.map((c) => c.dish.branchId)).map((id) => data.places.get(id)!));
   return blockedAnswer(r, ctx) ?? notOnMenu(r, ctx) ?? reprompt(r.lang, ctx);
 }
 
 /** "מיץ", "water", "بوظة": a food the customer named clearly that no place sells. Say so, rather than "I didn't get that". */
 function notOnMenu(r: Request, ctx: Ctx): Answer | undefined {
-  if (!r.craving.length || !r.craving.every(isKnownFood)) return undefined;
+  // Never "nothing for X" while X names dishes (a filter blocks them; that is the blocked answer's job).
+  if (!r.craving.length || cravingMatches(ctx.data, r.craving).size) return undefined;
+  // Every word a known food, or a two-word name with a known food in it ("hot dog", "מרק עוף").
+  const known = r.craving.every(isKnownFood) || (r.craving.length > 1 && !r.joined && r.craving.some(isKnownFood));
+  if (!known) return undefined;
   const typed = ctx.text.split(/\s+/).filter((w) => w && tokenize(w).some((t) => r.craving.includes(t)));
   const label = (typed.length ? typed : r.craving).join(' ').replace(/[?!.,؟]+$/u, '');
   return { kind: 'blocked', text: reply('blockedTags', r.lang, { slot: label }, seedOf(r, ctx.data)), cards: [], chips: suggestionChips(r.lang, ctx).slice(0, 3), shown: NOTHING_SHOWN, request: r, understood: true };
@@ -426,12 +449,14 @@ function blockedAnswer(r: Request, ctx: Ctx): Answer | undefined {
   const p = ctx.prev?.request;
   for (const slot of slotOrder(r, p)) {
     if (slot === 'tags') {
-      if (!r.tags.length) continue;
-      const newest = uniq([...r.tags.filter((t) => !p?.tags.includes(t)).reverse(), ...[...r.tags].reverse()]);
-      const one = newest.find((t) => retrieve({ ...r, tags: r.tags.filter((x) => x !== t) }, data).length > 0);
+      const wishes = wishesOf(r);
+      if (!wishes.length) continue;
+      // "Warm" is how a dish is served, so it goes before the dish wish itself ("קינוח חם" blames חם); then the newest tag.
+      const order = uniq<Wish>([...(r.warm ? ['warm' as const] : []), ...r.tags.filter((t) => !p?.tags.includes(t)).reverse(), ...[...r.tags].reverse()]);
+      const one = order.find((w) => candidates(withoutWishes(r, [w]), data).length > 0);
       if (one) return blocked(r, 'tags', data, [one]);
     }
-    if (retrieve(r, data, { ...ALL_FILTERS, [slot]: false }).length) return blocked(r, slot, data);
+    if (candidates(r, data, { ...ALL_FILTERS, [slot]: false }).length) return blocked(r, slot, data);
   }
   return undefined;
 }
@@ -440,7 +465,7 @@ function slotOrder(r: Request, p: Request | undefined): Slot[] {
   if (!p) return [...SLOTS];
   const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
   const changed: Record<Slot, boolean> = {
-    tags: !same(r.tags, p.tags),
+    tags: !same(r.tags, p.tags) || !!r.warm !== !!p.warm,
     exclude: !same(r.exclude, p.exclude),
     budget: r.budgetAgorot !== p.budgetAgorot || r.maxPriceAgorot !== p.maxPriceAgorot,
     mode: r.mode !== p.mode,
@@ -449,7 +474,17 @@ function slotOrder(r: Request, p: Request | undefined): Slot[] {
   return [...SLOTS.filter((s) => changed[s]), ...SLOTS.filter((s) => !changed[s])];
 }
 
-function blocked(r: Request, slot: Slot, data: AssistantData, tags: readonly DishTag[] = r.tags): Answer {
+/** A wish of the tags slot: a dish tag, or "warm". */
+type Wish = DishTag | 'warm';
+const WARM_LABEL: Record<Lang, string> = { he: 'חם', ar: 'سخن', en: 'warm' };
+const wishesOf = (r: Request): Wish[] => [...(r.warm ? ['warm' as const] : []), ...r.tags];
+function withoutWishes(r: Request, wishes: readonly Wish[]): Request {
+  const { warm: _w, ...rest } = r;
+  const tags = r.tags.filter((t) => !wishes.includes(t));
+  return wishes.includes('warm') ? { ...rest, tags } : { ...r, tags };
+}
+
+function blocked(r: Request, slot: Slot, data: AssistantData, tags: readonly Wish[] = wishesOf(r)): Answer {
   const { key, label } = slotWords(r, slot, data, tags);
   return {
     kind: 'blocked',
@@ -461,11 +496,11 @@ function blocked(r: Request, slot: Slot, data: AssistantData, tags: readonly Dis
   };
 }
 
-function slotWords(r: Request, slot: Slot, data: AssistantData, tags: readonly DishTag[]): { key: ReplyKey; label: string } {
+function slotWords(r: Request, slot: Slot, data: AssistantData, tags: readonly Wish[]): { key: ReplyKey; label: string } {
   const L = r.lang;
   switch (slot) {
     case 'tags':
-      return { key: 'blockedTags', label: tags.map((t) => TAG_LABELS[t][L]).join(', ') };
+      return { key: 'blockedTags', label: tags.map((t) => (t === 'warm' ? WARM_LABEL[L] : TAG_LABELS[t][L])).join(', ') };
     case 'exclude': {
       const said = uniq([...r.exclude.tags.map((t) => TAG_LABELS[t][L]), ...r.exclude.words]);
       return said.length ? { key: 'blockedExclude', label: said.join(', ') } : { key: 'blockedOther', label: '' };
@@ -479,11 +514,11 @@ function slotWords(r: Request, slot: Slot, data: AssistantData, tags: readonly D
   }
 }
 
-function dropSlot(r: Request, slot: Slot, tags: readonly DishTag[]): Request {
+function dropSlot(r: Request, slot: Slot, tags: readonly Wish[]): Request {
   const { budgetAgorot: _b, maxPriceAgorot: _m, mode: _mo, placeBranchIds: _p, ...rest } = r;
   switch (slot) {
     case 'tags':
-      return { ...r, tags: r.tags.filter((t) => !tags.includes(t)), page: 0 };
+      return { ...withoutWishes(r, tags), page: 0 };
     case 'exclude':
       return { ...r, exclude: { tags: [], words: [], dishIds: [], branchIds: [] }, page: 0 };
     case 'budget':
