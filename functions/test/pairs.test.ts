@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 // Imported from source like posts-sweep.test.ts: the schedule never fires in the emulator, and this
 // file must not import ./harness.js (second admin app on the same Firestore instance).
-import { db } from '../src/lib/firebase.js';
+import { col, db } from '../src/lib/firebase.js';
 import { rebuildPairs } from '../src/domain/pairs.js';
 import { reprojectCatalog } from '../src/lib/projections.js';
 
@@ -55,6 +55,30 @@ describe('rebuildPairs', () => {
     for (let i = 0; i < 10; i++) cleanup.delete(db.doc(`orders/pairs-nodish-${i}`));
     cleanup.delete(dishes);
     await cleanup.commit();
+  });
+});
+
+describe('rebuildPairs, final review', () => {
+  it('reads no dish index doc (the collection-group scan already lists them) and skips an order with no branchId', async () => {
+    const branchId = 'br-abu-salim-main';
+    const now = new Date('2026-10-05T03:00:00.000Z');
+    const batch = db.batch();
+    for (let i = 0; i < 10; i++) batch.set(db.doc(`orders/pairs-m1-${i}`), { branchId, businessId: 'biz-abu-salim', status: 'accepted', placedAt: now.toISOString(), lines: [{ productId: 'p-shawarma' }, { productId: 'p-cola' }] });
+    batch.set(db.doc('orders/pairs-m1-nobranch'), { businessId: 'biz-abu-salim', status: 'accepted', placedAt: now.toISOString(), lines: [{ productId: 'p-shawarma' }, { productId: 'p-cola' }] });
+    await batch.commit();
+    const spy = vi.spyOn(col, 'publicDishIndex');
+    try {
+      await rebuildPairs(now);
+      expect(spy).not.toHaveBeenCalled();
+      const doc = (await db.doc(`publicBranches/${branchId}/index/pairs`).get()).data()!;
+      expect(doc.pairs['p-shawarma'].map((p: { productId: string }) => p.productId)).toContain('p-cola');
+    } finally {
+      spy.mockRestore();
+      const cleanup = db.batch();
+      for (let i = 0; i < 10; i++) cleanup.delete(db.doc(`orders/pairs-m1-${i}`));
+      cleanup.delete(db.doc('orders/pairs-m1-nobranch'));
+      await cleanup.commit();
+    }
   });
 });
 

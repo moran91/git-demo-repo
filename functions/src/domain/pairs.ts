@@ -14,15 +14,20 @@ export async function rebuildPairs(now = new Date()): Promise<{ branches: number
   ]);
   const byBranch = new Map<string, PairOrder[]>();
   for (const d of snap.docs) {
-    const o = d.data() as PairOrder & { branchId: string };
+    const o = d.data() as PairOrder & { branchId?: string };
+    // The type requires a branch; an odd old order without one must not stop the whole run.
+    if (!o.branchId) continue;
     byBranch.set(o.branchId, [...(byBranch.get(o.branchId) ?? []), o]);
   }
-  const hadPairs = new Set(existing.docs.filter((d) => d.id === 'pairs' && d.ref.parent.parent?.parent.id === 'publicBranches').map((d) => d.ref.parent.parent!.id));
+  const indexed = (id: string) => new Set(existing.docs.filter((d) => d.id === id && d.ref.parent.parent?.parent.id === 'publicBranches').map((d) => d.ref.parent.parent!.id));
+  const hadPairs = indexed('pairs');
+  // Visible restaurants have a public dish index; the scan above already lists them, so no doc is read.
+  const hasDishes = indexed('dishes');
   let branches = 0;
   for (const branchId of new Set([...byBranch.keys(), ...hadPairs])) {
     const ref = col.publicPairsIndex(branchId);
     // Only branches with a public dish index (visible restaurants) get pairs.
-    const pairs = (await col.publicDishIndex(branchId).get()).exists ? computePairs(byBranch.get(branchId) ?? []) : null;
+    const pairs = hasDishes.has(branchId) ? computePairs(byBranch.get(branchId) ?? []) : null;
     if (pairs) {
       await ref.set({ branchId, pairs, updatedAt: nowIso() } satisfies PairsIndexDoc);
       branches++;

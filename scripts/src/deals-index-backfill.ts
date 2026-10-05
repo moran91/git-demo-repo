@@ -3,6 +3,8 @@
  * content reprojectCatalog writes. Touches nothing else.
  *   npx tsx scripts/src/deals-index-backfill.ts          -> dry run (prints counts)
  *   npx tsx scripts/src/deals-index-backfill.ts --apply  -> writes
+ * Uses Application Default Credentials against qareeb-dev, or the emulator when FIRESTORE_EMULATOR_HOST is set.
+ * --apply against anything but the emulator also needs --live (same guard as auto-tag.ts).
  */
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -11,6 +13,13 @@ import type { Branch, Business, Combo, Promotion } from '@qareeb/shared';
 import { toDealsIndexDoc } from '../../packages/shared/src/dishIndex.ts';
 
 const APPLY = process.argv.includes('--apply');
+const LIVE = process.argv.includes('--live');
+const EMULATOR = process.env.FIRESTORE_EMULATOR_HOST;
+if (APPLY && !EMULATOR && !LIVE) {
+  console.error('Refusing --apply: FIRESTORE_EMULATOR_HOST is not set, so this would write to the live project. Pass --live to do that on purpose.');
+  process.exit(1);
+}
+console.log(`Target: ${EMULATOR ? `emulator (${EMULATOR})` : 'qareeb-dev (LIVE)'}${APPLY ? ', writing' : ', dry run'}`);
 initializeApp({ projectId: 'qareeb-dev' });
 const db = getFirestore();
 
