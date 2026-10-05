@@ -160,7 +160,7 @@ export async function reprojectCatalog(businessId: string, branchId: string): Pr
   const [bSnap, brSnap] = await Promise.all([col.business(businessId).get(), col.branch(businessId, branchId).get()]);
   if (!bSnap.exists || !brSnap.exists) return;
   const visible = isPubliclyVisible(bSnap.data() as Business, brSnap.data() as Branch);
-  const [cats, prods, combos, promos, posts, pubCats, pubProds, pubCombos, pubPromos, pubPosts, pubIndex, pubDeals] = await Promise.all([
+  const [cats, prods, combos, promos, posts, pubCats, pubProds, pubCombos, pubPromos, pubPosts, pubIndex, pubDeals, pubPairs] = await Promise.all([
     col.categories(businessId, branchId).get(),
     col.products(businessId, branchId).get(),
     col.combos(businessId, branchId).get(),
@@ -173,6 +173,7 @@ export async function reprojectCatalog(businessId: string, branchId: string): Pr
     col.publicPosts(branchId).get(),
     col.publicDishIndex(branchId).get(),
     col.publicDealsIndex(branchId).get(),
+    col.publicPairsIndex(branchId).get(),
   ]);
   const ops: Array<(batch: FirebaseFirestore.WriteBatch) => void> = [];
   const retained = new Set<string>();
@@ -208,10 +209,13 @@ export async function reprojectCatalog(businessId: string, branchId: string): Pr
       const doc: DishIndexDoc = { branchId, businessId, dishes: Object.fromEntries(live.map((p) => [p.id, toDishIndexEntry(p)])), updatedAt: nowIso() };
       publish(col.publicDishIndex(branchId), doc);
       publish(col.publicDealsIndex(branchId), toDealsIndexDoc(branchId, businessId, combos.docs.map((d) => d.data() as Combo), promos.docs.map((d) => d.data() as Promotion), nowIso()));
+      // The nightly job owns the pairs doc: keep it for a visible restaurant, never write it here.
+      retained.add(pubPairs.ref.path);
     }
   }
   if (pubIndex.exists && !retained.has(pubIndex.ref.path)) ops.push((batch) => batch.delete(pubIndex.ref));
   if (pubDeals.exists && !retained.has(pubDeals.ref.path)) ops.push((batch) => batch.delete(pubDeals.ref));
+  if (pubPairs.exists && !retained.has(pubPairs.ref.path)) ops.push((batch) => batch.delete(pubPairs.ref));
   // Replace live documents in place. Delete only obsolete projections, so a failed later chunk
   // cannot leave an otherwise live menu empty halfway through republishing.
   for (const d of [...pubCats.docs, ...pubProds.docs, ...pubCombos.docs, ...pubPromos.docs, ...pubPosts.docs]) {

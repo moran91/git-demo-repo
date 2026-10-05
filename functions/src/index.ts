@@ -16,5 +16,5 @@ export { decideApproval, setUserSuspended, inviteOwner, saveCity, adminAdjustLoy
 export { whatsappStart, whatsappCheck, authOptions } from './domain/whatsapp.js';
 export { publishPost, removePost } from './domain/posts.js';
 export { onTranslationJob } from './domain/translation.js';
-export { onOutboxCreated, scheduledSweeps, onImageUploaded } from './triggers.js';
+export { onOutboxCreated, scheduledSweeps, onImageUploaded, buildPairs } from './triggers.js';
 export { serveImage } from './images.js';
