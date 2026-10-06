@@ -17,5 +17,5 @@ export { whatsappStart, whatsappCheck, authOptions } from './domain/whatsapp.js'
 export { publishPost, removePost } from './domain/posts.js';
 export { saveTaste, mergeTaste, deleteTaste, saveDishFeedback } from './domain/taste.js';
 export { onTranslationJob } from './domain/translation.js';
-export { onOutboxCreated, scheduledSweeps, onImageUploaded } from './triggers.js';
+export { onOutboxCreated, scheduledSweeps, popularityHourly, onImageUploaded } from './triggers.js';
 export { serveImage } from './images.js';

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 // Imported from source like posts-sweep.test.ts. This file must not import ./harness.js (the admin
 // app there is the same default Firestore instance src/lib/firebase.ts configures).
 import { db } from '../src/lib/firebase.js';
-import { countAcceptedOrder } from '../src/lib/popularity.js';
+import { countAcceptedOrder, publishPopularity } from '../src/lib/popularity.js';
 
 const CITY = `pop-city-${Date.now()}`;
 const baseOrder = { businessId: 'biz-pop', branchId: 'br-pop', businessType: 'restaurant', cityId: CITY, customer: { uid: 'u-pop' }, status: 'accepted' };
@@ -42,5 +42,26 @@ describe('countAcceptedOrder', () => {
     expect(await countAcceptedOrder(id)).toBe(false);
     expect((await db.doc(`popularityDaily/${CITY}_2026-01-20`).get()).exists).toBe(false);
     expect(await countAcceptedOrder('no-such-event')).toBe(false);
+  });
+});
+
+describe('publishPopularity', () => {
+  it('publishes ranks over 28 days with the 3-order floor and deletes older days', async () => {
+    const city = `pub-city-${Date.now()}`;
+    await db.doc(`cities/${city}`).set({ id: city, name: { en: 'Test' }, aliases: [], active: false, sortOrder: 99 });
+    await db.doc(`popularityDaily/${city}_2026-03-10`).set({ cityId: city, date: '2026-03-10', counts: { 'evening|brA|p1': 2, 'evening|brA|p2': 2, 'noon|brB|p9': 3 } });
+    await db.doc(`popularityDaily/${city}_2026-02-12`).set({ cityId: city, date: '2026-02-12', counts: { 'evening|brA|p1': 2 } });
+    await db.doc(`popularityDaily/${city}_2026-01-01`).set({ cityId: city, date: '2026-01-01', counts: { 'evening|brA|p3': 50 } });
+
+    const r = await publishPopularity(new Date('2026-03-10T12:00:00.000Z'));
+
+    expect(r.deleted).toBeGreaterThanOrEqual(1);
+    const pub = (await db.doc(`publicPopular/${city}`).get()).data()!;
+    expect(pub.cityId).toBe(city);
+    expect(pub.dayparts).toEqual({ morning: [], noon: [{ branchId: 'brB', productId: 'p9' }], evening: [{ branchId: 'brA', productId: 'p1' }], late: [] });
+    expect(JSON.stringify(pub)).not.toContain('counts');
+    expect((await db.doc(`popularityDaily/${city}_2026-01-01`).get()).exists).toBe(false);
+    expect((await db.doc(`popularityDaily/${city}_2026-02-12`).get()).exists).toBe(true);
+    await db.doc(`cities/${city}`).delete();
   });
 });

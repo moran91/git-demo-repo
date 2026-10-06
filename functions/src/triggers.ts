@@ -7,6 +7,7 @@ import { processOutboxEvent, sweepOutbox } from './lib/outbox.js';
 import { sweepPrintLeases } from './domain/printing.js';
 import { sweepExpiredPosts } from './domain/posts.js';
 import { retryTranslationJobs } from './domain/translation.js';
+import { publishPopularity } from './lib/popularity.js';
 
 export const onOutboxCreated = onDocumentCreated({ region: REGION, document: 'outbox/{id}', retry: true }, async (event) => {
   await processOutboxEvent(event.params.id);
@@ -19,6 +20,12 @@ export const scheduledSweeps = onSchedule({ region: REGION, schedule: 'every 5 m
   // Isolated so a failure here (e.g. the collection-group index still building) never stops the outbox.
   const posts = await sweepExpiredPosts().catch((e: unknown) => { console.error('post sweep failed', e); return { deleted: -1 }; });
   console.info('sweeps', { outbox, ...print, expiredPosts: posts.deleted, translations });
+});
+
+/** Popular dishes per city and daypart (ranks only), rebuilt every hour from the last 28 days. */
+export const popularityHourly = onSchedule({ region: REGION, schedule: 'every 60 minutes', timeZone: 'Asia/Jerusalem' }, async () => {
+  const r = await publishPopularity();
+  console.info('popularity', r);
 });
 
 const ALLOWED = new Set(['image/jpeg', 'image/png', 'image/webp']);
