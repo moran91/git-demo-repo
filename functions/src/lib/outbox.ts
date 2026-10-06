@@ -1,6 +1,7 @@
 import type { AppNotification, Locale, NotificationKind } from '@qareeb/shared';
 import { makeTranslator } from '@qareeb/shared';
 import { col, db, messaging, nowIso, type Tx } from './firebase.js';
+import { countAcceptedOrder } from './popularity.js';
 
 /**
  * Outbox pattern: business transactions enqueue an event document atomically. A Firestore trigger
@@ -52,6 +53,8 @@ export async function processOutboxEvent(id: string): Promise<void> {
   const e = snap.data() as OutboxEvent;
   if (e.status === 'done') return;
   try {
+    // Popularity first: if notifications fail, the retry finds the marker and does not count again.
+    if (e.kind === 'order_accepted') await countAcceptedOrder(id);
     const recipients = await resolveRecipients(e);
     for (const uid of recipients) {
       const userSnap = await col.user(uid).get();
