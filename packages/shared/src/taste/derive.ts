@@ -114,10 +114,12 @@ export function deriveTaste(input: { doc: TasteDoc | null; orders: TasteOrder[];
 
   const items: KnowsItem[] = [];
   if (party) items.push({ key: 'party', source: 'told', party });
-  // Told types keep their order of appearance in the quiz.
+  // Told types keep their order of appearance in the quiz. Dislikes are listed too, so every
+  // signal that moves a score can be seen and removed.
   for (const p of quiz?.pairs ?? []) {
     for (const t of [p.a, p.b]) {
-      if ((told[t] ?? 0) > 0 && !suppressed.has(`type:${t}`) && !items.some((i) => i.key === `type:${t}`)) items.push({ key: `type:${t}`, source: 'told', dishType: t });
+      const raw = told[t] ?? 0;
+      if (raw !== 0 && !suppressed.has(`type:${t}`) && !items.some((i) => i.key === `type:${t}`)) items.push({ key: `type:${t}`, source: 'told', dishType: t, liked: raw > 0 });
     }
   }
   for (const u of usual) items.push({ key: `usual:${dishKey(u.branchId, u.productId)}`, source: 'orders', branchId: u.branchId, productId: u.productId });

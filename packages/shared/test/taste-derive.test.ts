@@ -118,7 +118,10 @@ describe('quiz', () => {
     const d = deriveTaste({ doc: doc({ quiz }), orders: [], feedback: [], now: NOW });
     expect(d.affinity).toEqual({ pizza: 1, pasta: 0.5, mains: 0.5, sushi: -0.5, hummus: -0.5 });
     expect(d.party).toBe('family');
-    expect(d.items.filter((i) => i.source === 'told').map((i) => i.key)).toEqual(['party', 'type:pizza', 'type:pasta', 'type:mains']);
+    expect(d.items.filter((i) => i.source === 'told').map((i) => i.key)).toEqual(['party', 'type:pizza', 'type:pasta', 'type:mains', 'type:sushi', 'type:hummus']);
+    // A "neither" answer is a learned dislike, so it is listed (and removable) like a like.
+    expect(d.items).toContainEqual({ key: 'type:sushi', source: 'told', dishType: 'sushi', liked: false });
+    expect(d.items).toContainEqual({ key: 'type:pizza', source: 'told', dishType: 'pizza', liked: true });
   });
 
   it('is ignored when learn consent is off', () => {
@@ -132,7 +135,7 @@ describe('quiz', () => {
     const d = deriveTaste({ doc: doc({ quiz, suppressed: ['type:pizza', 'party'] }), orders: [], feedback: [], now: NOW });
     expect(d.affinity.pizza).toBeUndefined();
     expect(d.party).toBeNull();
-    expect(d.items.map((i) => i.key)).toEqual(['type:pasta', 'type:mains']);
+    expect(d.items.map((i) => i.key)).toEqual(['type:pasta', 'type:mains', 'type:sushi', 'type:hummus']);
   });
 
   it('fades with orders and age', () => {

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 // app there is the same default Firestore instance src/lib/firebase.ts configures).
 import { db } from '../src/lib/firebase.js';
 import { countAcceptedOrder, publishPopularity } from '../src/lib/popularity.js';
+import { processOutboxEvent } from '../src/lib/outbox.js';
 
 const CITY = `pop-city-${Date.now()}`;
 const baseOrder = { businessId: 'biz-pop', branchId: 'br-pop', businessType: 'restaurant', cityId: CITY, customer: { uid: 'u-pop' }, status: 'accepted' };
@@ -63,5 +64,18 @@ describe('publishPopularity', () => {
     expect((await db.doc(`popularityDaily/${city}_2026-01-01`).get()).exists).toBe(false);
     expect((await db.doc(`popularityDaily/${city}_2026-02-12`).get()).exists).toBe(true);
     await db.doc(`cities/${city}`).delete();
+  });
+});
+
+describe('outbox with popularity', () => {
+  it('a popularity failure never blocks the order-accepted notification', async () => {
+    const id = `pop-bad-${Date.now()}`;
+    const uid = `u-notify-${Date.now()}`;
+    // A legacy order with an unreadable placedAt makes counting throw.
+    await db.doc(`orders/${id}`).set({ id, ...baseOrder, placedAt: 'not-a-date', lines: [{ productId: 'p1' }] });
+    await db.doc(`outbox/${id}`).set({ id, kind: 'order_accepted', orderId: id, recipients: [uid], params: { reference: '1234' }, link: `/orders/${id}`, key: id, attempts: 0, status: 'pending', createdAt: new Date().toISOString() });
+    await processOutboxEvent(id);
+    expect((await db.doc(`outbox/${id}`).get()).data()!.status).toBe('done');
+    expect((await db.doc(`users/${uid}/notifications/${id}_${uid}`).get()).exists).toBe(true);
   });
 });

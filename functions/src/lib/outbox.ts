@@ -54,7 +54,8 @@ export async function processOutboxEvent(id: string): Promise<void> {
   if (e.status === 'done') return;
   try {
     // Popularity first: if notifications fail, the retry finds the marker and does not count again.
-    if (e.kind === 'order_accepted') await countAcceptedOrder(id);
+    // A counting failure only costs one count; it must never hold back the customer's notification.
+    if (e.kind === 'order_accepted') await countAcceptedOrder(id).catch((err: unknown) => console.error('popularity count failed', id, err instanceof Error ? err.message : err));
     const recipients = await resolveRecipients(e);
     for (const uid of recipients) {
       const userSnap = await col.user(uid).get();

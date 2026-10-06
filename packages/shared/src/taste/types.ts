@@ -66,7 +66,8 @@ export interface DishFeedback {
 
 export type KnowsItem =
   | { key: 'party'; source: 'told'; party: Party }
-  | { key: `type:${DishType}`; source: 'told'; dishType: DishType }
+  /** liked: false comes from "neither" answers, a dislike the customer can see and remove too. */
+  | { key: `type:${DishType}`; source: 'told'; dishType: DishType; liked: boolean }
   | { key: `usual:${string}`; source: 'orders'; branchId: string; productId: string }
   | { key: `daypart:${Daypart}`; source: 'orders'; daypart: Daypart }
   | { key: `loved:${string}`; source: 'rated'; branchId: string; productId: string }
