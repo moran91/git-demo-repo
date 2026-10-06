@@ -15,6 +15,7 @@ export { savePrinter, deactivatePrinter, markPrinterVerified, registerStation, s
 export { decideApproval, setUserSuspended, inviteOwner, saveCity, adminAdjustLoyalty, adminReverseCash, moderateProduct, setPlatformConfig, getAdminMetrics, adminListUsers, adminListInvitations, adminInvitationAction } from './domain/admin.js';
 export { whatsappStart, whatsappCheck, authOptions } from './domain/whatsapp.js';
 export { publishPost, removePost } from './domain/posts.js';
+export { saveTaste, mergeTaste, deleteTaste } from './domain/taste.js';
 export { onTranslationJob } from './domain/translation.js';
 export { onOutboxCreated, scheduledSweeps, onImageUploaded } from './triggers.js';
 export { serveImage } from './images.js';
