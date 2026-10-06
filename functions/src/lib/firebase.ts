@@ -42,6 +42,9 @@ export const col = {
   notifications: (uid: string) => db.collection('users').doc(uid).collection('notifications'),
   deviceTokens: (uid: string) => db.collection('users').doc(uid).collection('deviceTokens'),
   favorites: (uid: string) => db.collection('users').doc(uid).collection('favorites'),
+  /** The customer's taste profile (one doc) and per-order dish feedback; see packages/shared/src/taste. */
+  taste: (uid: string) => db.collection('users').doc(uid).collection('taste').doc('profile'),
+  dishFeedback: (uid: string) => db.collection('users').doc(uid).collection('dishFeedback'),
   memberships: () => db.collection('memberships'),
   membership: (uid: string, businessId: string) => db.collection('memberships').doc(`${uid}_${businessId}`),
   invitations: () => db.collection('invitations'),
@@ -93,4 +96,8 @@ export const col = {
   otpChallenges: () => db.collection('otpChallenges'),
   rateLimits: () => db.collection('rateLimits'),
   metricsDaily: (date: string) => db.collection('metricsDaily').doc(date),
+  /** `${cityId}_${YYYY-MM-DD}`: private per-day dish counts, kept 28 days. */
+  popularityDaily: (id: string) => db.collection('popularityDaily').doc(id),
+  popularityDays: () => db.collection('popularityDaily'),
+  publicPopular: (cityId: string) => db.collection('publicPopular').doc(cityId),
 };

@@ -148,3 +148,35 @@ describe('businesses and staff', () => {
     }
   });
 });
+
+describe('taste profile', () => {
+  beforeAll(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, 'users/cust1/taste/profile'), { v: 1, consent: null });
+      await setDoc(doc(db, 'users/cust1/dishFeedback/o1'), { orderId: 'o1', items: {} });
+      await setDoc(doc(db, 'publicPopular/beit-jann'), { cityId: 'beit-jann', dayparts: {} });
+      await setDoc(doc(db, 'popularityDaily/beit-jann_2026-10-06'), { counts: { 'evening|b|p': 4 } });
+    });
+  });
+
+  it('the owner reads their own taste and feedback; nobody else does; nobody writes', async () => {
+    await assertSucceeds(getDoc(doc(as('cust1'), 'users/cust1/taste/profile')));
+    await assertSucceeds(getDoc(doc(as('cust1'), 'users/cust1/dishFeedback/o1')));
+    await assertSucceeds(getDocs(collection(as('cust1'), 'users/cust1/dishFeedback')));
+    await assertFails(getDoc(doc(as('cust2'), 'users/cust1/taste/profile')));
+    await assertFails(getDoc(doc(as('cust2'), 'users/cust1/dishFeedback/o1')));
+    await assertFails(getDoc(doc(anon(), 'users/cust1/taste/profile')));
+    await assertFails(getDoc(doc(as('susp'), 'users/susp/taste/profile')));
+    await assertFails(setDoc(doc(as('cust1'), 'users/cust1/taste/profile'), { v: 1, consent: null }));
+    await assertFails(setDoc(doc(as('cust1'), 'users/cust1/dishFeedback/o2'), { orderId: 'o2' }));
+    await assertFails(deleteDoc(doc(as('cust1'), 'users/cust1/dishFeedback/o1')));
+  });
+
+  it('popular ranks are public and server-written; raw counts are server-only', async () => {
+    await assertSucceeds(getDoc(doc(anon(), 'publicPopular/beit-jann')));
+    await assertFails(setDoc(doc(as('admin', { admin: true }), 'publicPopular/beit-jann'), { dayparts: {} }));
+    await assertFails(getDoc(doc(anon(), 'popularityDaily/beit-jann_2026-10-06')));
+    await assertFails(getDoc(doc(as('admin', { admin: true }), 'popularityDaily/beit-jann_2026-10-06')));
+  });
+});

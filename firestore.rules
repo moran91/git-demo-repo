@@ -51,6 +51,9 @@ service cloud.firestore {
     }
     match /cities/{cityId} { allow read: if true; allow write: if false; }
     match /config/platform { allow read: if true; allow write: if false; }
+    // Popular dishes per city and daypart: ranks only, published hourly. Raw counts
+    // (popularityDaily) stay server-only through the catch-all deny.
+    match /publicPopular/{cityId} { allow read: if true; allow write: if false; }
 
     // ---------- users (private) ----------
     match /users/{userId} {
@@ -70,6 +73,15 @@ service cloud.firestore {
           && request.resource.data.createdAt is string;
         allow delete: if activeUser() && uid() == userId;
         allow update: if false;
+      }
+      // Taste profile and dish feedback: written only by the taste callables.
+      match /taste/{docId} {
+        allow read: if activeUser() && uid() == userId;
+        allow write: if false;
+      }
+      match /dishFeedback/{orderId} {
+        allow read: if activeUser() && uid() == userId;
+        allow write: if false;
       }
       match /notifications/{notificationId} {
         allow read: if activeUser() && uid() == userId;

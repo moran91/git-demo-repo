@@ -32,6 +32,10 @@ integer grams. IDs are Firestore auto-ids unless noted.
 | `idempotency/{uid}_{key}` | server | — | Replay results |
 | `audit/{id}` | server | admin | Admin/owner sensitive actions |
 | `metricsDaily/{yyyy-mm-dd}` | server (increments) | admin | Placed/accepted/cash counters |
+| `users/{uid}/taste/profile` | server (taste callables) | owner | Taste profile: consent, quiz, removed items |
+| `users/{uid}/dishFeedback/{orderId}` | server (`saveDishFeedback`) | owner | Loved / not-again per dish of one order |
+| `popularityDaily/{cityId}_{yyyy-mm-dd}` | server (outbox `order_accepted`) | nobody | Orders per daypart and dish; deleted after 28 days |
+| `publicPopular/{cityId}` | server (`popularityHourly`) | public | Top 12 dishes per daypart, ranks only |
 | `cities/{id}`, `config/platform` | server (admin callables) | everyone | Reference data |
 | `otpChallenges`, `rateLimits` | server | — | WhatsApp OTP challenges, abuse guards |
 
