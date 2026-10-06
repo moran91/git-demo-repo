@@ -3,6 +3,7 @@ import { LOYALTY_BOUNDS } from './pricing.js';
 import { validateInterval } from './hours.js';
 import { MAX_COMBO_ITEMS, MAX_PROMO_PRODUCTS } from './types.js';
 import { DISH_TYPES } from './dishIndex.js';
+import { PAIR_ANSWERS, PARTIES } from './taste/types.js';
 
 export const localeSchema = z.enum(['he', 'ar', 'en']);
 export const localizedSchema = z
@@ -392,3 +393,60 @@ export const publishPostSchema = z
   })
   .strict();
 export type PublishPostInput = z.infer<typeof publishPostSchema>;
+
+// ---------- taste profile ----------
+
+const dishTypeSchema = z.enum(DISH_TYPES);
+const dishRefPart = '[A-Za-z0-9_-]{1,64}/[A-Za-z0-9_-]{1,64}';
+/** A knows-item key the customer can remove (see KnowsItem). */
+export const knowsKeySchema = z.string().regex(new RegExp(`^(party|type:[a-z]+|daypart:(morning|noon|evening|late)|(usual|loved|notAgain):${dishRefPart})$`));
+
+export const tasteConsentInputSchema = z
+  .object({ orders: z.boolean(), learn: z.boolean(), ai: z.boolean(), version: z.number().int().min(1).max(1000), locale: localeSchema })
+  .strict();
+
+const tastePairSchema = z
+  .object({ a: dishTypeSchema, b: dishTypeSchema, answer: z.enum(PAIR_ANSWERS) })
+  .strict()
+  .refine((p) => p.a !== p.b, { message: 'same_type' });
+
+/** The server sets `at`; a missing party means the question was skipped. */
+export const tasteQuizInputSchema = z
+  .object({ party: z.enum(PARTIES).optional(), pairs: z.array(tastePairSchema).max(3) })
+  .strict();
+
+export const saveTasteSchema = z
+  .object({
+    consent: tasteConsentInputSchema.optional(),
+    quiz: tasteQuizInputSchema.optional(),
+    /** Deletes the stored quiz. */
+    clearQuiz: z.boolean().optional(),
+    suppressed: z.array(knowsKeySchema).max(100).optional(),
+  })
+  .strict();
+export type SaveTasteInput = z.infer<typeof saveTasteSchema>;
+
+export const mergeTasteSchema = z
+  .object({
+    choice: z.enum(['link', 'fresh']),
+    local: z
+      .object({
+        consent: tasteConsentInputSchema.optional(),
+        quiz: tasteQuizInputSchema.extend({ at: z.string().max(40).optional() }).strict().optional(),
+        suppressed: z.array(knowsKeySchema).max(100).optional(),
+      })
+      .strict(),
+  })
+  .strict();
+export type MergeTasteInput = z.infer<typeof mergeTasteSchema>;
+
+export const saveDishFeedbackSchema = z
+  .object({
+    orderId: idSchema,
+    /** 'none' removes an earlier verdict (undo). */
+    items: z.record(idSchema, z.enum(['loved', 'not_again', 'none'])).refine((items) => Object.keys(items).length <= 50, { message: 'too_many_items' }),
+    forSomeoneElse: z.boolean().optional(),
+    dismissed: z.boolean().optional(),
+  })
+  .strict();
+export type SaveDishFeedbackInput = z.infer<typeof saveDishFeedbackSchema>;
