@@ -213,6 +213,7 @@ New rules blocks:
     - orders before `ignoreOrdersBefore`;
     - orders whose feedback says `forSomeoneElse`;
     - every suppressed key.
+  - A profile whose consent was never asked (`consent === null`) still learns from orders, since tier 1 is on by default. The quiz is used only when `consent.learn` is true.
   - **Usual dishes:** the top 3 `(branchId, productId)` pairs by recency-weighted frequency, with a half-life of 60 days. Each needs at least 2 orders.
   - **Usual daypart:** reported only when 3 or more orders exist and at least 60% fall in one daypart.
   - **Quiz affinity:** a picked type +1, both +0.5 each, neither −0.5 each. Its weight fades: 1 for 0–2 orders, 0.5 for 3–9, and 0 at 10 or more orders or 90 days after the quiz.
@@ -242,6 +243,7 @@ New rules blocks:
 All use the existing `onCall(opts, handled(...))` pattern with zod schemas in `packages/shared/src/schemas.ts`.
 
 - **`saveTaste`** (signed in): sets consent (server timestamp), quiz, suppressed keys, and pause through `consent.orders`. It validates enums and caps `suppressed` at 100.
+  - Inputs never use `null` (`parse()` strips nulls): `clearQuiz: true` deletes the quiz, and the verdict `'none'` undoes a dish rating in `saveDishFeedback`.
 - **`mergeTaste({ choice: 'link'|'fresh', local })`** (signed in, once, right after sign-in):
   - `link` copies the local consent and quiz when the server doc is empty, or merges suppressed keys when it exists.
   - `fresh` keeps the server doc, or creates an empty one.
@@ -250,8 +252,8 @@ All use the existing `onCall(opts, handled(...))` pattern with zod schemas in `p
 - **`saveDishFeedback({ orderId, items, forSomeoneElse, dismissed })`**: checks the order's `customer.uid` is the caller and that every productId is in its lines, then upserts.
 - **`suggestMeals({ wish, locale, cityId, anon? })`**: sign-in optional. Its flow is in section 8.2.
 - **Popularity:**
-  - A handler on the existing `onOutboxCreated` path for `order_accepted` adds each line's quantity to `popularityDaily/{cityId}_{date}` under its daypart key. It is idempotent per outbox doc.
-  - `scheduledSweeps` gains an hourly step. It sums the last 28 days, applies the threshold of 3, and writes `publicPopular/{cityId}` ranks.
+  - `countAcceptedOrder` runs first in `processOutboxEvent` for `order_accepted`. Inside one transaction it adds 1 per distinct dish of an accepted restaurant order (combo and removed lines excluded) to `popularityDaily/{cityId}_{date}` under its daypart key. The `popularityCountedAt` marker on the outbox doc makes retries no-ops.
+  - A separate scheduled function, `popularityHourly`, sums the last 28 Israeli days, applies the threshold of 3 orders, writes `publicPopular/{cityId}` ranks, and deletes older daily docs.
 - **AI client:** `functions/src/lib/claude.ts`.
   - It wraps `@anthropic-ai/vertex-sdk` (new dependency), which calls Claude on Google Cloud Vertex AI in the same `qareeb-dev` project.
     - Region `global`, at standard price with no regional premium.
