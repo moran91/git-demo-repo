@@ -107,3 +107,42 @@ describe('deleteTaste', () => {
     expect((await admin.db.collection(`users/${UID_A}/dishFeedback`).get()).empty).toBe(true);
   });
 });
+
+describe('saveDishFeedback', () => {
+  const orderDoc = (id: string, uid: string, over: Record<string, unknown> = {}) => ({
+    id, businessId: 'biz-abu-salim', branchId: 'br-abu-salim-main', businessType: 'restaurant', cityId: 'beit-jann',
+    customer: { uid }, status: 'accepted', placedAt: '2026-10-05T17:00:00.000Z',
+    lines: [{ lineId: 'l1', productId: 'p-shawarma' }, { lineId: 'l2', productId: 'p-fries' }, { lineId: 'l3', productId: 'p-combo', comboId: 'cb1' }, { lineId: 'l4', productId: 'p-gone', removed: true }],
+    ...over,
+  });
+  beforeAll(async () => {
+    await admin.db.doc('orders/fb-mine').set(orderDoc('fb-mine', UID_A));
+    await admin.db.doc('orders/fb-theirs').set(orderDoc('fb-theirs', UID_B));
+    await admin.db.doc('orders/fb-placed').set(orderDoc('fb-placed', UID_A, { status: 'placed' }));
+  });
+
+  it('saves verdicts with the order branch and time, merges later taps, and undoes with none', async () => {
+    const first = (await a.call<{ feedback: { items: Record<string, string>; branchId: string; placedAt: string; forSomeoneElse: boolean } }>('saveDishFeedback', { orderId: 'fb-mine', items: { 'p-shawarma': 'loved' } })).feedback;
+    expect(first).toMatchObject({ branchId: 'br-abu-salim-main', placedAt: '2026-10-05T17:00:00.000Z', items: { 'p-shawarma': 'loved' }, forSomeoneElse: false });
+    await a.call('saveDishFeedback', { orderId: 'fb-mine', items: { 'p-fries': 'not_again' } });
+    const undo = (await a.call<{ feedback: { items: Record<string, string> } }>('saveDishFeedback', { orderId: 'fb-mine', items: { 'p-fries': 'none' }, forSomeoneElse: true })).feedback;
+    expect(undo.items).toEqual({ 'p-shawarma': 'loved' });
+    const stored = (await admin.db.doc(`users/${UID_A}/dishFeedback/fb-mine`).get()).data()!;
+    expect(stored.forSomeoneElse).toBe(true);
+    const keep = (await a.call<{ feedback: { forSomeoneElse: boolean; dismissed: boolean } }>('saveDishFeedback', { orderId: 'fb-mine', items: {}, dismissed: true })).feedback;
+    expect(keep).toMatchObject({ forSomeoneElse: true, dismissed: true });
+  });
+
+  it("someone else's order and a missing order look the same", async () => {
+    expect(await expectCode(a.call('saveDishFeedback', { orderId: 'fb-theirs', items: { 'p-fries': 'loved' } }))).toBe('not_found');
+    expect(await expectCode(a.call('saveDishFeedback', { orderId: 'fb-nope', items: { 'p-fries': 'loved' } }))).toBe('not_found');
+    expect((await admin.db.doc(`users/${UID_A}/dishFeedback/fb-theirs`).get()).exists).toBe(false);
+  });
+
+  it('refuses orders not yet accepted, dishes not in the order, combo lines and removed lines', async () => {
+    expect(await expectCode(a.call('saveDishFeedback', { orderId: 'fb-placed', items: { 'p-fries': 'loved' } }))).toBe('invalid_argument');
+    expect(await expectCode(a.call('saveDishFeedback', { orderId: 'fb-mine', items: { 'p-pizza': 'loved' } }))).toBe('invalid_argument');
+    expect(await expectCode(a.call('saveDishFeedback', { orderId: 'fb-mine', items: { 'p-combo': 'loved' } }))).toBe('invalid_argument');
+    expect(await expectCode(a.call('saveDishFeedback', { orderId: 'fb-mine', items: { 'p-gone': 'not_again' } }))).toBe('invalid_argument');
+  });
+});

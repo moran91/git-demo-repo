@@ -1,6 +1,6 @@
 import { onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { z } from 'zod';
-import { emptyTasteDoc, mergeTasteSchema, saveTasteSchema, type TasteDoc } from '@qareeb/shared';
+import { emptyTasteDoc, mergeTasteSchema, saveDishFeedbackSchema, saveTasteSchema, type DishFeedback, type Order, type TasteDoc } from '@qareeb/shared';
 import { REGION, col, commitInChunks, db, nowIso } from '../lib/firebase.js';
 import { handled, fail } from '../lib/errors.js';
 import { parse } from '../lib/validate.js';
@@ -96,4 +96,42 @@ export const deleteTaste = onCall(opts, handled(async (req: CallableRequest<unkn
     return doc;
   });
   return { taste };
+}));
+
+/**
+ * "Loved" / "not again" per dish, and "this was for someone else", for one of the caller's accepted
+ * orders. Someone else's order answers not_found, exactly like a missing one.
+ */
+export const saveDishFeedback = onCall(opts, handled(async (req: CallableRequest<unknown>) => {
+  const c = await requireCaller(req);
+  const input = parse(saveDishFeedbackSchema, req.data);
+  await rateLimit(`feedback:${c.uid}`, 120, 3600);
+  const order = (await col.order(input.orderId).get()).data() as Order | undefined;
+  if (!order || order.customer.uid !== c.uid) fail('not_found', { entity: 'order' });
+  if (order.status !== 'accepted') fail('invalid_argument', { issues: [{ path: 'orderId', message: 'order_not_accepted' }] });
+  const rateable = new Set(order.lines.filter((l) => !l.comboId && !l.removed).map((l) => l.productId));
+  for (const productId of Object.keys(input.items)) {
+    if (!rateable.has(productId)) fail('invalid_argument', { issues: [{ path: `items.${productId}`, message: 'not_in_order' }] });
+  }
+  const ref = col.dishFeedback(c.uid).doc(order.id);
+  const feedback = await db.runTransaction(async (tx) => {
+    const prev = (await tx.get(ref)).data() as DishFeedback | undefined;
+    const items: DishFeedback['items'] = { ...(prev?.items ?? {}) };
+    for (const [productId, verdict] of Object.entries(input.items)) {
+      if (verdict === 'none') delete items[productId];
+      else items[productId] = verdict;
+    }
+    const doc: DishFeedback = {
+      orderId: order.id,
+      branchId: order.branchId,
+      placedAt: order.placedAt,
+      items,
+      forSomeoneElse: input.forSomeoneElse ?? prev?.forSomeoneElse ?? false,
+      dismissed: input.dismissed ?? prev?.dismissed ?? false,
+      updatedAt: nowIso(),
+    };
+    tx.set(ref, doc);
+    return doc;
+  });
+  return { feedback };
 }));
