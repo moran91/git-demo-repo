@@ -418,7 +418,7 @@ Models under $0.30 per million input tokens (Flash-Lite, GPT nano and mini) are 
   - Removing an item on the knows-me page changes the band.
   - Delete everything.
   - Signed-out game, then sign-in, then link.
-- **Eval script:** run by hand with the real key, as described in section 9.
+- **Eval script:** run by hand against the real models, as described in section 9.1.
 
 ## 14. Rollout and open items
 
