@@ -40,7 +40,7 @@ Qareeb should feel personal. It learns what each customer likes and suggests the
 - The "What Qareeb knows about me" page.
 - Merging the anonymous profile at sign-in.
 - Server-side popularity ranking.
-- Haiku behind a flag, with a spend cap and metrics.
+- Haiku behind a flag, with a $2/day spend cap, metrics and a live costs page in the admin panel.
 - An evaluation script.
 
 **Not in v1**
@@ -175,8 +175,25 @@ type ReasonCode = 'usual' | 'ordered_before' | 'you_picked' | 'popular_now' | 'n
 | `users/{uid}/dishFeedback/{orderId}` | `saveDishFeedback` | owner | `DishFeedback` |
 | `popularityDaily/{cityId}_{YYYY-MM-DD}` | outbox handler | none (server only) | `{ counts: { "daypart|branchId|productId": n } }` |
 | `publicPopular/{cityId}` | hourly publish | public | `{ dayparts: Record<Daypart, {branchId, productId}[]>, updatedAt }`. Top 12 per daypart, ranks only, each item counted in at least 3 orders over 28 days |
-| `aiSpend/{YYYY-MM-DD}` | `suggestMeals` | none | `{ microUsd, calls, fallbacks, timeouts }` |
-| `config/platform.aiDailyCapMicroUsd` | admin | public (existing doc) | default 8,000,000 ($8, about ₪30/day) |
+| `spendDaily/{YYYY-MM-DD}` (Israel date) | `suggestMeals`, translation jobs | admin | `SpendDay`, see below |
+| `config/platform.aiDailyCapMicroUsd` | admin | public (existing doc) | default 2,000,000 ($2, about ₪7.40/day, about 700 wishes) |
+
+```ts
+interface SpendDay {
+  ai: {
+    microUsd: number; calls: number; ok: number;
+    fallback: { timeout: number; invalid: number; error: number; capped: number };
+    inTok: number; outTok: number; inMicroUsd: number; outMicroUsd: number;
+    fast: number;                        // calls answered within 3 s
+    byModel: Record<string, { microUsd: number; calls: number }>;
+  };
+  translate: { microUsd: number; chars: number; jobs: number };
+  byHour: Record<'00' | '01' | /* … */ '23', { aiIn: number; aiOut: number; translate: number }>; // micro-USD
+  updatedAt: Timestamp;
+}
+```
+
+Every field is bumped with `FieldValue.increment` in one `set(..., { merge: true })` per call, so writes never conflict and the admin page sees them at once. Cost is computed from the response's `usage` and a price table in `functions/src/lib/prices.ts` keyed by model id. Translation is $20 per million characters; the first 500,000 characters each month are free, and the page shows that allowance. Wish counts and costs only: no wish text, uid or IP is stored here.
 
 New rules blocks:
 - `users/{uid}/taste/{doc}` and `users/{uid}/dishFeedback/{id}`: owner read, `write: if false`.
@@ -243,6 +260,8 @@ All use the existing `onCall(opts, handled(...))` pattern with zod schemas in `p
   - Request: `max_tokens` 500, structured output via `output_config.format` (JSON schema), and a 4.5 s abort.
   - Under `FUNCTIONS_EMULATOR==='true'` it returns a deterministic stub, like `getTranslator()` (`lib/translator.ts:41`). The stub picks the first two candidates and can be told to return malformed or wrong output for tests.
   - **Flag:** `AI_SUGGEST=1` in `functions/.env` turns the AI on. With the flag off, `suggestMeals` uses `buildMeals` only.
+- **Spend ledger:** `functions/src/lib/spend.ts` exports `recordAiSpend(usage, model, outcome, ms)`, `recordTranslateSpend(chars)` and `aiCapReached()`. The translation job calls `recordTranslateSpend` after each successful batch.
+- **`setAiDailyCap({ usd })`** (admin): writes `config/platform.aiDailyCapMicroUsd`, from 0 to 50 dollars, with an `admin.*` audit entry like the other config writes.
 
 ### 7.3 Web (`apps/web/src/customer/taste/`)
 
@@ -285,6 +304,19 @@ All use the existing `onCall(opts, handled(...))` pattern with zod schemas in `p
   - It is linked from AccountPage's nav list and from every "?".
 - **Sign-in merge:** after `PhoneAuthPage` succeeds, if the local taste has consent or a quiz, a sheet asks "לשמור את הבחירות שלכם?". "Link" and "Start fresh" are the same size and call `mergeTaste`.
 
+### 7.4 Admin: costs page (`apps/web/src/admin/CostsPage.tsx`)
+
+Mockup: https://claude.ai/artifact/ALoHV33prKvSN8iTykvhrq. It is a new nav item "עלויות" in the platform group at `/admin/costs`, built from the existing admin primitives (card, table, badge, the `achart` bar style).
+
+- **Live:** `onSnapshot` on `spendDaily/{today}` and a query for the last 30 days, ordered by id. There is no polling and no new callable. A "חי" badge and the last update time show the subscription is connected.
+- **Today:** the spend in dollars and roughly in shekels, against the cap, as one meter. The meter carries a dashed "expected by end of day" mark: today's spend so far plus, for each hour still to come, the average of that hour over the last 7 days. Under it, 24 hour bars stacked by AI input, AI output and translation, with the current hour marked.
+- **Where the money went:** AI meal suggestions (wish count, input and output tokens with their cost) and menu translation (characters today and the month's free allowance used), then the total.
+- **How wishes were answered:** answered by AI against built by code, the fallback reasons (timeout, invalid, service error, cap), the share answered within 3 s, average cost per wish, and the active model.
+- **Last 30 days:** daily bars with the cap as a dashed line, days that hit the cap in the danger colour, a hover readout, month to date and the month's projection.
+- **Daily AI cap:** a dollar field and "שמירה", calling `setAiDailyCap`.
+- A one-line footnote says Firebase hosting, database and functions are billed in Google Cloud and are not shown, with a link to the project's billing page.
+- Empty state, before the first AI call: the meter at $0 and the line "עוד אין הוצאות היום".
+
 ## 8. Data flow
 
 ### 8.1 Home band
@@ -297,7 +329,7 @@ The app loads `useTaste()`, orders (signed in), dish feedback, `publicPopular/{c
 2. Server checks:
    - consent: the taste doc when signed in, else the client's assertion. When signed in, the server also loads the last 50 orders and the dish feedback, and runs `deriveTaste` itself. The client's view of the profile is never trusted;
    - rate limit: `suggest:uid` 30 per hour, or `suggest:ip` by IP hash, 30 per hour;
-   - spend: if `aiSpend/today` is at or over the cap, the AI is skipped.
+   - spend: if `spendDaily/today.ai.microUsd` is at or over the cap, the AI is skipped and the call counts as `fallback.capped`.
 3. Load the city's visible restaurant branches and their dish indexes, with a 60 s in-memory cache per instance. Keep open branches with orders not paused. Keep available dishes, excluding `needsChoice` and "not again" dishes.
 4. Score each dish: `matchScore` against the wish words, plus `scoreDish` from the profile. Take up to 6 dishes from each of the 8 best branches, at most 48. Give each a short alias, c1–c48, with a server-side map to `{branchId, productId}`.
 5. Prompt (static system rules plus a user message):
@@ -308,7 +340,7 @@ The app loads `useTaste()`, orders (signed in), dish feedback, `publicPopular/{c
    - candidate lines as `c7 | place 3 | נפוליטנית קלאסית | pizza | ₪58`.
    - The output schema: `{ meals: [{ title, reason: ReasonCode, items: [{ id: enum c1..cN, qty: 1..10 }] }] (0–2), noFit: 'none'|'closed'|'budget'|'diet' }`.
 6. Run `validateAiMeals`. If fewer than 2 meals survive, fill from `buildMeals`. On a timeout or API error, use `buildMeals` entirely.
-7. Write `lastAiSummary` (signed in) and add tokens and cost to `aiSpend`.
+7. Write `lastAiSummary` (signed in) and call `recordAiSpend` with the tokens, cost, outcome and duration.
 8. Return `{ meals: [{ branchId, items: [{productId, qty}], title, reason, source: 'ai'|'rules' }], noFit }`. There are no prices or names: the client renders those from live data.
 
 ### 8.3 Feedback
@@ -351,18 +383,21 @@ The phone OTP or WhatsApp flow finishes, then the merge sheet appears, then `mer
 
 ### 9.1 Choosing the model
 
-The model is picked by measurement before phase 4 ships, not by price list. Run the eval set on three candidates, all reachable from the same Google Cloud project with no new vendor or key:
+The model is picked by measurement before phase 4 ships, not by price list. Run the eval set on these candidates, all reachable from the same Google Cloud project with no new vendor or key:
 
 | Candidate | Price per million tokens (input / output) | Why it is in the test |
 |---|---|---|
 | Claude Haiku 4.5 | $1 / $5 | Default. Fast, with no thinking by default. Strict structured outputs on Vertex. |
 | Gemini Flash (current 3.x) | $0.75 / $3.75 until 31 Dec 2026, then $1.50 / $7.50 | Similar price; thinking tokens count as output. |
 | Claude Sonnet 5.5, low effort | $2 / $10 | Quality ceiling, to see what the cheaper models miss. |
+| Qwen3 235B (managed open model) | per token, under Haiku's price | Comparison only: the best open model for Arabic on Vertex. |
 
 Selection rule:
 1. The highest constraint pass rate (budget, party, no drinks, ids only) on the Arabic and mixed wishes.
 2. Then p95 latency under 3 s.
 3. Price only breaks ties.
+
+Open models in Model Garden (Llama, Qwen, Gemma, DeepSeek, gpt-oss) are not free to run: either Google's managed API charges per token, or a self-deployed endpoint bills GPU hours around the clock, which is hundreds of dollars a month at our traffic. One managed open model (Qwen3 235B, the strongest Arabic among them) is added to the eval as a fourth row for comparison only; adopting it would need a second adapter in `lib/claude.ts`.
 
 Models under $0.30 per million input tokens (Flash-Lite, GPT nano and mini) are left out. They save about $20 a month at most, and a failed answer falls back to `buildMeals`, which is the "dumb answers" problem this feature exists to fix. OpenAI models would also need a separate account, key and data agreement.
 
@@ -409,8 +444,11 @@ Models under $0.30 per million input tokens (Flash-Lite, GPT nano and mini) are 
 - **Functions (emulators):**
   - `saveTaste`, `mergeTaste` (link and fresh), `deleteTaste`, and `saveDishFeedback` (the order belongs to someone else, or the product is not in the order).
   - `suggestMeals` with the stub returning good, malformed and slow (timeout) output, a meal over budget, mixed branches, and over the spend cap.
+  - `recordAiSpend` and `recordTranslateSpend` totals and hour buckets; `setAiDailyCap` admin-only, range and audit entry.
   - Popularity counting and publishing, including the threshold of 3 and no counts leaking.
-- **Rules:** the new `taste`, `dishFeedback` and `publicPopular` paths. Popularity, spend and other users' taste must be denied.
+- **Rules:** the new `taste`, `dishFeedback` and `publicPopular` paths. Popularity and other users' taste must be denied; `spendDaily` is readable by admins only.
+- **Shared:** the end-of-day projection and the month projection.
+- **E2E:** an admin opens `/admin/costs`, a stub wish runs in another tab, and the page updates without a reload.
 - **E2E (Playwright, seed):**
   - Consent, then the game, then the cold band.
   - Wish, then two meals, then the meal sheet, then add to cart.
@@ -426,16 +464,16 @@ Models under $0.30 per million input tokens (Flash-Lite, GPT nano and mini) are 
 1. **Foundations:** the shared `taste` module; types, schemas and rules; `saveTaste`, `mergeTaste`, `deleteTaste` and `saveDishFeedback`; popularity counting and publishing.
 2. **Personal home without AI:** the consent sheet, the game, the home band (usual, try, popular), the feedback card, the knows-me page and the sign-in merge.
 3. **Wishes with the code builder:** `suggestMeals` running `buildMeals` only, the wish row, results and the meal sheet.
-4. **Haiku:** the client and stub, prompt, validator, spend cap, metrics and eval script. It is enabled by `AI_SUGGEST=1` and the secret.
+4. **Haiku:** the client and stub, prompt, validator, spend cap, spend ledger, the admin costs page, metrics and eval script. It is enabled by `AI_SUGGEST=1` once the Vertex AI setup below is done.
 
 **The user does these** (the auto-mode classifier blocks them for Claude):
 - Enable the Vertex AI API on `qareeb-dev`, enable the chosen Claude model in Model Garden (accepting its terms), and give the functions service account the `Vertex AI User` role.
 - Run deploys: hosting, functions and rules.
-- Run the eval script against the real models (under $1 for all three candidates).
+- Run the eval script against the real models (under $1 for all candidates).
 
 **Open items:**
 - A lawyer to check whether a privacy officer is required, and whether the database needs medium security.
 - Whether the PPA's AI guidance is final.
-- The spend cap amount (default $8/day).
+- The spend cap: $2/day, chosen by the owner on 2026-10-06, editable on the costs page.
 - Ask the Beit Jann owners whether they already take orders on WhatsApp.
 - After launch, A/B tests: 3, 4 or 6 game questions; an explore share of 10% vs 20% for new users; AI against `buildMeals` on wishes.
