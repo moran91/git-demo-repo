@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import * as shared from '../src/index.js';
-import { DISH_TYPES, matchesQuery, normalizeSearch, toDealsCombo, toDealsIndexDoc, toDealsPromotion, toDishIndexEntry, type Combo, type Product, type Promotion } from '../src/index.js';
+import { DISH_TYPES, matchesQuery, normalizeSearch, rankDishes, toDishIndexEntry, type DishHit, type Product } from '../src/index.js';
 
 const base: Product = {
   id: 'p1', branchId: 'br1', businessId: 'b1', categoryId: 'c1',
@@ -72,31 +71,36 @@ describe('toDishIndexEntry', () => {
   });
 });
 
-it('the cravings-home ranking is gone: the assistant ranks (rank.ts)', () => {
-  expect(Object.keys(shared)).not.toContain('rankDishes');
+describe('rankDishes', () => {
+  const hit = (branchId: string, id: string, open: boolean, sortOrder = 0): DishHit => ({
+    id, branchId, open, entry: { name: { he: id }, priceAgorot: 1000, fromPrice: false, available: true, needsChoice: false, sortOrder },
+  });
+  it('puts orderable places first and never promotes one place over another', () => {
+    const out = rankDishes([hit('a', 'a1', true, 0), hit('a', 'a2', true, 1), hit('a', 'a3', true, 2), hit('b', 'b1', true, 0), hit('c', 'c1', false, 0)], { seed: 0 });
+    expect(out.map((h) => h.id).slice(0, 4).sort()).toEqual(['a1', 'a2', 'a3', 'b1'].sort());
+    expect(out.at(-1)!.id).toBe('c1');
+    // round robin: the second place's first dish comes before the first place's second dish
+    const a2 = out.findIndex((h) => h.id === 'a2');
+    const b1 = out.findIndex((h) => h.id === 'b1');
+    expect(b1).toBeLessThan(a2);
+  });
+  it('rotates which place leads from day to day', () => {
+    const list = [hit('a', 'a1', true), hit('b', 'b1', true), hit('c', 'c1', true)];
+    const leaders = new Set([0, 1, 2].map((seed) => rankDishes(list, { seed })[0]!.branchId));
+    expect(leaders.size).toBe(3);
+  });
+  it('pins the place already in the cart to the top while it is open', () => {
+    const out = rankDishes([hit('a', 'a1', true), hit('b', 'b1', true), hit('b', 'b2', true)], { seed: 0, pinBranchId: 'b' });
+    expect(out.slice(0, 2).map((h) => h.branchId)).toEqual(['b', 'b']);
+    const closed = rankDishes([hit('a', 'a1', true), hit('b', 'b1', false)], { seed: 0, pinBranchId: 'b' });
+    expect(closed[0]!.branchId).toBe('a');
+  });
+  it('keeps each place in its own menu order', () => {
+    const out = rankDishes([hit('a', 'a2', true, 5), hit('a', 'a1', true, 1)], { seed: 0 });
+    expect(out.map((h) => h.id)).toEqual(['a1', 'a2']);
+  });
 });
 
 it('has the twelve agreed dish types', () => {
   expect(DISH_TYPES).toEqual(['pizza', 'pasta', 'burger', 'shawarma', 'hummus', 'sushi', 'pastries', 'salads', 'mains', 'snacks', 'desserts', 'drinks']);
-});
-
-describe('assistant fields in the indexes', () => {
-  it('the dish entry carries tags and serves when set', () => {
-    expect(toDishIndexEntry({ ...base, tags: ['spicy'], serves: 2 })).toMatchObject({ tags: ['spicy'], serves: 2 });
-    const plain = toDishIndexEntry({ ...base, tags: [] });
-    expect('tags' in plain).toBe(false);
-    expect('serves' in plain).toBe(false);
-  });
-  const combo: Combo = { id: 'c1', businessId: 'b1', branchId: 'br1', name: { he: 'קומבו' }, description: {}, items: [{ productId: 'p1', quantity: 2 }], priceAgorot: 6000, promoted: true, active: true, archived: false, sortOrder: 1, createdAt: '', updatedAt: '' };
-  const promo: Promotion = { id: 'pr', businessId: 'b1', branchId: 'br1', title: { he: '1+1' }, body: { he: 'רק היום' }, productIds: ['p1'], endsAt: '2030-01-01', active: true, sortOrder: 0, createdAt: '', updatedAt: '' };
-  it('deals entries keep what the assistant shows and drop empty text', () => {
-    expect(toDealsCombo(combo)).toEqual({ name: { he: 'קומבו' }, priceAgorot: 6000, items: [{ productId: 'p1', quantity: 2 }], sortOrder: 1 });
-    expect(toDealsPromotion(promo)).toEqual({ title: { he: '1+1' }, body: { he: 'רק היום' }, productIds: ['p1'], endsAt: '2030-01-01', sortOrder: 0 });
-  });
-  it('the deals document holds only live combos and promotions, keyed by id', () => {
-    const doc = toDealsIndexDoc('br1', 'b1', [combo, { ...combo, id: 'c2', active: false }, { ...combo, id: 'c3', archived: true }], [promo, { ...promo, id: 'pr2', active: false }], '2026-10-05T00:00:00.000Z');
-    expect(Object.keys(doc.combos)).toEqual(['c1']);
-    expect(Object.keys(doc.promotions)).toEqual(['pr']);
-    expect(doc).toMatchObject({ branchId: 'br1', businessId: 'b1', updatedAt: '2026-10-05T00:00:00.000Z' });
-  });
 });

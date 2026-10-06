@@ -65,12 +65,6 @@ describe('public projections', () => {
     await assertSucceeds(getDoc(doc(anon(), 'publicBranches/brA/index/dishes')));
     await assertFails(setDoc(doc(anon(), 'publicBranches/brA/index/dishes'), { dishes: {} }));
     await assertFails(setDoc(doc(as('owner1'), 'publicBranches/brA/index/dishes'), { dishes: {} }));
-    for (const id of ['deals', 'pairs']) {
-      await env.withSecurityRulesDisabled(async (ctx) => { await setDoc(doc(ctx.firestore(), `publicBranches/brA/index/${id}`), { branchId: 'brA' }); });
-      await assertSucceeds(getDoc(doc(anon(), `publicBranches/brA/index/${id}`)));
-      await assertFails(setDoc(doc(anon(), `publicBranches/brA/index/${id}`), { branchId: 'brA' }));
-      await assertFails(setDoc(doc(as('owner1'), `publicBranches/brA/index/${id}`), { branchId: 'brA' }));
-    }
   });
   it('unapproved private business data is not readable by the public', async () => {
     await assertFails(getDoc(doc(anon(), 'businesses/biz1')));

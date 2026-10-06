@@ -16,4 +16,3 @@ export * from './location.js';
 export * from './dishIndex.js';
 export * from './search/index.js';
 export * from './translation.js';
-export * from './assistant/index.js';

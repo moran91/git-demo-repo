@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ref as sref, uploadBytes } from 'firebase/storage';
-import { DISH_TAGS, DISH_TYPES, MAX_STORY_ITEMS, TAG_LABELS, autoTags, editorAutoView, hasAnyTranslation, ownerAutoInput, makeId, productInputSchema, type Category, type Localized, type ModifierGroup, type Product, type ProductInput, type SharedModifierGroup } from '@qareeb/shared';
+import { DISH_TYPES, MAX_STORY_ITEMS, hasAnyTranslation, makeId, productInputSchema, type Category, type Localized, type ModifierGroup, type Product, type ProductInput, type SharedModifierGroup } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
 import { storage } from '@/lib/firebase';
 import { useCollection, orderBy, limit } from '@/lib/queries';
-import { Button, Dialog, TextInput, Select, Segmented, IconButton, Badge, Stepper, toast, ConfirmDialog } from '@/design/components';
+import { Button, Dialog, TextInput, Select, Segmented, IconButton, Badge, toast, ConfirmDialog } from '@/design/components';
 import { Icon } from '@/design/Icon';
 import { money } from '@/lib/format';
 import { call } from '@/lib/api';
@@ -67,14 +67,13 @@ function machineTextOf(p: Product | undefined, field: 'name' | 'description'): L
   return Object.fromEntries(Object.keys(mark).map((l) => [l, p[field][l as keyof Localized]]));
 }
 function draftFrom(p: Product | undefined, categoryId: string): Draft {
-  if (!p) return { categoryId, name: {}, description: {}, dietaryText: {}, pricingMode: 'unit', priceAgorot: 0, unitLabel: {}, quantityStep: 1, minQuantity: 1, variants: [], modifierGroups: [], available: true, trackInventory: false, stockQty: 0, weightStepGrams: 100, minWeightGrams: 100, mostOrdered: false, inStories: false };
+  if (!p) return { categoryId, name: {}, description: {}, dietaryText: {}, pricingMode: 'unit', priceAgorot: 0, unitLabel: {}, quantityStep: 1, minQuantity: 1, variants: [], modifierGroups: [], available: true, trackInventory: false, stockQty: 0, weightStepGrams: 100, minWeightGrams: 100, mostOrdered: false, inStories: false, dishType: 'none' };
   // Callable responses encode omitted optional values as null; Firestore snapshots omit them.
   // Normalize both sources, including variant/extra fields, before editing and validating.
   const normalized = JSON.parse(JSON.stringify(p, (_key, value) => value === null ? undefined : value)) as Product;
-  // `autoTranslated` and `autoFields` are server-owned (the save schema is strict); the editor reads autoTranslated from `initial`.
-  // Tags, serves and type are left out: the draft holds only the ones the owner touches, and only those are sent.
-  const { id: _i, branchId: _b, businessId: _bz, archived: _a, createdAt: _c, updatedAt: _u, autoTranslated: _t, autoFields: _af, tags: _tg, serves: _sv, dishType: _dt, imagePath, sortOrder, ...rest } = normalized;
-  return { ...rest, imagePath, sortOrder };
+  // `autoTranslated` is server-owned (the save schema is strict); the editor reads it from `initial`.
+  const { id: _i, branchId: _b, businessId: _bz, archived: _a, createdAt: _c, updatedAt: _u, autoTranslated: _t, imagePath, sortOrder, ...rest } = normalized;
+  return { ...rest, dishType: rest.dishType ?? 'none', imagePath, sortOrder };
 }
 
 type GroupIn = ProductInput['modifierGroups'][number];
@@ -114,11 +113,6 @@ export function ProductEditor({ initial, categoryId, categories, onClose }: { in
   const close = () => { if (!busy && safety.confirmDiscard()) onClose(); };
   const productId = savedProduct?.id;
   const name = (l: Localized) => l[lang]?.trim() || L(l, business.defaultLocale);
-  // Tags, serves and type: the live suggestion while the machine owns them, the owner's value once touched (ownership.ts).
-  const categoryName = categories.find((c) => c.id === d.categoryId)?.name;
-  const suggestion = useMemo(() => autoTags({ name: d.name, description: d.description, categoryName }), [d.name, d.description, categoryName]);
-  const auto = editorAutoView(savedProduct, d, suggestion);
-  const toggleTag = (tag: (typeof DISH_TAGS)[number]) => set({ tags: DISH_TAGS.filter((x) => (x === tag) !== auto.tags.includes(x)) });
 
   const upload = async (file: File, id: string) => {
     setUploadError(null);
@@ -176,9 +170,7 @@ export function ProductEditor({ initial, categoryId, categories, onClose }: { in
   const save = async (then: 'close' | 'another') => {
     setError(null);
     if (!hasAnyTranslation(d.name)) return setError(t('validation.atLeastOneLanguage'));
-    // Only touched tags/serves/type are sent (the server derives the rest); supermarkets send none.
-    const { imagePath: _image, tags: _tg, serves: _sv, dishType: _dt, ...base } = d;
-    const product = { ...base, ...(business.type === 'supermarket' ? {} : ownerAutoInput(d)) };
+    const { imagePath: _image, ...product } = d;
     if (!productInputSchema.safeParse(product).success) return setError(t('owner.invalidProduct'));
     setBusy(true);
     let saved: Product;
@@ -264,7 +256,7 @@ export function ProductEditor({ initial, categoryId, categories, onClose }: { in
           <LocalizedInput lang={lang} label={t('common.name')} value={d.name} required onChange={(name) => set({ name })} machineText={machineTextOf(initial, 'name')} />
           <Select label={t('catalog.category')} value={d.categoryId} onChange={(e) => set({ categoryId: e.target.value })}>{categories.map((c) => <option key={c.id} value={c.id}>{L(c.name, business.defaultLocale)}</option>)}</Select>
           {!supermarket ? (
-            <Select label={t('dishType.label')} value={auto.dishType} onChange={(e) => set({ dishType: e.target.value as Draft['dishType'] })}>
+            <Select label={t('dishType.label')} value={d.dishType ?? 'none'} onChange={(e) => set({ dishType: e.target.value as Draft['dishType'] })}>
               <option value="none">{t('dishType.none')}</option>
               {DISH_TYPES.map((dt) => <option key={dt} value={dt}>{t(`dishType.${dt}`)}</option>)}
             </Select>
@@ -283,19 +275,6 @@ export function ProductEditor({ initial, categoryId, categories, onClose }: { in
       <section className="pe-sec">
         <LocalizedInput lang={lang} label={t('catalog.descHe').replace(/ \(.*\)/, '')} value={d.description} multiline onChange={(description) => set({ description })} machineText={machineTextOf(initial, 'description')} />
       </section>
-      {!supermarket ? (
-        <section className="pe-sec">
-          <fieldset className="pe-tags">
-            <legend className="field__label">{t('catalog.tags')}</legend>
-            <div className="pe-tags__chips">
-              {DISH_TAGS.map((tag) => <button key={tag} type="button" className="chip" aria-pressed={auto.tags.includes(tag)} onClick={() => toggleTag(tag)}>{TAG_LABELS[tag][locale]}</button>)}
-            </div>
-          </fieldset>
-          <div className="kvrow-list pe-toggles">
-            <LedgerRow label={t('catalog.serves')}><Stepper value={auto.serves} min={1} max={12} onChange={(serves) => set({ serves })} decLabel={`${t('catalog.serves')}: ${t('common.decrease')}`} incLabel={`${t('catalog.serves')}: ${t('common.increase')}`} /></LedgerRow>
-          </div>
-        </section>
-      ) : null}
       {!weight ? (
         <section className="pe-sec">
           <div className="pe-sec__head"><h3>{t('catalog.sizes')}</h3><Button variant="ghost" icon="plus" onClick={addVariant}>{t('common.add')}</Button></div>

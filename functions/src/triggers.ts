@@ -6,16 +6,10 @@ import { REGION, storage } from './lib/firebase.js';
 import { processOutboxEvent, sweepOutbox } from './lib/outbox.js';
 import { sweepPrintLeases } from './domain/printing.js';
 import { sweepExpiredPosts } from './domain/posts.js';
-import { rebuildPairs } from './domain/pairs.js';
 import { retryTranslationJobs } from './domain/translation.js';
 
 export const onOutboxCreated = onDocumentCreated({ region: REGION, document: 'outbox/{id}', retry: true }, async (event) => {
   await processOutboxEvent(event.params.id);
-});
-
-export const buildPairs = onSchedule({ region: REGION, schedule: 'every day 03:00', timeZone: 'Asia/Jerusalem' }, async () => {
-  const r = await rebuildPairs();
-  console.info('pairs rebuilt', r);
 });
 
 export const scheduledSweeps = onSchedule({ region: REGION, schedule: 'every 5 minutes', timeZone: 'Asia/Jerusalem' }, async () => {

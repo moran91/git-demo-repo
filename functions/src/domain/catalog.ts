@@ -1,12 +1,12 @@
 import { onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { z } from 'zod';
-import { MAX_PROMOTIONS, MAX_STORY_ITEMS, autoTags, categoryInputSchema, cleanLocalized, reconcileAuto, resolveAutoFields, textFields, comboInputSchema, idSchema, productInputSchema, promotionInputSchema, sharedModifierGroupInputSchema, makeId, type Branch, type Business, type Category, type Combo, type ModifierGroup, type Product, type Promotion, type SharedModifierGroup } from '@qareeb/shared';
+import { MAX_PROMOTIONS, MAX_STORY_ITEMS, categoryInputSchema, cleanLocalized, reconcileAuto, textFields, comboInputSchema, idSchema, productInputSchema, promotionInputSchema, sharedModifierGroupInputSchema, makeId, type Branch, type Business, type Category, type Combo, type ModifierGroup, type Product, type Promotion, type SharedModifierGroup } from '@qareeb/shared';
 import { REGION, col, db, nowIso, storage, commitInChunks } from '../lib/firebase.js';
 import { handled, fail } from '../lib/errors.js';
 import { parse } from '../lib/validate.js';
 import { requireCaller, requireMembership } from '../lib/auth.js';
 import { enqueueTranslationInTx } from './translation.js';
-import { isPubliclyVisible, projectCategoryInTx, projectComboInTx, projectDishIndexEntry, projectProductInTx, projectPromotionInTx, removeDealEntry, reprojectCatalog, toPublicProduct } from '../lib/projections.js';
+import { isPubliclyVisible, projectCategoryInTx, projectComboInTx, projectDishIndexEntry, projectProductInTx, projectPromotionInTx, reprojectCatalog, toPublicProduct } from '../lib/projections.js';
 import { writeAudit } from '../lib/audit.js';
 import { deleteImageWithVariants } from '../lib/images.js';
 
@@ -92,7 +92,7 @@ function materializeShared(g: Pick<ModifierGroup, 'id' | 'sortOrder'>, s: Shared
   return { id: g.id, sortOrder: g.sortOrder, sharedGroupId: s.id, name: s.name, required: s.required, minSelect: s.minSelect, maxSelect: s.maxSelect, options: s.options.map((o) => ({ ...o })), placement: s.placement };
 }
 
-function buildProduct(existing: Product | undefined, input: z.infer<typeof productInputSchema>, ids: { id: string; branchId: string; businessId: string }, now: string, shared: Map<string, SharedModifierGroup>, defaultSortOrder = 0, auto?: ReturnType<typeof resolveAutoFields>): Product {
+function buildProduct(existing: Product | undefined, input: z.infer<typeof productInputSchema>, ids: { id: string; branchId: string; businessId: string }, now: string, shared: Map<string, SharedModifierGroup>, defaultSortOrder = 0): Product {
   if (input.pricingMode === 'weight' && input.variants.length > 0) fail('invalid_argument', { issues: [{ path: 'variants', message: 'weight_items_cannot_have_variants' }] });
   if (input.pricingMode === 'weight' && input.modifierGroups.length > 0) fail('invalid_argument', { issues: [{ path: 'modifierGroups', message: 'weight_items_cannot_have_modifiers' }] });
   const variants = input.variants.map((v, i) => ({ ...v, id: v.id ?? makeId(8), name: cleanLocalized(v.name), sortOrder: v.sortOrder ?? i }));
@@ -144,8 +144,8 @@ function buildProduct(existing: Product | undefined, input: z.infer<typeof produ
     mostOrdered: input.mostOrdered ?? false,
     // An older client that does not send the field keeps what the product had.
     inStories: input.inStories ?? existing?.inStories ?? false,
-    // Tags, serves and type: automatic unless the owner chose (resolveAutoFields). Supermarkets get none (`auto` is undefined).
-    ...(auto ? { ...auto.values, autoFields: auto.autoFields } : {}),
+    // Omitted keeps the current type (older clients); 'none' clears it.
+    ...(input.dishType === 'none' ? {} : (input.dishType ?? existing?.dishType) ? { dishType: input.dishType ?? existing?.dishType } : {}),
     archived: existing?.archived ?? false,
     sortOrder: input.sortOrder ?? existing?.sortOrder ?? defaultSortOrder,
     createdAt: existing?.createdAt ?? now,
@@ -177,14 +177,11 @@ export const saveProduct = onCall(opts, handled(async (req: CallableRequest<unkn
     const sharedSnaps = await Promise.all(sharedIds.map((id) => tx.get(col.modifierGroups(input.businessId, input.branchId).doc(id))));
     const shared = new Map(sharedSnaps.filter((s) => s.exists).map((s) => [s.id, s.data() as SharedModifierGroup]));
     const now = nowIso();
-    // Suggested from the saved texts and the category name (the same inputs as the backfill); a value the owner chose is kept (ownership.ts).
-    const auto = ctx.business.type === 'supermarket' ? undefined
-      : resolveAutoFields({ tags: input.product.tags, serves: input.product.serves, dishType: input.product.dishType }, existing, autoTags({ name: input.product.name, description: input.product.description, categoryName: (catSnap.data() as Category).name }));
-    const p = buildProduct(existing, input.product, { id: ref.id, branchId: input.branchId, businessId: input.businessId }, now, shared, nextSortOrder, auto);
+    const p = buildProduct(existing, input.product, { id: ref.id, branchId: input.branchId, businessId: input.businessId }, now, shared, nextSortOrder);
     if (p.inStories && !existing?.inStories) await assertStoryRoom(tx, input.businessId, input.branchId, ref.id);
     // Machine-written languages the owner left untouched stay machine-written; see translation.ts.
-    const autoText = reconcileAuto(existing ? textFields('product', existing) : [], existing?.autoTranslated ?? {}, textFields('product', p));
-    if (Object.keys(autoText).length) p.autoTranslated = autoText;
+    const auto = reconcileAuto(existing ? textFields('product', existing) : [], existing?.autoTranslated ?? {}, textFields('product', p));
+    if (Object.keys(auto).length) p.autoTranslated = auto;
     tx.set(ref, p);
     projectProductInTx(tx, ctx.business, ctx.branch, p);
     enqueueTranslationInTx(tx, ref, 'product', ctx.business, ctx.branch, p);
@@ -592,7 +589,6 @@ export const deleteCombo = onCall(opts, handled(async (req: CallableRequest<unkn
     if (!snap.exists) fail('not_found');
     const combo = snap.data() as Combo;
     imagePath = combo.imagePath;
-    await removeDealEntry(tx, input.branchId, 'combos', input.comboId); // reads, so before any write
     tx.delete(ref);
     tx.delete(col.publicCombos(input.branchId).doc(input.comboId));
     writeAudit(tx, { actorUid: c.uid, action: 'combo.delete', targetType: 'combo', targetId: `${input.branchId}/${input.comboId}`, before: combo, after: undefined });
@@ -689,7 +685,6 @@ export const removePromotion = onCall(opts, handled(async (req: CallableRequest<
     if (!snap.exists) fail('not_found');
     const promotion = snap.data() as Promotion;
     imagePath = promotion.imagePath;
-    await removeDealEntry(tx, input.branchId, 'promotions', input.promotionId); // reads, so before any write
     tx.delete(ref);
     tx.delete(col.publicPromotions(input.branchId).doc(input.promotionId));
     writeAudit(tx, { actorUid: c.uid, action: 'promotion.remove', targetType: 'promotion', targetId: `${input.branchId}/${input.promotionId}`, before: promotion, after: undefined });

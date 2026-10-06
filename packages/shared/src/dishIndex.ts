@@ -5,8 +5,7 @@
  * holding a compact entry per live product. The home reads one such document per branch in the city
  * and searches in memory, so a load costs one read per place instead of one per dish.
  */
-import type { DishTag } from './assistant/tags.js';
-import type { Agorot, Combo, ComboItem, Localized, Product, Promotion } from './types.js';
+import type { Agorot, Localized, Product } from './types.js';
 
 /** Fixed dish-type list, owner-assigned per product. Order is the order chips appear in. */
 export const DISH_TYPES = ['pizza', 'pasta', 'burger', 'shawarma', 'hummus', 'sushi', 'pastries', 'salads', 'mains', 'snacks', 'desserts', 'drinks'] as const;
@@ -28,9 +27,6 @@ export interface DishIndexEntry {
   needsChoice: boolean;
   sortOrder: number;
   mostOrdered?: boolean;
-  tags?: DishTag[];
-  /** People one portion feeds; missing reads as 1 (2 for a whole pizza). */
-  serves?: number;
 }
 
 export interface DishIndexDoc {
@@ -39,11 +35,6 @@ export interface DishIndexDoc {
   /** productId -> entry. Written per key so one product change never rewrites the others. */
   dishes: Record<string, DishIndexEntry>;
   updatedAt: string;
-}
-
-/** A size, a required option or a weight must be picked, so quick add opens the product sheet instead of adding directly. */
-export function needsChoice(p: Pick<Product, 'variants' | 'modifierGroups' | 'pricingMode'>): boolean {
-  return p.variants.length > 0 || p.modifierGroups.some((g) => g.required || g.minSelect > 0) || p.pricingMode === 'weight';
 }
 
 export function toDishIndexEntry(p: Product): DishIndexEntry {
@@ -55,7 +46,7 @@ export function toDishIndexEntry(p: Product): DishIndexEntry {
     priceAgorot: price,
     fromPrice: p.variants.length > 1,
     available: p.available && inStock,
-    needsChoice: needsChoice(p),
+    needsChoice: p.variants.length > 0 || p.modifierGroups.some((g) => g.required || g.minSelect > 0) || p.pricingMode === 'weight',
     sortOrder: p.sortOrder,
   };
   // Firestore rejects undefined, so optional fields are only set when present.
@@ -63,8 +54,6 @@ export function toDishIndexEntry(p: Product): DishIndexEntry {
   if (p.dishType) entry.dishType = p.dishType;
   if (p.imagePath) entry.imagePath = p.imagePath;
   if (p.mostOrdered) entry.mostOrdered = true;
-  if (p.tags?.length) entry.tags = p.tags;
-  if (p.serves) entry.serves = p.serves;
   return entry;
 }
 
@@ -94,70 +83,48 @@ export function matchesQuery(haystack: string, query: string): boolean {
   return q.split(' ').every((w) => h.includes(w));
 }
 
+export interface DishHit {
+  id: string;
+  branchId: string;
+  /** The place can take an order right now (open, not paused). */
+  open: boolean;
+  entry: DishIndexEntry;
+}
+
+/**
+ * Neutral ranking. Orderable places first; within them one dish per place in turn (round robin), so
+ * no restaurant fills the top of the list. Which place leads rotates with `seed` (the day), and the
+ * place already in the customer's cart leads while it is open. Each place keeps its own menu order.
+ */
+export function rankDishes<T extends DishHit>(hits: T[], opts: { seed: number; pinBranchId?: string }): T[] {
+  const byBranch = new Map<string, T[]>();
+  for (const h of hits) {
+    const list = byBranch.get(h.branchId) ?? [];
+    list.push(h);
+    byBranch.set(h.branchId, list);
+  }
+  for (const list of byBranch.values()) list.sort((a, b) => a.entry.sortOrder - b.entry.sortOrder || a.id.localeCompare(b.id));
+  const ids = [...byBranch.keys()].sort();
+  const n = ids.length;
+  const rotated = n ? ids.map((_, i) => ids[(i + (((opts.seed % n) + n) % n)) % n]!) : [];
+  const open = rotated.filter((b) => byBranch.get(b)![0]!.open);
+  const closed = rotated.filter((b) => !byBranch.get(b)![0]!.open);
+  if (opts.pinBranchId && open.includes(opts.pinBranchId)) {
+    open.splice(open.indexOf(opts.pinBranchId), 1);
+    open.unshift(opts.pinBranchId);
+  }
+  const roundRobin = (branches: string[]) => {
+    const out: T[] = [];
+    const queues = branches.map((b) => [...byBranch.get(b)!]);
+    // The pinned place gets all its dishes first; the rest share the list in turn.
+    if (opts.pinBranchId && branches[0] === opts.pinBranchId) out.push(...queues.shift()!);
+    while (queues.some((q) => q.length)) for (const q of queues) if (q.length) out.push(q.shift()!);
+    return out;
+  };
+  return [...roundRobin(open), ...roundRobin(closed)];
+}
+
 /** Day number used as the rotation seed, so the order is stable within a day. */
 export function daySeed(now: Date): number {
   return Math.floor(now.getTime() / 86_400_000);
-}
-
-/** `publicBranches/{branchId}/index/deals`: active combos and promotions, so the assistant answers "what's on offer?" across the city in one read per place. */
-export interface DealsIndexCombo {
-  name: Localized;
-  description?: Localized;
-  priceAgorot: Agorot;
-  items: ComboItem[];
-  imagePath?: string;
-  sortOrder: number;
-}
-export interface DealsIndexPromotion {
-  title: Localized;
-  body?: Localized;
-  productIds: string[];
-  /** Last valid day, YYYY-MM-DD in Asia/Jerusalem; the client drops expired ones. */
-  endsAt: string;
-  imagePath?: string;
-  sortOrder: number;
-}
-export interface DealsIndexDoc {
-  branchId: string;
-  businessId: string;
-  combos: Record<string, DealsIndexCombo>;
-  promotions: Record<string, DealsIndexPromotion>;
-  updatedAt: string;
-}
-/** `publicBranches/{branchId}/index/pairs`: what customers add together, rebuilt nightly from orders. */
-/** Ranked best-first; the co-order count is deliberately not published (it is sales volume). */
-export interface PairEntry {
-  productId: string;
-}
-export interface PairsIndexDoc {
-  branchId: string;
-  pairs: Record<string, PairEntry[]>;
-  updatedAt: string;
-}
-
-const hasText = (l?: Localized) => Object.values(l ?? {}).some((v) => v && v.trim());
-
-export function toDealsCombo(c: Combo): DealsIndexCombo {
-  const d: DealsIndexCombo = { name: c.name, priceAgorot: c.priceAgorot, items: c.items, sortOrder: c.sortOrder };
-  if (hasText(c.description)) d.description = c.description;
-  if (c.imagePath) d.imagePath = c.imagePath;
-  return d;
-}
-
-export function toDealsPromotion(p: Promotion): DealsIndexPromotion {
-  const d: DealsIndexPromotion = { title: p.title, productIds: p.productIds, endsAt: p.endsAt, sortOrder: p.sortOrder };
-  if (hasText(p.body)) d.body = p.body;
-  if (p.imagePath) d.imagePath = p.imagePath;
-  return d;
-}
-
-/** The whole deals document for one branch: only active, unarchived combos and active promotions, keyed by id. */
-export function toDealsIndexDoc(branchId: string, businessId: string, combos: Combo[], promos: Promotion[], now: string): DealsIndexDoc {
-  return {
-    branchId,
-    businessId,
-    combos: Object.fromEntries(combos.filter((c) => c.active && !c.archived).map((c) => [c.id, toDealsCombo(c)])),
-    promotions: Object.fromEntries(promos.filter((p) => p.active).map((p) => [p.id, toDealsPromotion(p)])),
-    updatedAt: now,
-  };
 }

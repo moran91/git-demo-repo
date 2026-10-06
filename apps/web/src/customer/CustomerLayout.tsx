@@ -44,8 +44,6 @@ export function CustomerLayout() {
   const topbarRef = useHeightVar<HTMLElement>('--topbar-height');
   // The town only matters where it changes what is listed or orderable: home and a business page.
   const showCity = location.pathname === '/' || location.pathname.startsWith('/b/');
-  // The assistant opens from the home's ask box, so it keeps the home tab lit.
-  const homeTab = ({ isActive }: { isActive: boolean }) => (isActive || location.pathname === '/ask' ? 'active' : undefined);
   return (
     <>
       <a className="skip-link" href="#main">{t('common.skipToContent')}</a>
@@ -58,7 +56,7 @@ export function CustomerLayout() {
           </Link>
           {showCity ? <CityControl /> : null}
           <nav className="topbar__nav" aria-label={t('nav.mainNavigation')}>
-            <NavLink to="/" end className={homeTab}><Icon name="compass" size={18} /> {t('nav.explore')}</NavLink>
+            <NavLink to="/" end><Icon name="compass" size={18} /> {t('nav.explore')}</NavLink>
             <NavLink to="/favorites"><Icon name="heart" size={18} /> {t('nav.favorites')}</NavLink>
             <NavLink to="/cart"><span className="cart-icon" data-cart-target><Icon name="cart" size={18} /></span> {t('nav.cart')}{count > 0 ? ` (${count})` : ''}</NavLink>
             <NavLink to="/account"><Icon name="user" size={18} /> {t('nav.account')}{unread.data.length ? ` (${unread.data.length})` : ''}</NavLink>
@@ -74,7 +72,7 @@ export function CustomerLayout() {
       </main>
       <span className="visually-hidden" aria-live="polite">{announce}</span>
       <nav className="bottom-nav" aria-label={t('nav.mainNavigation')}>
-        <NavLink to="/" end className={homeTab}><Icon name="compass" /> <span>{t('nav.explore')}</span></NavLink>
+        <NavLink to="/" end><Icon name="compass" /> <span>{t('nav.explore')}</span></NavLink>
         <NavLink to="/favorites"><Icon name="heart" /> <span>{t('nav.favorites')}</span></NavLink>
         <NavLink to="/cart" className={count > 0 ? 'has-items' : undefined} aria-label={count > 0 ? `${t('nav.cart')} (${count})` : undefined}><span className="cart-icon" data-cart-target><Icon name="cart" /></span> <span>{t('nav.cart')}</span>{count > 0 ? <span key={count} className="bottom-nav__count" aria-hidden="true">{count}</span> : null}</NavLink>
         <NavLink to="/account"><Icon name="user" /> <span>{t('nav.account')}</span>{unread.data.length ? <span className="bottom-nav__count" aria-hidden="true">{unread.data.length}</span> : null}</NavLink>

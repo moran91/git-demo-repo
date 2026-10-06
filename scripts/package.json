@@ -16,7 +16,6 @@
   "devDependencies": {
     "@qareeb/shared": "*",
     "@types/node": "^26.4.1",
-    "tsx": "^4.23.15",
     "typescript": "^5.9.0"
   }
 }

@@ -6,8 +6,6 @@
  */
 
 import type { DishType } from './dishIndex.js';
-import type { DishTag } from './assistant/tags.js';
-import type { AutoFields } from './assistant/ownership.js';
 import type { AutoTranslated } from './translation.js';
 
 export type Locale = 'he' | 'ar' | 'en';
@@ -352,12 +350,6 @@ export interface Product {
   inStories?: boolean;
   /** Restaurant dish type for the home page's dish chips and search (see DISH_TYPES). */
   dishType?: DishType;
-  /** Taste, diet and occasion tags for the assistant (DISH_TAGS). */
-  tags?: DishTag[];
-  /** How many people one portion feeds (1–12); the assistant's "for 4" uses it. */
-  serves?: number;
-  /** Automatic values still owned by the machine (see ownership.ts); an owner's different choice drops the key for good. */
-  autoFields?: AutoFields;
   /** Machine-written languages per text field (translation.ts); the owner's text is never listed. */
   autoTranslated?: AutoTranslated;
   archived: boolean;

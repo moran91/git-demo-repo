@@ -5,7 +5,6 @@ import { AuthProvider } from '@/lib/auth';
 import { ToastRegion } from '@/design/components';
 import { CustomerLayout } from '@/customer/CustomerLayout';
 import { DiscoveryPage } from '@/customer/DiscoveryPage';
-import { AskPage } from '@/customer/assistant/AskPage';
 import { BusinessPage } from '@/customer/BusinessPage';
 import { CartPage } from '@/customer/CartPage';
 import { CheckoutPage } from '@/customer/CheckoutPage';
@@ -23,7 +22,6 @@ function AppRoutes() {
     <Routes>
       <Route element={<CustomerLayout />}>
         <Route index element={<DiscoveryPage />} />
-        <Route path="ask" element={<AskPage />} />
         <Route path="b/:businessId/:branchId" element={<BusinessPage />} />
         <Route path="b/:businessId" element={<BusinessPage />} />
         <Route path="cart" element={<CartPage />} />

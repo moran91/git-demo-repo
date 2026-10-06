@@ -3,7 +3,6 @@ import { LOYALTY_BOUNDS } from './pricing.js';
 import { validateInterval } from './hours.js';
 import { MAX_COMBO_ITEMS, MAX_PROMO_PRODUCTS } from './types.js';
 import { DISH_TYPES } from './dishIndex.js';
-import { DISH_TAGS } from './assistant/tags.js';
 
 export const localeSchema = z.enum(['he', 'ar', 'en']);
 export const localizedSchema = z
@@ -273,9 +272,6 @@ export const productInputSchema = z
     inStories: z.boolean().optional(),
     /** Omitted keeps the product's current type (older clients); 'none' clears it. */
     dishType: z.enum([...DISH_TYPES, 'none']).optional(),
-    /** Omitted keeps the stored value (older clients); see resolveAutoFields. */
-    tags: z.array(z.enum(DISH_TAGS)).max(DISH_TAGS.length).optional(),
-    serves: z.number().int().min(1).max(12).optional(),
     sortOrder: z.number().int().min(0).max(10000).optional(),
   })
   .strict();

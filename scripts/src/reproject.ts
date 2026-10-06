@@ -6,7 +6,7 @@ import type { Firestore } from 'firebase-admin/firestore';
 import type { Branch, Business, Category, Combo, Product, Promotion } from '@qareeb/shared';
 // Relative .ts import: the seed runs under node --experimental-strip-types, which cannot resolve the
 // package's .js-suffixed re-exports; dishIndex.ts itself has only type imports.
-import { toDealsIndexDoc, toDishIndexEntry } from '../../packages/shared/src/dishIndex.ts';
+import { toDishIndexEntry } from '../../packages/shared/src/dishIndex.ts';
 
 function visible(b: Business, br: Branch): boolean {
   return b.approval === 'approved' && br.approval === 'approved';
@@ -57,7 +57,6 @@ export async function reprojectBusinessSeed(db: Firestore, businessId: string): 
     if (b.type === 'restaurant') {
       const live = prods.docs.map((p) => p.data() as Product).filter((p) => !p.archived);
       batch.set(ref.collection('index').doc('dishes'), { branchId: br.id, businessId: b.id, dishes: Object.fromEntries(live.map((p) => [p.id, toDishIndexEntry(p)])), updatedAt: now });
-      batch.set(ref.collection('index').doc('deals'), toDealsIndexDoc(br.id, b.id, combos.docs.map((c) => c.data() as Combo), promos.docs.map((p) => p.data() as Promotion), now));
     }
   }
   await batch.commit();
