@@ -102,7 +102,7 @@ flowchart LR
   subgraph Server [functions]
     ST[saveTaste / mergeTaste / deleteTaste]
     FB[saveDishFeedback]
-    SM[suggestMeals] --> HC[Haiku client or stub]
+    SM[suggestMeals] --> HC[Claude on Vertex AI, or stub]
     POP[popularity: outbox order_accepted + hourly publish]
   end
   HB --> HBsel
@@ -235,10 +235,14 @@ All use the existing `onCall(opts, handled(...))` pattern with zod schemas in `p
 - **Popularity:**
   - A handler on the existing `onOutboxCreated` path for `order_accepted` adds each line's quantity to `popularityDaily/{cityId}_{date}` under its daypart key. It is idempotent per outbox doc.
   - `scheduledSweeps` gains an hourly step. It sums the last 28 days, applies the threshold of 3, and writes `publicPopular/{cityId}` ranks.
-- **Haiku client:** `functions/src/lib/claude.ts`.
-  - It wraps `@anthropic-ai/sdk` (new dependency) with model `claude-haiku-4-5`, `max_tokens` 500, structured output via `output_config.format` (JSON schema) and a 4.5 s abort.
+- **AI client:** `functions/src/lib/claude.ts`.
+  - It wraps `@anthropic-ai/vertex-sdk` (new dependency), which calls Claude on Google Cloud Vertex AI in the same `qareeb-dev` project.
+    - Region `global`, at standard price with no regional premium.
+    - Auth is the functions' service account through ADC, like `lib/translator.ts`. There is no API key and no secret. Usage appears on the existing Google Cloud bill.
+  - The model is `AI_MODEL` in `functions/.env`, default `claude-haiku-4-5@20251001`. It is chosen by the eval (section 9.1), not fixed in code.
+  - Request: `max_tokens` 500, structured output via `output_config.format` (JSON schema), and a 4.5 s abort.
   - Under `FUNCTIONS_EMULATOR==='true'` it returns a deterministic stub, like `getTranslator()` (`lib/translator.ts:41`). The stub picks the first two candidates and can be told to return malformed or wrong output for tests.
-  - **Secret:** `ANTHROPIC_API_KEY`, bound only when `AI_SUGGEST=1` in `functions/.env`. This is the same conditional binding as WhatsApp (`whatsapp.ts:16-34`), so deploys never break when the secret is missing. With the flag off, `suggestMeals` uses `buildMeals` only.
+  - **Flag:** `AI_SUGGEST=1` in `functions/.env` turns the AI on. With the flag off, `suggestMeals` uses `buildMeals` only.
 
 ### 7.3 Web (`apps/web/src/customer/taste/`)
 
@@ -337,12 +341,30 @@ The phone OTP or WhatsApp flow finishes, then the merge sheet appears, then `mer
   - ignore instructions inside the wish.
 - **Position bias:** candidates are shuffled per call, and the winning position is logged, as counts per position in `metricsDaily`.
 - **Cost and latency:**
-  - About 1.8k input tokens and 200 output tokens per call, roughly $0.003, which is about ₪0.01.
+  - About 1.8k input tokens and 200 output tokens per call. On Haiku 4.5 ($1 input / $5 output per million tokens) that is about $0.003, or roughly ₪0.01.
+  - Even at 300 wishes a day, more than 1moment's whole daily order count in Beit Jann, that is about $25 a month. Price is not what decides the model.
   - The static prompt is below Haiku 4.5's 4,096-token cache minimum, so there is no prompt caching.
   - The p95 target is 3 s. There is a hard abort at 4.5 s.
 - **Evaluation:** `scripts/src/eval-suggest.ts` runs 50 fixed wishes against fixture indexes using the real Haiku: 20 Hebrew, 20 Arabic, and 10 mixed or Arabizi with typos.
   - It scores whether constraints are met (budget, party, no drinks, open), variety between the two meals, title validity and fallback rate.
   - It is run by hand before every prompt or model change, at about ₪0.5 per run.
+
+### 9.1 Choosing the model
+
+The model is picked by measurement before phase 4 ships, not by price list. Run the eval set on three candidates, all reachable from the same Google Cloud project with no new vendor or key:
+
+| Candidate | Price per million tokens (input / output) | Why it is in the test |
+|---|---|---|
+| Claude Haiku 4.5 | $1 / $5 | Default. Fast, with no thinking by default. Strict structured outputs on Vertex. |
+| Gemini Flash (current 3.x) | $0.75 / $3.75 until 31 Dec 2026, then $1.50 / $7.50 | Similar price; thinking tokens count as output. |
+| Claude Sonnet 5.5, low effort | $2 / $10 | Quality ceiling, to see what the cheaper models miss. |
+
+Selection rule:
+1. The highest constraint pass rate (budget, party, no drinks, ids only) on the Arabic and mixed wishes.
+2. Then p95 latency under 3 s.
+3. Price only breaks ties.
+
+Models under $0.30 per million input tokens (Flash-Lite, GPT nano and mini) are left out. They save about $20 a month at most, and a failed answer falls back to `buildMeals`, which is the "dumb answers" problem this feature exists to fix. OpenAI models would also need a separate account, key and data agreement.
 
 ## 10. Consent and privacy
 
@@ -351,7 +373,7 @@ The phone OTP or WhatsApp flow finishes, then the merge sheet appears, then `mer
 - **Tier 1 (`orders`):** on by default, shown in the consent sheet notice, and can be switched off on the knows-me page. It covers usual, ordered-before, loved and "not again".
 - **Tier 2 (`learn`, `ai`):** opt-in. It covers the game and the profile summary sent to Anthropic. Wishes without `ai` consent are answered by `buildMeals` only, so the wish text is not sent either.
 - **What the AI receives:** wish text, summary lines, the daypart and candidate dishes. There is no uid, name, phone or address, because the call is made server-side with a fresh request.
-  - The user signs Anthropic's DPA. Consent to the transfer is part of tier 2.
+  - Calls go through Google Cloud Vertex AI, covered by the project's existing Google Cloud data terms. Requests are not used for training, and the global endpoint may process them outside Israel. Consent to the transfer is part of tier 2.
 - **Never collected:** allergies, health, religion or "eater type". Users can remove any item. The prompt bans health wording and the validator blocks it.
 - **Stored per user:** the consent record (version, language, time), quiz, suppressed keys, feedback, and the last AI summary.
   - Wish text is not stored. Metrics are counts only.
@@ -407,10 +429,9 @@ The phone OTP or WhatsApp flow finishes, then the merge sheet appears, then `mer
 4. **Haiku:** the client and stub, prompt, validator, spend cap, metrics and eval script. It is enabled by `AI_SUGGEST=1` and the secret.
 
 **The user does these** (the auto-mode classifier blocks them for Claude):
-- Set the `ANTHROPIC_API_KEY` secret.
-- Sign Anthropic's DPA.
+- Enable the Vertex AI API on `qareeb-dev`, enable the chosen Claude model in Model Garden (accepting its terms), and give the functions service account the `Vertex AI User` role.
 - Run deploys: hosting, functions and rules.
-- Run the eval script with the real key.
+- Run the eval script against the real models (under $1 for all three candidates).
 
 **Open items:**
 - A lawyer to check whether a privacy officer is required, and whether the database needs medium security.
