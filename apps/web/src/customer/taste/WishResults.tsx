@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { evaluateOpen, type DishIndexDoc, type DishIndexEntry, type MealItem, type NoFit, type ReasonCode, type Refine } from '@qareeb/shared';
+import { evaluateOpen, priceLine, type DishIndexDoc, type DishIndexEntry, type MealItem, type NoFit, type ReasonCode, type Refine } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
 import { ApiError, call } from '@/lib/api';
 import { errorKey } from '@/lib/errors';
@@ -61,7 +61,10 @@ export function WishResults({ wish, askId, restaurants, indexes, cityId, now, on
     return out;
   };
 
+  // Only the latest request may set the answer: a slower earlier one (a quick refine tap) is dropped.
+  const latest = useRef(0);
   const run = async (ai: boolean, refine?: Refine, prev?: Answer) => {
+    const id = ++latest.current;
     setState({ status: 'loading' });
     const local = localTaste.get().doc;
     const live = prev ? resolve(prev.meals) : [];
@@ -71,9 +74,9 @@ export function WishResults({ wish, askId, restaurants, indexes, cityId, now, on
         ...(taste.signedIn ? {} : { ai, ...(ai && local?.quiz ? { anon: { ...(local.quiz.party ? { party: local.quiz.party } : {}), pairs: local.quiz.pairs } } : {}) }),
         ...(refine ? { refine, prev: { branchIds: live.map((m) => m.branchId).slice(0, 4), ...(live.length ? { minTotalAgorot: Math.min(...live.map((m) => m.total)) } : {}) } } : {}),
       });
-      setState({ status: 'done', answer });
+      if (id === latest.current) setState({ status: 'done', answer });
     } catch (e) {
-      setState({ status: e instanceof ApiError && e.code === 'rate_limited' ? 'limited' : 'error' });
+      if (id === latest.current) setState({ status: e instanceof ApiError && e.code === 'rate_limited' ? 'limited' : 'error' });
     }
   };
 
@@ -98,8 +101,8 @@ export function WishResults({ wish, askId, restaurants, indexes, cityId, now, on
           <p>{t('taste.wish.consent')}</p>
           <Button size="sm" onClick={async () => {
             try {
+              // The consent effect above sends the wish once the new consent arrives.
               await taste.actions.setConsent({ orders: taste.doc?.consent?.orders ?? true, learn: taste.doc?.consent?.learn ?? false, ai: true });
-              void run(true);
             } catch (e) {
               toast(t(errorKey(e)), 'danger');
             }
@@ -128,7 +131,7 @@ export function WishResults({ wish, askId, restaurants, indexes, cityId, now, on
   const note = answer.noFit === 'closed' || (meals.length === 0 && answer.meals.length > 0) ? t('taste.wish.closed')
     : answer.noFit === 'budget' && answer.budgetAgorot ? t('taste.wish.budget', { budget: money(answer.budgetAgorot, locale) })
     : meals.length === 0 ? t('taste.wish.none') : null;
-  const ai = aiConsent || !declined;
+  const ai = aiConsent;
   return (
     <section className="twish" aria-live="polite">
       <div className="twish__head">
@@ -186,7 +189,11 @@ function Album({ meal, onOpen }: { meal: LiveMeal; onOpen: () => void }) {
   );
 }
 
-/** One meal, editable: tap a photo to leave a dish out, change amounts, then add it all to the cart. */
+/**
+ * One meal, editable: tap a photo to leave a dish out, change amounts, then add it all to the cart.
+ * The sheet loads the dishes' menu entries, so the total is exactly what the cart will hold (the
+ * cheapest size plus paid required options), not the index's starting price.
+ */
 function MealSheet({ meal, cityId, placeName, onClose }: { meal: LiveMeal; cityId: string; placeName: string; onClose: () => void }) {
   const t = useT();
   const { L, locale } = useI18n();
@@ -195,8 +202,25 @@ function MealSheet({ meal, cityId, placeName, onClose }: { meal: LiveMeal; cityI
   const [off, setOff] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<null | (() => void)>(null);
-  const kept = meal.dishes.filter((d) => !off.has(d.productId));
-  const total = kept.reduce((s, d) => s + d.entry.priceAgorot * (qty[d.productId] ?? 1), 0);
+  const [place, setPlace] = useState<Awaited<ReturnType<typeof loadPlace>> | null>(null);
+  useEffect(() => {
+    let live = true;
+    loadPlace(meal.branch, meal.dishes.map((d) => d.productId)).then((p) => { if (live) setPlace(p); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [meal]);
+
+  // The real line for a dish at its amount, or null when the menu no longer allows it.
+  const lineFor = (productId: string) => {
+    const p = place?.products.get(productId);
+    if (!p) return place ? null : undefined;
+    const filled = defaultLine(p, qty[productId] ?? 1);
+    const priced = filled ? priceLine(p, filled.line) : null;
+    return filled && priced?.line ? { filled, total: priced.line.lineTotalAgorot } : null;
+  };
+  const gone = new Set(meal.dishes.filter((d) => lineFor(d.productId) === null).map((d) => d.productId));
+  const kept = meal.dishes.filter((d) => !off.has(d.productId) && !gone.has(d.productId));
+  const exact = !!place;
+  const total = kept.reduce((s, d) => s + (lineFor(d.productId)?.total ?? d.entry.priceAgorot * (qty[d.productId] ?? 1)), 0);
   const hero = meal.dishes.find((d) => d.entry.imagePath)?.entry.imagePath;
   const toggle = (id: string) => {
     const next = new Set(off);
@@ -206,22 +230,22 @@ function MealSheet({ meal, cityId, placeName, onClose }: { meal: LiveMeal; cityI
     setOff(next);
   };
   const add = async () => {
+    if (!place) return;
     setBusy(true);
     try {
-      const { business, products } = await loadPlace(meal.branch, kept.map((d) => d.productId));
-      const lines = kept.map((d) => { const p = products.get(d.productId); return p ? defaultLine(p, qty[d.productId] ?? 1) : null; });
-      if (lines.some((l) => !l)) {
+      const lines = kept.map((d) => lineFor(d.productId)?.filled ?? null);
+      if (lines.some((l) => !l) || kept.length === 0) {
         toast(t('taste.band.reorderFailed'));
         navigate(`/b/${meal.branch.businessId}/${meal.branch.id}`);
         return;
       }
       const go = () => {
-        fillCart(business, meal.branch, cityId, lines.filter((l) => !!l));
+        fillCart(place.business, meal.branch, cityId, lines.filter((l) => !!l));
         void call('trackTaste', { event: 'meal_added' }).catch(() => undefined);
         toast(t('taste.meal.added'));
         onClose();
       };
-      if (needsReplace(business, meal.branch)) setConfirm(() => go);
+      if (needsReplace(place.business, meal.branch)) setConfirm(() => go);
       else go();
     } catch (e) {
       toast(t(errorKey(e)), 'danger');
@@ -229,8 +253,9 @@ function MealSheet({ meal, cityId, placeName, onClose }: { meal: LiveMeal; cityI
       setBusy(false);
     }
   };
+  const totalText = money(total, locale);
   return (
-    <Dialog open onClose={onClose} title={meal.title ?? t('taste.wish.mealFrom', { place: placeName })} footer={<Button block loading={busy} onClick={() => void add()}>{t('taste.meal.add', { total: money(total, locale) })}</Button>}>
+    <Dialog open onClose={onClose} title={meal.title ?? t('taste.wish.mealFrom', { place: placeName })} footer={<Button block loading={busy || !exact} disabled={kept.length === 0} onClick={() => void add()}>{t('taste.meal.add', { total: totalText })}</Button>}>
       <div className="tmeal">
         <div className="tmeal__hero">
           <StorageImage path={hero} alt="" fallbackLabel="" fallbackMark={placeName} />
@@ -239,23 +264,31 @@ function MealSheet({ meal, cityId, placeName, onClose }: { meal: LiveMeal; cityI
         <ul className="tmeal__list">
           {meal.dishes.map((d) => {
             const name = L(d.entry.name, meal.branch.businessDefaultLocale);
-            const isOff = off.has(d.productId);
+            const unavailable = gone.has(d.productId);
+            const isOff = off.has(d.productId) || unavailable;
+            const line = lineFor(d.productId);
+            const unit = line ? line.total / Math.max(1, line.filled.line.quantity) : d.entry.priceAgorot;
             return (
               <li key={d.productId} className={`tmeal__dish ${isOff ? 'is-off' : ''}`}>
-                <button type="button" className="tmeal__thumb" onClick={() => toggle(d.productId)} aria-pressed={!isOff} aria-label={isOff ? t('taste.meal.restore', { name }) : t('taste.meal.remove', { name })}>
+                <button type="button" className="tmeal__thumb" onClick={() => toggle(d.productId)} disabled={unavailable} aria-pressed={!isOff} aria-label={isOff ? t('taste.meal.restore', { name }) : t('taste.meal.remove', { name })}>
                   <StorageImage path={d.entry.imagePath} alt="" fallbackLabel="" fallbackMark={name} />
                   <span className="tmeal__mark" aria-hidden="true"><Icon name={isOff ? 'plus' : 'check'} size={14} /></span>
                 </button>
-                <span className="tmeal__name">{name}<span className="tmeal__sub"><bdi className="price">{d.entry.fromPrice || d.entry.needsChoice ? t('cravings.from', { price: money(d.entry.priceAgorot, locale) }) : money(d.entry.priceAgorot, locale)}</bdi></span></span>
+                <span className="tmeal__name">
+                  {name}
+                  <span className="tmeal__sub">
+                    {unavailable ? t('common.unavailable') : <bdi className="price">{line ? money(unit, locale) : t('cravings.from', { price: money(d.entry.priceAgorot, locale) })}</bdi>}
+                    {line && line.filled.meta.modifierNames.length ? ` · ${line.filled.meta.modifierNames.map((m) => L(m)).join(t('taste.listSep'))}` : ''}
+                  </span>
+                </span>
                 {isOff ? <span /> : <Stepper size="sm" value={qty[d.productId] ?? 1} min={1} max={10} onChange={(v) => setQty({ ...qty, [d.productId]: v })} decLabel={t('product.decrease')} incLabel={t('product.increase')} />}
               </li>
             );
           })}
         </ul>
-        <div className="tmeal__sum"><span>{t('common.total')}</span><strong><bdi className="money">{money(total, locale)}</bdi></strong></div>
+        <div className="tmeal__sum"><span>{t('common.total')}</span><strong><bdi className="money">{totalText}</bdi></strong></div>
       </div>
       <ConfirmDialog open={!!confirm} onClose={() => setConfirm(null)} onConfirm={() => { const go = confirm; setConfirm(null); go?.(); }} title={t('product.replaceCartTitle')} body={t('product.replaceCartBody', { business: placeName })} confirmLabel={t('product.replaceCartConfirm')} danger />
     </Dialog>
   );
 }
-

@@ -8,7 +8,7 @@ const FAST_MS = 3000;
  * One wish's AI cost and outcome, added to today's spendDaily doc with increments only, so
  * concurrent calls never conflict and the admin costs page sees them at once.
  */
-export async function recordAiSpend(r: { outcome: AiOutcome; model?: string; inTok?: number; outTok?: number; ms?: number; /** Released from reserveAiBudget. */ reserved?: number }, now = new Date()): Promise<void> {
+export async function recordAiSpend(r: { outcome: AiOutcome; model?: string; inTok?: number; outTok?: number; ms?: number; /** Released from reserveAiBudget. */ reserved?: number; anon?: boolean }, now = new Date()): Promise<void> {
   const inTok = r.inTok ?? 0;
   const outTok = r.outTok ?? 0;
   const price = r.model ? aiPrice(r.model) : { input: 0, output: 0 };
@@ -23,6 +23,7 @@ export async function recordAiSpend(r: { outcome: AiOutcome; model?: string; inT
       ai: {
         microUsd: inc(total),
         ...(r.reserved ? { reservedMicroUsd: inc(-r.reserved) } : {}),
+        ...(r.anon ? { anonMicroUsd: inc(total), ...(r.reserved ? { anonReservedMicroUsd: inc(-r.reserved) } : {}) } : {}),
         calls: inc(1),
         ...(r.outcome === 'ok' ? { ok: inc(1) } : {}),
         ...(r.outcome === 'skipped' ? { skipped: inc(1) } : {}),
@@ -74,18 +75,23 @@ export async function aiCapMicroUsd(): Promise<number> {
   return typeof cfg?.aiDailyCapMicroUsd === 'number' ? cfg.aiDailyCapMicroUsd : DEFAULT_AI_CAP_MICRO_USD;
 }
 
+/** Signed-out wishes may use at most this share of the daily cap, so they can never lock real customers out. */
+export const ANON_CAP_SHARE = 0.3;
+
 /**
  * Holds a call's worst-case cost against today's cap before the call is made, so concurrent wishes
- * can never spend past the cap together. False when the cap would be passed: the wish is then
- * answered by code only. recordAiSpend releases the hold and adds the real cost.
+ * can never spend past the cap together. False when the cap (or, signed out, the anonymous share of
+ * it) would be passed: the wish is then answered by code only. recordAiSpend releases the hold.
  */
-export async function reserveAiBudget(estimateMicroUsd: number, now = new Date()): Promise<boolean> {
+export async function reserveAiBudget(estimateMicroUsd: number, now = new Date(), anon = false): Promise<boolean> {
   const cap = await aiCapMicroUsd();
   const ref = col.spendDaily(israelDay(now));
   return db.runTransaction(async (tx) => {
     const ai = ((await tx.get(ref)).data() as SpendDay | undefined)?.ai;
     if ((ai?.microUsd ?? 0) + (ai?.reservedMicroUsd ?? 0) + estimateMicroUsd > cap) return false;
-    tx.set(ref, { ai: { reservedMicroUsd: FieldValue.increment(estimateMicroUsd) } }, { merge: true });
+    if (anon && (ai?.anonMicroUsd ?? 0) + (ai?.anonReservedMicroUsd ?? 0) + estimateMicroUsd > cap * ANON_CAP_SHARE) return false;
+    const inc = FieldValue.increment(estimateMicroUsd);
+    tx.set(ref, { ai: { reservedMicroUsd: inc, ...(anon ? { anonReservedMicroUsd: inc } : {}) } }, { merge: true });
     return true;
   });
 }

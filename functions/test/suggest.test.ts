@@ -202,3 +202,40 @@ describe('taste metrics', () => {
     expect(after.tryTaps).toBe((before.tryTaps ?? 0) + 1);
   });
 });
+
+describe('review fixes', () => {
+  it('signed-out wishes stop at their share of the cap while signed-in customers still get the AI', async () => {
+    const before = await spend();
+    const cap = (before.ai?.microUsd ?? 0) + (before.ai?.reservedMicroUsd ?? 0) + 200_000;
+    // Signed-out spend has already reached 30% of the cap today.
+    const pad = Math.ceil(cap * 0.3);
+    await admin.db.doc(`spendDaily/${today()}`).set({ ai: { anonMicroUsd: FieldValue.increment(pad) } }, { merge: true });
+    await admin.db.doc('config/platform').set({ aiDailyCapMicroUsd: cap }, { merge: true });
+    const uid = `suggest-share-${Date.now()}`;
+    const c = await asUid(uid);
+    try {
+      const anon = await guest.call<Res>('suggestMeals', wish('שווארמה', { ai: true }));
+      expect(anon.source).toBe('rules');
+      expect((await spend()).ai!.fallback.capped).toBe((before.ai?.fallback?.capped ?? 0) + 1);
+      await c.call('saveTaste', { consent: { orders: true, learn: false, ai: true, version: 1, locale: 'he' } });
+      expect((await c.call<Res>('suggestMeals', wish('שווארמה'))).source).toBe('ai');
+    } finally {
+      await c.close();
+      await admin.db.doc(`spendDaily/${today()}`).set({ ai: { anonMicroUsd: FieldValue.increment(-pad) } }, { merge: true });
+      await admin.db.doc('config/platform').update({ aiDailyCapMicroUsd: FieldValue.delete() });
+    }
+  });
+
+  it('a wish for food only a closed place serves says "closed" instead of offering other food', async () => {
+    // Knafeh is only on the main branch's menu; pause that branch.
+    const ref = admin.db.doc(`publicBranches/${IDS.branchA}`);
+    await ref.update({ ordersPaused: true });
+    try {
+      const r = await guest.call<Res>('suggestMeals', wish('כנאפה', { ai: false }));
+      expect(r.noFit).toBe('closed');
+      expect(r.meals).toEqual([]);
+    } finally {
+      await ref.update({ ordersPaused: false });
+    }
+  });
+});

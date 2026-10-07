@@ -10,6 +10,9 @@ export interface SpendDay {
     microUsd: number;
     /** Worst-case cost held for AI calls in flight (see reserveAiBudget); released as each call settles. */
     reservedMicroUsd?: number;
+    /** Spend and holds of signed-out wishes, limited to a share of the cap. */
+    anonMicroUsd?: number;
+    anonReservedMicroUsd?: number;
     /** Wishes handled by suggestMeals, AI or not. */
     calls: number;
     /** Answered by the AI. */

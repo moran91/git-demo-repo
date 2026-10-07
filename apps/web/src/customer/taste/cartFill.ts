@@ -40,7 +40,8 @@ function meta(product: PublicProduct, line: CartLine, modifierNames: Localized[]
 
 /**
  * A meal's dish as a cart line: the cheapest available size and, for each required group, the
- * cheapest options up to its minimum. That is the price the dish index shows.
+ * cheapest options up to its minimum. Paid required options make it dearer than the index's
+ * starting price, so the meal sheet totals these lines, not the index.
  */
 export function defaultLine(product: PublicProduct, qty: number): FilledLine | null {
   if (!product.available || !product.inStock) return null;

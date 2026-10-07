@@ -116,13 +116,18 @@ test('a wish gets two meals; the meal sheet puts the meal in the cart with the c
   ]);
 });
 
-test('with AI consent the wish is answered by the AI (stub) and labelled', async ({ page }) => {
+test('with AI consent the wish is answered by the AI (stub), labelled, and sent once', async ({ page }) => {
+  const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date());
+  const calls = async () => (((await fsGet(`spendDaily/${day}`))?.ai as { calls?: number } | undefined)?.calls ?? 0);
   await page.goto('/');
   await page.getByRole('searchbox', { name: 'חיפוש מנות' }).fill('פלאפל לשלושה');
   await page.getByRole('searchbox', { name: 'חיפוש מנות' }).press('Enter');
+  const before = await calls();
   await page.getByRole('button', { name: 'כן, לשלוח' }).click();
   await expect(page.getByText('הצעת AI')).toBeVisible();
   await expect(page.locator('.talbum').first()).toContainText('ארוחה טעימה');
+  await page.waitForTimeout(1500);
+  expect(await calls()).toBe(before + 1);
 });
 
 test('feedback: "not again" takes the dish out of suggestions; the knows-me page shows and undoes it', async ({ page }) => {

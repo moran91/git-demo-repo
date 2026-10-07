@@ -77,7 +77,7 @@ for (const [wish, locale] of WISHES) {
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
     const res = await client.messages.create(
-      { model: MODEL, max_tokens: 500, system: SYSTEM, messages: [{ role: 'user', content: user }], output_config: { format: { type: 'json_schema', schema: schemaFor(candidates.map((c) => c.alias)) } } },
+      { model: MODEL, max_tokens: 500, system: SYSTEM, messages: [{ role: 'user', content: user }], output_config: { format: { type: 'json_schema', schema: schemaFor() } } },
       { signal: controller.signal, maxRetries: 0 },
     );
     const ms = Date.now() - started;

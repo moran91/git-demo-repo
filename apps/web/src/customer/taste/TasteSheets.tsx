@@ -203,7 +203,8 @@ export function TasteMerge() {
   const local = localTaste.use();
   const [busy, setBusy] = useState<'link' | 'fresh' | null>(null);
   const doc = local.doc;
-  const open = !!user && !!(doc?.consent || doc?.quiz);
+  const session = tasteSession.use();
+  const open = !!user && !!(doc?.consent || doc?.quiz) && !session.mergeLater;
   const choose = async (choice: 'link' | 'fresh') => {
     if (!doc) return;
     setBusy(choice);
@@ -224,8 +225,9 @@ export function TasteMerge() {
       setBusy(null);
     }
   };
+  // Closing without a choice keeps the device's picks and asks again on the next visit.
   return (
-    <Dialog open={open} onClose={() => void choose('fresh')} title={t('taste.merge.title')}>
+    <Dialog open={open} onClose={() => tasteSession.set({ mergeLater: true })} title={t('taste.merge.title')}>
       <div className="tconsent">
         <p style={{ margin: 0 }}>{t('taste.merge.body')}</p>
         <div className="tconsent__actions">

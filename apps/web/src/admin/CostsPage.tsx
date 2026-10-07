@@ -7,8 +7,8 @@ import { call } from '@/lib/api';
 import { errorKey } from '@/lib/errors';
 import { Badge, Button, Skeleton, TextInput, toast } from '@/design/components';
 
-/** Rough shekel equivalent shown beside dollars; Google bills in dollars. */
-const ILS_PER_USD = 3.7;
+/** Rough shekel equivalent beside dollars: the rate qareeb-dev's billing account used in October 2026. */
+const ILS_PER_USD = 3.07;
 const MODEL_NAMES: Record<string, string> = { 'claude-haiku-4-5@20251001': 'Claude Haiku 4.5', 'claude-sonnet-5-5': 'Claude Sonnet 5.5', stub: 'Stub (emulator)' };
 
 const usd = (micro: number, digits = 2) => `$${(micro / 1_000_000).toFixed(digits)}`;

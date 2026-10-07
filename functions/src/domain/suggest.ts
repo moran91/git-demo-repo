@@ -23,7 +23,8 @@ const opts = { region: REGION, memory: '512MiB', timeoutSeconds: 30 } as const;
 const AI_TIMEOUT_MS = 4500;
 const PER_BRANCH = 6;
 const BRANCHES = 8;
-const CACHE_MS = 60_000;
+// The emulator reads fresh every call, so tests see menu changes at once.
+const CACHE_MS = process.env.FUNCTIONS_EMULATOR === 'true' ? 0 : 60_000;
 /** matchScore's level for a match on the place name only. */
 const PLACE_LEVEL = 7;
 
@@ -140,7 +141,9 @@ export const suggestMeals = onCall(opts, handled(async (req: CallableRequest<unk
   // A wish that names a food keeps to the dishes that match it, plus each place's sides.
   const picked = topBranches.flatMap((b) => b.list.filter((c) => !wishMatched || c.wish !== undefined || (c.entry.dishType && ['snacks', 'salads', 'pastries', 'desserts'].includes(c.entry.dishType))).slice(0, PER_BRANCH));
 
-  const rules = buildMeals({ candidates: picked.length ? picked : all, facts, derived, popular: city.popular, now });
+  // The food asked for exists only at places that are closed now: say so rather than offer other food.
+  const closedOnly = queries.length > 0 && !wishMatched && all.some((c) => !c.open && c.wish !== undefined);
+  const rules = closedOnly ? { meals: [] as Meal[], noFit: 'closed' as NoFit } : buildMeals({ candidates: picked.length ? picked : all, facts, derived, popular: city.popular, now });
   let meals: Meal[] = rules.meals;
   let noFit: NoFit = rules.noFit;
   let source: 'ai' | 'rules' = 'rules';
@@ -148,13 +151,17 @@ export const suggestMeals = onCall(opts, handled(async (req: CallableRequest<unk
   let outcome: AiOutcome = 'skipped';
   let usage: { model?: string; inTok?: number; outTok?: number; ms?: number } = {};
   let pickPosition = 0;
-  const aiAllowed = aiEnabled() && profile.aiConsent && picked.length > 0;
+  const aiAllowed = aiEnabled() && profile.aiConsent && picked.length > 0 && !closedOnly;
   const picker = getMealPicker();
   const price = aiPrice(picker.model);
   // Worst case for one call: the prompt (about 4 characters a token, rounded up generously) and a full answer.
   const reserved = Math.ceil(((SYSTEM.length + 120 * (picked.length + 12)) / 3) * price.input + MAX_OUT_TOKENS * price.output);
-  const held = aiAllowed ? await reserveAiBudget(reserved, now) : false;
-  if (aiAllowed && !held) outcome = 'capped';
+  const anon = !profile.uid;
+  // A contended or failed hold must not break the wish: it is answered by code, counted as an error.
+  const held = aiAllowed ? await reserveAiBudget(reserved, now, anon).catch((e: unknown) => { console.error('AI budget hold failed', e instanceof Error ? e.message : e); return null; }) : false;
+  let summaryText: string | null = null;
+  if (aiAllowed && held === null) outcome = 'error';
+  else if (aiAllowed && !held) outcome = 'capped';
   else if (aiAllowed) {
     const shuffled = shuffle(picked, now.getTime() % 100_000);
     const candidates = shuffled.map((c, i): AiCandidate => ({ alias: `c${i + 1}`, branchId: c.branchId, productId: c.productId, entry: c.entry }));
@@ -166,7 +173,7 @@ export const suggestMeals = onCall(opts, handled(async (req: CallableRequest<unk
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
     try {
-      const res = await picker.pick({ system: SYSTEM, user: userMessage({ wish, facts, party, locale: input.locale, daypart, summary, candidates, placeOf, locales }), schema: schemaFor(candidates.map((c) => c.alias)), signal: controller.signal });
+      const res = await picker.pick({ system: SYSTEM, user: userMessage({ wish, facts, party, locale: input.locale, daypart, summary, candidates, placeOf, locales }), schema: schemaFor(), signal: controller.signal });
       usage = { model: picker.model, inTok: res.inTok, outTok: res.outTok, ms: Date.now() - started };
       const valid = validateAiMeals(res.json, { candidates: new Map(candidates.map((c) => [c.alias, c])), facts, locale: input.locale });
       // Position bias: which slot (in sixes) of the shuffled list held the first dish the model chose.
@@ -183,7 +190,7 @@ export const suggestMeals = onCall(opts, handled(async (req: CallableRequest<unk
         meals = [...valid.meals, ...fill].slice(0, 2);
         noFit = 'none';
       }
-      if (profile.uid) await col.taste(profile.uid).set({ lastAiSummary: { text: summary.join('\n'), at: nowIso() } }, { merge: true });
+      summaryText = summary.join('\n');
     } catch (e) {
       const aborted = controller.signal.aborted;
       outcome = aborted ? 'timeout' : 'error';
@@ -193,6 +200,15 @@ export const suggestMeals = onCall(opts, handled(async (req: CallableRequest<unk
       clearTimeout(timer);
     }
   }
+  // What was sent is kept for the knows-me page, unless AI consent was withdrawn during the call.
+  if (profile.uid && summaryText !== null) {
+    const ref = col.taste(profile.uid);
+    const text = summaryText;
+    await db.runTransaction(async (tx) => {
+      const doc = (await tx.get(ref)).data() as TasteDoc | undefined;
+      if (doc?.consent?.ai === true) tx.set(ref, { lastAiSummary: { text, at: nowIso() } }, { merge: true });
+    }).catch((e: unknown) => console.error('AI summary save failed', e instanceof Error ? e.message : e));
+  }
   await bumpTasteMetrics({
     suggestionsShown: meals.length,
     aiCalls: outcome === 'ok' || outcome === 'invalid' || outcome === 'timeout' || outcome === 'error' ? 1 : 0,
@@ -200,7 +216,7 @@ export const suggestMeals = onCall(opts, handled(async (req: CallableRequest<unk
     aiTimeouts: outcome === 'timeout' ? 1 : 0,
     ...(pickPosition ? { [`aiPickPos${pickPosition}`]: 1 } : {}),
   }, now).catch((e: unknown) => console.error('taste metrics failed', e instanceof Error ? e.message : e));
-  await recordAiSpend({ outcome, ...usage, ...(held ? { reserved } : {}) }, now).catch((e: unknown) => console.error('spend record failed', e instanceof Error ? e.message : e));
+  await recordAiSpend({ outcome, ...usage, ...(held ? { reserved } : {}), anon }, now).catch((e: unknown) => console.error('spend record failed', e instanceof Error ? e.message : e));
 
   // Names and prices stay out: the client renders them from its live dish indexes.
   return {

@@ -13,7 +13,7 @@ export const localTaste = createStore<{ doc: TasteDoc | null }>('taste', { doc: 
 export const consentSeen = createStore<{ seen: boolean }>('taste-seen', { seen: false });
 
 /** Sheets opened from the band and the knows-me page, and the knows-me entry to highlight. */
-export const tasteSession = createStore<{ consentShown: boolean; gameOpen: boolean; knowsFocus: string | null }>('taste-session', { consentShown: false, gameOpen: false, knowsFocus: null }, { persist: false });
+export const tasteSession = createStore<{ consentShown: boolean; gameOpen: boolean; knowsFocus: string | null; mergeLater: boolean }>('taste-session', { consentShown: false, gameOpen: false, knowsFocus: null, mergeLater: false }, { persist: false });
 
 export interface TasteActions {
   setConsent(c: { orders: boolean; learn: boolean; ai: boolean }): Promise<void>;
