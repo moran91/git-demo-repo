@@ -9,6 +9,9 @@ import { PlaceRow } from './BusinessCard';
 import { cityPickerStore } from './CityControl';
 import { StoriesBar } from './StoriesBar';
 import { CravingsHome } from './CravingsHome';
+import { useDishIndexes } from './dishIndex';
+import { HomeBand, useCityDishes } from './taste/HomeBand';
+import { TasteHost } from './taste/TasteSheets';
 
 /**
  * Customer home, food first: stories on a green band, then "what do I feel like eating?" (search and
@@ -25,6 +28,9 @@ export function DiscoveryPage() {
   const { data, loading, error } = prefs.kind === 'restaurant' ? restaurants : markets;
   const cityName = city.data ? L(city.data.name) : '…';
   const now = useNow();
+  // One listener per restaurant's dish index, shared by the personal band and dish search.
+  const dishIndexes = useDishIndexes(restaurants.data.map((b) => b.id));
+  const cityDishes = useCityDishes(restaurants.data, dishIndexes.indexes, now);
   const branches = useMemo(() => sortOpenFirst(data, now), [data, now]);
   const multiBranch = useMemo(() => {
     const counts = new Map<string, number>();
@@ -36,10 +42,12 @@ export function DiscoveryPage() {
     <div className="home">
       <div className="crave-band">
         <StoriesBar cityId={prefs.cityId} />
+        <HomeBand restaurants={restaurants.data} indexes={dishIndexes.indexes} cityId={prefs.cityId} now={now} />
       </div>
       {/* The page title stays for screen readers and the document outline; the band opens the page visually. */}
       <h1 className="visually-hidden">{t('brand.tagline')}</h1>
-      <CravingsHome restaurants={restaurants.data} cityId={prefs.cityId} now={now} />
+      <CravingsHome restaurants={restaurants.data} cityId={prefs.cityId} now={now} indexes={dishIndexes.indexes} loading={dishIndexes.loading} />
+      <TasteHost dishes={cityDishes.dishes} />
       <section className="places" aria-labelledby="places">
         <div className="discovery-head">
           <h2 id="places">{t('cravings.places')}</h2>

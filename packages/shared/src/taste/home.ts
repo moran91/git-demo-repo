@@ -63,6 +63,8 @@ export function pickHomeBand(input: {
   /** Orders that already have a dishFeedback doc. */
   ratedOrderIds: string[];
   ordersConsent: boolean;
+  /** From "delete everything": older orders are never asked about again. */
+  ignoreOrdersBefore?: string | null;
   dishes: BandDish[];
   popular: PopularDayparts | null;
   now: Date;
@@ -81,12 +83,13 @@ export function pickHomeBand(input: {
   // Usual: the newest learned order with a usual dish that can be ordered again exactly as it was.
   const learned = new Set(derived.learnedOrderIds);
   const usualKeys = new Set(derived.usual.map((u) => dishKey(u.branchId, u.productId)));
+  const notAgain = new Set(derived.notAgain);
   let usual: HomeBand['usual'] = null;
   for (const o of newestFirst) {
     if (!learned.has(o.id) || o.lines.some((l) => l.comboId && !l.removed)) continue;
     const lines = rateable(o);
     const hit = lines.find((l) => usualKeys.has(dishKey(o.branchId, l.productId)));
-    if (!hit || !lines.every((l) => orderable(o.branchId, l.productId))) continue;
+    if (!hit || !lines.every((l) => orderable(o.branchId, l.productId) && !notAgain.has(dishKey(o.branchId, l.productId)))) continue;
     usual = { order: o, productId: hit.productId };
     break;
   }
@@ -102,12 +105,12 @@ export function pickHomeBand(input: {
   const tryPick = t ? { branchId: t.branchId, productId: t.productId, entry: t.entry, open: t.open } : null;
 
   const rated = new Set(input.ratedOrderIds);
-  const feedbackOrder = input.ordersConsent
-    ? newestFirst.find((o) => {
-        const age = now.getTime() - Date.parse(o.placedAt);
-        return o.status === 'accepted' && age >= FEEDBACK_AFTER_MS && age <= FEEDBACK_UNTIL_MS && !rated.has(o.id) && rateable(o).length > 0;
-      }) ?? null
-    : null;
+  const cutoff = input.ignoreOrdersBefore ? Date.parse(input.ignoreOrdersBefore) : -Infinity;
+  // Only the newest accepted order old enough to have been eaten is asked about: once it is answered
+  // (or closed), older orders are never asked, so the card never comes back twice in a row.
+  const latest = newestFirst.find((o) => o.status === 'accepted' && now.getTime() - Date.parse(o.placedAt) >= FEEDBACK_AFTER_MS);
+  const feedbackOrder = input.ordersConsent && latest && now.getTime() - Date.parse(latest.placedAt) <= FEEDBACK_UNTIL_MS
+    && Date.parse(latest.placedAt) >= cutoff && !rated.has(latest.id) && rateable(latest).length > 0 ? latest : null;
 
   return { usual, tryPick, popular, feedbackOrder };
 }

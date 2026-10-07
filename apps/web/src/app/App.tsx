@@ -10,6 +10,7 @@ import { CartPage } from '@/customer/CartPage';
 import { CheckoutPage } from '@/customer/CheckoutPage';
 import { OrderPage, OrdersPage } from '@/customer/OrderPages';
 import { AccountPage, AddressesPage, FavoritesPage, NotificationsPage, LoyaltyPage } from '@/customer/AccountPages';
+import { KnowsPage } from '@/customer/taste/KnowsPage';
 import { PhoneAuthPage } from '@/customer/PhoneAuthPage';
 import { QrLanding } from '@/customer/QrLanding';
 import { NotFound, PageFallback } from '@/app/Shell';
@@ -33,6 +34,7 @@ function AppRoutes() {
         <Route path="account/addresses" element={<AddressesPage />} />
         <Route path="account/notifications" element={<NotificationsPage />} />
         <Route path="account/loyalty" element={<LoyaltyPage />} />
+        <Route path="account/taste" element={<KnowsPage />} />
         <Route path="signin" element={<PhoneAuthPage />} />
       </Route>
       <Route path="q/:businessId/:branchId?" element={<QrLanding />} />

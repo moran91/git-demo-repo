@@ -202,6 +202,7 @@ body:has(dialog[open]) { overflow: hidden; }
 @media (min-width: 900px) { .toast-region { bottom: var(--space-6); inset-inline: auto var(--gutter); max-width: 420px; } }
 .toast { pointer-events: auto; background: var(--color-text); color: var(--color-bg); padding: var(--space-3) var(--space-4); border-radius: var(--radius-control); box-shadow: var(--shadow-float); font-size: var(--text-secondary); display: flex; gap: var(--space-3); align-items: center; }
 .toast--danger { background: var(--color-danger); color: #fff; }
+.toast__action { margin-inline-start: auto; min-height: var(--touch-min); padding-inline: var(--space-3); border: 0; border-radius: var(--radius-control); background: none; color: inherit; font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
 .toast { animation: rise-in var(--duration) var(--ease-out); }
 .toast.is-leaving { animation: fade-out var(--duration-exit) var(--ease-in) forwards; }
 

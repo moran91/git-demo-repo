@@ -43,6 +43,7 @@ export function AccountPage() {
       {!user ? (
         <>
           <GuestGate />
+          <Link to="/account/taste" className="btn btn--secondary"><Icon name="heart" size={18} /> {t('taste.knows.title')}</Link>
           <div className="row" style={{ justifyContent: 'center' }}>
             <Link to="/business/signin" className="btn btn--ghost">{t('account.staffSignIn')}</Link>
             <Link to="/business/register" className="btn btn--ghost">{t('account.ownerSignup')}</Link>
@@ -63,6 +64,7 @@ export function AccountPage() {
             <Link to="/orders" className="list__item" style={{ textDecoration: 'none', color: 'inherit' }}><Icon name="bag" /> <span className="list__grow">{t('orders.title')}</span><Icon name="chevron" directional size={18} /></Link>
             <Link to="/account/addresses" className="list__item" style={{ textDecoration: 'none', color: 'inherit' }}><Icon name="house" /> <span className="list__grow">{t('address.title')}</span><Icon name="chevron" directional size={18} /></Link>
             <Link to="/account/loyalty" className="list__item" style={{ textDecoration: 'none', color: 'inherit' }}><Icon name="star" /> <span className="list__grow">{t('account.loyalty')}</span><Icon name="chevron" directional size={18} /></Link>
+            <Link to="/account/taste" className="list__item" style={{ textDecoration: 'none', color: 'inherit' }}><Icon name="heart" /> <span className="list__grow">{t('taste.knows.title')}</span><Icon name="chevron" directional size={18} /></Link>
             <Link to="/account/notifications" className="list__item" style={{ textDecoration: 'none', color: 'inherit' }}><Icon name="bell" /> <span className="list__grow">{t('account.notifications')}</span>{unread.data.length ? <Badge tone="primary">{unread.data.length}</Badge> : null}<Icon name="chevron" directional size={18} /></Link>
             {memberships.length > 0 ? <Link to="/business" className="list__item" style={{ textDecoration: 'none', color: 'inherit' }}><Icon name="store" /> <span className="list__grow">{t('account.businessAccess')}</span><Icon name="chevron" directional size={18} /></Link> : null}
             {isAdmin ? <Link to="/admin" className="list__item" style={{ textDecoration: 'none', color: 'inherit' }}><Icon name="shield" /> <span className="list__grow">{t('nav.admin')}</span><Icon name="chevron" directional size={18} /></Link> : null}

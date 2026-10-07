@@ -4,6 +4,8 @@ import { defineConfig } from '@playwright/test';
  * Requires: emulators (scripts/emulators.sh), seed (SEED_ALWAYS_OPEN=1), and the web dev server on
  * http://127.0.0.1:5173 with VITE_USE_EMULATORS=1. See docs/TESTING.md.
  */
+const baseURL = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:5173';
+
 export default defineConfig({
   testDir: '.',
   timeout: 90_000,
@@ -13,7 +15,9 @@ export default defineConfig({
   retries: 0,
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]],
   use: {
-    baseURL: process.env.E2E_BASE_URL ?? 'http://127.0.0.1:5173',
+    baseURL,
+    // The taste consent sheet shows once per device; specs start past it (taste.spec.ts opts back in).
+    storageState: { cookies: [], origins: [{ origin: new URL(baseURL).origin, localStorage: [{ name: 'qareeb.taste-seen.v1', value: '{"seen":true}' }] }] },
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     locale: 'he-IL',

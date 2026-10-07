@@ -1,7 +1,7 @@
-import { useDeferredValue, useMemo, useState, type ReactNode } from 'react';
+import { useDeferredValue, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { doc, getDoc } from 'firebase/firestore';
-import { DISH_TYPES, LOCALES, availableFulfillmentModes, daySeed, dictionaries, evaluateOpen, highlightRanges, layoutAlternatives, makeId, matchScore, parseQuery, prepareFields, priceLine, rankDishes, type DishHit, type DishType, type Localized, type PreparedFields, type SearchQuery } from '@qareeb/shared';
+import { DISH_TYPES, availableFulfillmentModes, daySeed, dishSearchFields, evaluateOpen, isWish, highlightRanges, layoutAlternatives, makeId, matchScore, parseQuery, priceLine, rankDishes, type DishHit, type DishIndexDoc, type DishType, type Localized, type PreparedFields, type SearchQuery } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
 import { db } from '@/lib/firebase';
 import { addLine, cartBelongsTo, cartStore } from '@/lib/cart';
@@ -10,9 +10,9 @@ import { ConfirmDialog, toast } from '@/design/components';
 import { Icon } from '@/design/Icon';
 import type { PublicBranch, PublicBusiness } from './hooks';
 import type { PublicProduct } from './BusinessPage';
-import { useDishIndexes } from './dishIndex';
 import { ProductSheet } from './ProductSheet';
 import { StorageImage } from './StorageImage';
+import { AskRow, WishResults } from './taste/WishResults';
 import './cravings.css';
 
 type Hit = DishHit & { branch: PublicBranch; opensInMin?: number; search: PreparedFields };
@@ -21,13 +21,13 @@ type Hit = DishHit & { branch: PublicBranch; opensInMin?: number; search: Prepar
  * The home's food-first half (mockup 9): a search field and dish-type chips over every restaurant in
  * the city, with dishes you can add straight to the cart. Places follow below in DiscoveryPage.
  */
-export function CravingsHome({ restaurants, cityId, now }: { restaurants: PublicBranch[]; cityId: string; now: Date }) {
+export function CravingsHome({ restaurants, cityId, now, indexes, loading }: { restaurants: PublicBranch[]; cityId: string; now: Date; indexes: Map<string, DishIndexDoc>; loading: boolean }) {
   const t = useT();
-  const { L } = useI18n();
   const cart = cartStore.use();
   const [query, setQuery] = useState('');
   const [type, setType] = useState<DishType | null>(null);
-  const { indexes, loading } = useDishIndexes(restaurants.map((b) => b.id));
+  const [asked, setAsked] = useState<{ wish: string; id: number } | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const quick = useQuickAdd(cityId);
 
   const hits = useMemo<Hit[]>(() => {
@@ -40,7 +40,7 @@ export function CravingsHome({ restaurants, cityId, now }: { restaurants: Public
       for (const [id, entry] of Object.entries(idx.dishes)) {
         if (!entry.available) continue;
         // Folded and sound-keyed once per menu update, so each keystroke only compares.
-        const search = prepareFields({ name: words(entry.name), description: words(entry.description ?? {}), type: entry.dishType ? DISH_TYPE_WORDS[entry.dishType] : '', place: words(branch.businessName) });
+        const search = dishSearchFields(entry, branch.businessName);
         out.push({ id, branchId: branch.id, open, entry, branch, opensInMin: state.open ? undefined : state.opensInMin, search });
       }
     }
@@ -84,6 +84,9 @@ export function CravingsHome({ restaurants, cityId, now }: { restaurants: Public
 
   // A business with more than one branch listed names the branch too, or two rows would read the same.
   const multi = new Set(restaurants.filter((b, _i, all) => all.some((o) => o.businessId === b.businessId && o.id !== b.id)).map((b) => b.id));
+  const canAsk = q.length > 0 && (isWish(q) || (results.length === 0 && !loading && hits.length > 0));
+  const showWish = asked !== null && asked.wish === q;
+  const ask = () => { if (q) setAsked((a) => ({ wish: q, id: (a?.id ?? 0) + 1 })); };
   const openRows = results.filter((h) => h.open);
   const closedRows = results.filter((h) => !h.open);
   const row = (h: Hit) => <DishRow key={`${h.branchId}/${h.id}`} hit={h} query={search} showBranch={multi.has(h.branchId)} busy={quick.busy === `${h.branchId}/${h.id}`} onAdd={() => void quick.start(h)} />;
@@ -94,7 +97,7 @@ export function CravingsHome({ restaurants, cityId, now }: { restaurants: Public
         <label className="crave-search__box">
           <Icon name="search" size={24} />
           <span className="visually-hidden">{t('cravings.searchLabel')}</span>
-          <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('cravings.search')} autoComplete="off" enterKeyHint="search" />
+          <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && canAsk) { e.preventDefault(); ask(); } }} placeholder={t('cravings.search')} autoComplete="off" enterKeyHint="search" />
           {query ? <button type="button" className="crave-search__clear" onClick={() => setQuery('')} aria-label={t('cravings.clear')}><Icon name="x" size={18} /></button> : null}
         </label>
       </div>
@@ -114,9 +117,12 @@ export function CravingsHome({ restaurants, cityId, now }: { restaurants: Public
 
       {active ? (
         <section className="crave-results" aria-live="polite">
+          {canAsk && !showWish ? <AskRow query={q} onAsk={ask} /> : null}
+          {showWish ? <WishResults wish={asked.wish} askId={asked.id} restaurants={restaurants} indexes={indexes} cityId={cityId} now={now} onShowDishes={() => listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} /> : null}
+          <div ref={listRef} />
           {resultsFor ? <p className="crave-for">{t('cravings.resultsFor', { q: resultsFor })}</p> : null}
           {/* Menus still loading (or none in town): say nothing rather than "no dishes". */}
-          {results.length === 0 && !loading && hits.length > 0 ? <p className="crave-empty">{t('cravings.noResults', { q: q || t(`dishType.${type!}`) })}</p> : null}
+          {results.length === 0 && !loading && hits.length > 0 && !showWish ? <p className="crave-empty">{t('cravings.noResults', { q: q || t(`dishType.${type!}`) })}</p> : null}
           {openRows.length ? <ul className="crave-list">{openRows.map(row)}</ul> : null}
           {closedRows.length ? (
             <>
@@ -132,6 +138,18 @@ export function CravingsHome({ restaurants, cityId, now }: { restaurants: Public
         </section>
       ) : null}
 
+      <QuickAddUi quick={quick} cityId={cityId} />
+    </div>
+  );
+}
+
+/** The product sheet and the replace-cart confirm that quick add may open. */
+export function QuickAddUi({ quick, cityId }: { quick: ReturnType<typeof useQuickAdd>; cityId: string }) {
+  const t = useT();
+  const { L } = useI18n();
+  const cart = cartStore.use();
+  return (
+    <>
       {quick.sheet ? <ProductSheet product={quick.sheet.product} business={quick.sheet.business} branch={quick.sheet.branch} mode={quick.sheet.mode} cityId={cityId} onClose={quick.close} /> : null}
       <ConfirmDialog
         open={!!quick.replace}
@@ -142,7 +160,7 @@ export function CravingsHome({ restaurants, cityId, now }: { restaurants: Public
         confirmLabel={t('product.replaceCartConfirm')}
         danger
       />
-    </div>
+    </>
   );
 }
 
@@ -186,7 +204,7 @@ function DishRow({ hit, query, showBranch, busy, onAdd }: { hit: Hit; query: Sea
  * options opens the product sheet. Both read the full product first so the price always comes from
  * the menu, and both respect the one-place cart (confirm before replacing another place's cart).
  */
-function useQuickAdd(cityId: string) {
+export function useQuickAdd(cityId: string) {
   const t = useT();
   const cart = cartStore.use();
   const [busy, setBusy] = useState<string | null>(null);
@@ -194,7 +212,7 @@ function useQuickAdd(cityId: string) {
   const [replace, setReplace] = useState<{ commit: () => void } | null>(null);
   const close = () => { setSheet(null); setReplace(null); };
 
-  const start = async (h: Hit) => {
+  const start = async (h: { id: string; branchId: string; branch: PublicBranch }) => {
     const key = `${h.branchId}/${h.id}`;
     setBusy(key);
     try {
@@ -271,11 +289,3 @@ function highlight(name: string, query: SearchQuery): ReactNode {
   if (at < name.length) out.push(name.slice(at));
   return out;
 }
-
-/** Every locale's words for a name, so a search in any of the three languages finds it. */
-function words(l: Localized): string {
-  return [l.he, l.ar, l.en].filter(Boolean).join(' ');
-}
-
-/** Dish-type names in all three languages, so typing "פיצה" or "بيتزا" also finds pizzas whose name lacks the word. */
-const DISH_TYPE_WORDS = Object.fromEntries(DISH_TYPES.map((dt) => [dt, LOCALES.map((l) => dictionaries[l][`dishType.${dt}`]).join(' ')])) as Record<DishType, string>;

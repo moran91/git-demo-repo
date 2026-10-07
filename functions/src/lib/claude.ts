@@ -68,7 +68,8 @@ const stubPicker: MealPicker = {
     const party = Number(/^party: (\d+)$/m.exec(user)?.[1] ?? 1);
     const rows = [...user.matchAll(/^(c\d+) \| place (\d+) \| [^|]+ \| (\w+) \|/gm)].map((m) => ({ id: m[1]!, place: m[2]!, type: m[3]! }));
     const firstPerPlace = new Map<string, { id: string; type: string }>();
-    for (const r of rows) if (r.type !== 'drinks' && !firstPerPlace.has(r.place)) firstPerPlace.set(r.place, r);
+    const side = (type: string) => ['drinks', 'snacks', 'salads', 'pastries', 'desserts'].includes(type);
+    for (const r of rows) if (!side(r.type) && !firstPerPlace.has(r.place)) firstPerPlace.set(r.place, r);
     const locale = /^locale: (\w+)$/m.exec(user)?.[1];
     const meals = [...firstPerPlace.values()].slice(0, 2).map((r, i) => ({
       title: locale === 'ar' ? 'وجبة لذيذة' : locale === 'en' ? 'A tasty meal' : 'ארוחה טעימה',

@@ -323,11 +323,11 @@ export function EmptyState({ icon = 'info', title, body, action }: { icon?: Icon
 }
 
 /* ---------- Toasts ---------- */
-export interface ToastItem { id: number; text: string; tone?: 'default' | 'danger'; leaving?: boolean }
+export interface ToastItem { id: number; text: string; tone?: 'default' | 'danger'; leaving?: boolean; action?: { label: string; onClick: () => void } }
 let toastListeners: Array<(t: ToastItem) => void> = [];
 let toastId = 0;
-export function toast(text: string, tone: ToastItem['tone'] = 'default') {
-  const item = { id: ++toastId, text, tone };
+export function toast(text: string, tone: ToastItem['tone'] = 'default', action?: ToastItem['action']) {
+  const item = { id: ++toastId, text, tone, action };
   for (const l of toastListeners) l(item);
 }
 export function ToastRegion() {
@@ -348,6 +348,7 @@ export function ToastRegion() {
       {items.map((t) => (
         <div key={t.id} className={`toast ${t.tone === 'danger' ? 'toast--danger' : ''} ${t.leaving ? 'is-leaving' : ''}`} role={t.tone === 'danger' ? 'alert' : 'status'}>
           {t.text}
+          {t.action ? <button type="button" className="toast__action" onClick={() => { t.action!.onClick(); setItems((prev) => prev.filter((x) => x.id !== t.id)); }}>{t.action.label}</button> : null}
         </div>
       ))}
     </div>

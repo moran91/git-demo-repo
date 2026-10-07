@@ -60,6 +60,16 @@ describe('usual', () => {
   });
 });
 
+describe('usual and "not again"', () => {
+  it('never offers again an order holding a dish marked "not again"', () => {
+    const o1 = order('b1', ['pz', 'fr'], ago(9 * DAY));
+    const o2 = order('b1', ['pz', 'fr'], ago(3 * DAY));
+    const derived = deriveTaste({ doc: doc(), orders: [o1, o2], feedback: [{ orderId: o2.id, branchId: 'b1', placedAt: o2.placedAt, items: { pz: 'not_again' }, forSomeoneElse: false, dismissed: false, updatedAt: o2.placedAt }], now: NOW });
+    expect(derived.usual.map((u) => u.productId)).toEqual(['fr']);
+    expect(pickHomeBand({ derived, orders: [o1, o2], ratedOrderIds: [o2.id], ordersConsent: true, dishes: [dish('b1', 'pz', 'pizza'), dish('b1', 'fr', 'snacks')], popular: null, now: NOW }).usual).toBeNull();
+  });
+});
+
 describe('try and popular', () => {
   it('try is a popular dish never ordered, not disliked; popular is the top 2 open', () => {
     const o1 = order('b1', ['pz'], ago(9 * DAY));
@@ -96,6 +106,18 @@ describe('feedback order', () => {
     expect(band({ orders: [tooNew, ok, old], dishes, rated: [ok.id] }).feedbackOrder).toBeNull();
     expect(band({ orders: [ok], dishes, tasteDoc: doc({ consent: { orders: false, learn: false, ai: false, version: 1, locale: 'he', at: ago(DAY) } }) }).feedbackOrder).toBeNull();
     expect(band({ orders: [order('b1', ['pz'], ago(2 * 60 * MIN), { status: 'rejected' })], dishes }).feedbackOrder).toBeNull();
+  });
+
+  it('never asks about orders from before "delete everything"', () => {
+    const ok = order('b1', ['pz'], ago(2 * 60 * MIN));
+    const derived = deriveTaste({ doc: doc({ ignoreOrdersBefore: ago(60 * MIN) }), orders: [ok], feedback: [], now: NOW });
+    expect(pickHomeBand({ derived, orders: [ok], ratedOrderIds: [], ordersConsent: true, ignoreOrdersBefore: ago(60 * MIN), dishes: [dish('b1', 'pz', 'pizza')], popular: null, now: NOW }).feedbackOrder).toBeNull();
+  });
+
+  it('only ever asks about the newest order: once it is answered, older ones are not asked', () => {
+    const older = order('b1', ['pz'], ago(3 * DAY));
+    const newest = order('b1', ['pz'], ago(3 * 60 * MIN));
+    expect(band({ orders: [older, newest], dishes: [dish('b1', 'pz', 'pizza')], rated: [newest.id] }).feedbackOrder).toBeNull();
   });
 
   it('skips an order with nothing to rate', () => {

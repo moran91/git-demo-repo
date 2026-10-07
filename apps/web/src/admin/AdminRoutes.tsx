@@ -14,6 +14,7 @@ import { UserDetailPage, UsersPage } from './UserPages';
 import { OrdersPage } from './OrdersPage';
 import { AuditPage, CitiesPage, ConfigPage } from './PlatformPages';
 import { InvitationsPage } from './InvitationsPage';
+import { CostsPage } from './CostsPage';
 import './admin.css';
 
 type NavItem = { to: string; icon: IconName; label: string; count?: number; end?: boolean };
@@ -34,6 +35,7 @@ function AdminNav({ onNavigate }: { onNavigate?: () => void }) {
     ] },
     { id: 'platform', label: t('admin.nav.platform'), items: [
       { to: '/admin/cities', icon: 'pin', label: t('admin.cities') },
+      { to: '/admin/costs', icon: 'wallet', label: t('admin.costs') },
       { to: '/admin/audit', icon: 'list', label: t('admin.audit') },
       { to: '/admin/config', icon: 'settings', label: t('admin.config') },
     ] },
@@ -133,6 +135,7 @@ export function AdminRoutes() {
         <Route path="invitations" element={<InvitationsPage />} />
         <Route path="invite" element={<Navigate to="/admin/invitations" replace />} />
         <Route path="cities" element={<CitiesPage />} />
+        <Route path="costs" element={<CostsPage />} />
         <Route path="audit" element={<AuditPage />} />
         <Route path="config" element={<ConfigPage />} />
         <Route path="*" element={<AdminNotFound />} />

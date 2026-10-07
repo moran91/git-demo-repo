@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
+import { TasteMerge } from './taste/TasteSheets';
 import { BRAND } from '@qareeb/shared';
 import { useT } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
@@ -69,6 +70,7 @@ export function CustomerLayout() {
       </header>
       <main id="main" className="page page--customer">
         <Outlet />
+        <TasteMerge />
       </main>
       <span className="visually-hidden" aria-live="polite">{announce}</span>
       <nav className="bottom-nav" aria-label={t('nav.mainNavigation')}>
