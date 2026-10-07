@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
-import { DISH_TYPES, type BandDish, type DishType, type PairAnswer, type Party, type TastePair } from '@qareeb/shared';
+import { DISH_TYPES, DISH_TYPE_WORDS, allWords, type BandDish, type DishType, type PairAnswer, type Party, type TastePair } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
 import { call } from '@/lib/api';
@@ -108,12 +108,22 @@ export function TasteGame({ dishes, onClose }: { dishes: BandDish[]; onClose: ()
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
 
-  // Each type is pictured by a live dish of that type in the city, open places first.
+  // Each type is pictured by a live dish of that type in the city. Owners sometimes tag a snack with a
+  // main's type (pizza-flavoured crisps as "pizza"), so dishes priced far below the type's median are
+  // left out, then most-ordered, open and dishes named after the type come first.
   const photos = useMemo(() => {
     const m = new Map<DishType, { path: string; name: string }>();
-    for (const d of [...dishes].sort((a, b) => Number(b.open) - Number(a.open))) {
-      const type = d.entry.dishType;
-      if (type && d.entry.imagePath && d.entry.available && !m.has(type)) m.set(type, { path: d.entry.imagePath, name: L(d.entry.name) });
+    for (const type of DISH_TYPES) {
+      const ofType = dishes.filter((d) => d.entry.dishType === type && d.entry.imagePath && d.entry.available);
+      if (!ofType.length) continue;
+      const prices = ofType.map((d) => d.entry.priceAgorot).sort((a, b) => a - b);
+      const median = prices[Math.floor(prices.length / 2)]!;
+      const words = DISH_TYPE_WORDS[type].toLowerCase().split(' ').filter((w) => w.length > 2);
+      const named = (d: BandDish) => words.some((w) => allWords(d.entry.name).toLowerCase().includes(w));
+      const pick = ofType
+        .filter((d) => d.entry.priceAgorot >= median * 0.6)
+        .sort((a, b) => Number(!!b.entry.mostOrdered) - Number(!!a.entry.mostOrdered) || Number(b.open) - Number(a.open) || Number(named(b)) - Number(named(a)) || b.entry.priceAgorot - a.entry.priceAgorot)[0];
+      if (pick) m.set(type, { path: pick.entry.imagePath!, name: L(pick.entry.name) });
     }
     return m;
   }, [dishes, L]);
