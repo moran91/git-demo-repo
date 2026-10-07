@@ -6,6 +6,7 @@ import { handled, fail } from '../lib/errors.js';
 import { parse } from '../lib/validate.js';
 import { requireCaller } from '../lib/auth.js';
 import { rateLimit } from '../lib/ratelimit.js';
+import { bumpTasteMetrics } from '../lib/spend.js';
 
 const opts = { region: REGION } as const;
 const QUIZ_MAX_AGE_MS = 90 * 86_400_000;
@@ -133,5 +134,8 @@ export const saveDishFeedback = onCall(opts, handled(async (req: CallableRequest
     tx.set(ref, doc);
     return doc;
   });
+  const verdicts = Object.values(input.items);
+  await bumpTasteMetrics({ feedbackAnswers: verdicts.filter((v) => v !== 'none').length, notAgainTaps: verdicts.filter((v) => v === 'not_again').length })
+    .catch((e: unknown) => console.error('taste metrics failed', e instanceof Error ? e.message : e));
   return { feedback };
 }));

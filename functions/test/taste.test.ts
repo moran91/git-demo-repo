@@ -133,6 +133,16 @@ describe('saveDishFeedback', () => {
     expect(keep).toMatchObject({ forSomeoneElse: true, dismissed: true });
   });
 
+  it('counts answers and "not again" taps on the day\'s metrics', async () => {
+    const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date());
+    const read = async () => ((await admin.db.doc(`metricsDaily/${date}`).get()).data()?.taste ?? {}) as Record<string, number>;
+    const before = await read();
+    await a.call('saveDishFeedback', { orderId: 'fb-mine', items: { 'p-shawarma': 'not_again', 'p-fries': 'loved' } });
+    const after = await read();
+    expect(after.feedbackAnswers).toBe((before.feedbackAnswers ?? 0) + 2);
+    expect(after.notAgainTaps).toBe((before.notAgainTaps ?? 0) + 1);
+  });
+
   it("someone else's order and a missing order look the same", async () => {
     expect(await expectCode(a.call('saveDishFeedback', { orderId: 'fb-theirs', items: { 'p-fries': 'loved' } }))).toBe('not_found');
     expect(await expectCode(a.call('saveDishFeedback', { orderId: 'fb-nope', items: { 'p-fries': 'loved' } }))).toBe('not_found');

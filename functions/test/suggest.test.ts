@@ -178,3 +178,27 @@ describe('setAiDailyCap', () => {
     expect((await admin.db.doc('config/platform').get()).data()!.aiDailyCapMicroUsd).toBe(2_250_000);
   });
 });
+
+describe('taste metrics', () => {
+  const metrics = async () => ((await admin.db.doc(`metricsDaily/${today()}`).get()).data()?.taste ?? {}) as Record<string, number>;
+
+  it('counts suggestions shown and AI calls, and the slot the AI picked from', async () => {
+    const before = await metrics();
+    const r = await guest.call<Res>('suggestMeals', wish('שווארמה', { ai: true }));
+    const after = await metrics();
+    expect(after.suggestionsShown).toBe((before.suggestionsShown ?? 0) + r.meals.length);
+    expect(after.aiCalls).toBe((before.aiCalls ?? 0) + 1);
+    const slots = (m: Record<string, number>) => Object.entries(m).filter(([k]) => k.startsWith('aiPickPos')).reduce((n, [, v]) => n + v, 0);
+    expect(slots(after)).toBe(slots(before) + 1);
+  });
+
+  it('counts client events, and only known ones', async () => {
+    const before = await metrics();
+    await guest.call('trackTaste', { event: 'meal_added' });
+    await guest.call('trackTaste', { event: 'try_tap' });
+    expect(await expectCode(guest.call('trackTaste', { event: 'clicked_everything' }))).toBe('invalid_argument');
+    const after = await metrics();
+    expect(after.mealsAdded).toBe((before.mealsAdded ?? 0) + 1);
+    expect(after.tryTaps).toBe((before.tryTaps ?? 0) + 1);
+  });
+});

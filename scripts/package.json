@@ -7,7 +7,8 @@
     "seed": "node --experimental-strip-types src/seed.ts",
     "bootstrap-admin": "node --experimental-strip-types src/bootstrap-admin.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "check:storage-upload": "node --experimental-strip-types src/check-storage-upload.ts"
+    "check:storage-upload": "node --experimental-strip-types src/check-storage-upload.ts",
+    "eval:suggest": "esbuild src/eval-suggest.ts --bundle --platform=node --format=esm --target=node22 --external:@anthropic-ai/* --outfile=.eval/eval-suggest.mjs --log-level=warning && node .eval/eval-suggest.mjs"
   },
   "dependencies": {
     "firebase-admin": "^14.3.0",

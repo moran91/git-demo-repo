@@ -217,6 +217,7 @@ function MealSheet({ meal, cityId, placeName, onClose }: { meal: LiveMeal; cityI
       }
       const go = () => {
         fillCart(business, meal.branch, cityId, lines.filter((l) => !!l));
+        void call('trackTaste', { event: 'meal_added' }).catch(() => undefined);
         toast(t('taste.meal.added'));
         onClose();
       };

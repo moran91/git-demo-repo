@@ -1,4 +1,4 @@
-import { DEFAULT_AI_CAP_MICRO_USD, TRANSLATE_FREE_CHARS, TRANSLATE_MICRO_USD_PER_CHAR, israelDay, israelHour, type AiOutcome, type PlatformConfig, type SpendDay } from '@qareeb/shared';
+import { toLocal, DEFAULT_AI_CAP_MICRO_USD, TRANSLATE_FREE_CHARS, TRANSLATE_MICRO_USD_PER_CHAR, israelDay, israelHour, type AiOutcome, type PlatformConfig, type SpendDay } from '@qareeb/shared';
 import { FieldValue, col, db, nowIso } from './firebase.js';
 import { aiPrice } from './prices.js';
 
@@ -88,4 +88,16 @@ export async function reserveAiBudget(estimateMicroUsd: number, now = new Date()
     tx.set(ref, { ai: { reservedMicroUsd: FieldValue.increment(estimateMicroUsd) } }, { merge: true });
     return true;
   });
+}
+
+/**
+ * Taste counters on the admin overview's metricsDaily doc (Israeli day), under `taste`: counts only,
+ * never who or what was asked.
+ */
+export async function bumpTasteMetrics(fields: Record<string, number>, now = new Date()): Promise<void> {
+  const date = toLocal(now).date;
+  const taste: Record<string, FirebaseFirestore.FieldValue> = {};
+  for (const [k, v] of Object.entries(fields)) if (v) taste[k] = FieldValue.increment(v);
+  if (Object.keys(taste).length === 0) return;
+  await col.metricsDaily(date).set({ date, taste }, { merge: true });
 }

@@ -116,7 +116,7 @@ export function HomeBand({ restaurants, indexes, cityId, now }: { restaurants: P
               <span className="ttry__label">{t('taste.band.try')}</span>
               <span className="ttry__name">{L(band.tryPick.entry.name, branches.get(band.tryPick.branchId)?.businessDefaultLocale)} · {placeName(branches.get(band.tryPick.branchId)!, branches.values(), L)}</span>
             </span>
-            <button type="button" className="tcard__add" onClick={() => void quick.start({ id: band.tryPick!.productId, branchId: band.tryPick!.branchId, branch: branches.get(band.tryPick!.branchId)! })} aria-label={t('cravings.add', { name: L(band.tryPick.entry.name) })}><Icon name="plus" size={20} /></button>
+            <button type="button" className="tcard__add" onClick={() => { void call('trackTaste', { event: 'try_tap' }).catch(() => undefined); void quick.start({ id: band.tryPick!.productId, branchId: band.tryPick!.branchId, branch: branches.get(band.tryPick!.branchId)! }); }} aria-label={t('cravings.add', { name: L(band.tryPick.entry.name) })}><Icon name="plus" size={20} /></button>
           </div>
         ) : null}
       </>
@@ -165,6 +165,7 @@ function UsualCard({ order, branch, place, index, cityId, onWhy }: { order: Orde
       }
       const go = () => {
         fillCart(business, branch, cityId, filled.filter((f) => !!f));
+        void call('trackTaste', { event: 'usual_reorder' }).catch(() => undefined);
         toast(t('taste.band.inCart'));
         navigate('/cart');
       };

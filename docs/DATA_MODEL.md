@@ -36,6 +36,8 @@ integer grams. IDs are Firestore auto-ids unless noted.
 | `users/{uid}/dishFeedback/{orderId}` | server (`saveDishFeedback`) | owner | Loved / not-again per dish of one order |
 | `popularityDaily/{cityId}_{yyyy-mm-dd}` | server (outbox `order_accepted`) | nobody | Orders per daypart and dish; deleted after 28 days |
 | `publicPopular/{cityId}` | server (`popularityHourly`) | public | Top 12 dishes per daypart, ranks only |
+| `spendDaily/{YYYY-MM-DD}` | server (`suggestMeals`, translation jobs) | admin | AI and translation cost for the Israeli day (`SpendDay`), increments only; counts and costs, never wish text or who |
+| `spendMonthly/{YYYY-MM}` | server (translation jobs) | admin | `translateChars`: the month's Cloud Translation characters, for the 500,000 free allowance |
 | `cities/{id}`, `config/platform` | server (admin callables) | everyone | Reference data |
 | `otpChallenges`, `rateLimits` | server | — | WhatsApp OTP challenges, abuse guards |
 

@@ -49,3 +49,4 @@ __pycache__/
 .DS_Store
 apps/web/src/lab/
 apps/web/*-lab.html
+scripts/.eval/
