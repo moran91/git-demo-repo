@@ -12,8 +12,9 @@ import { parse } from '../lib/validate.js';
 import { requireAdmin, requireCaller } from '../lib/auth.js';
 import { rateLimit } from '../lib/ratelimit.js';
 import { writeAudit } from '../lib/audit.js';
-import { aiEnabled, getMealPicker } from '../lib/claude.js';
-import { aiCapReached, recordAiSpend } from '../lib/spend.js';
+import { MAX_OUT_TOKENS, aiEnabled, getMealPicker } from '../lib/claude.js';
+import { recordAiSpend, reserveAiBudget } from '../lib/spend.js';
+import { aiPrice } from '../lib/prices.js';
 import type { PublicBranchDoc } from '../lib/projections.js';
 
 const opts = { region: REGION, memory: '512MiB', timeoutSeconds: 30 } as const;
@@ -197,7 +198,12 @@ export const suggestMeals = onCall(opts, handled(async (req: CallableRequest<unk
   let outcome: AiOutcome = 'skipped';
   let usage: { model?: string; inTok?: number; outTok?: number; ms?: number } = {};
   const aiAllowed = aiEnabled() && profile.aiConsent && picked.length > 0;
-  if (aiAllowed && (await aiCapReached(now))) outcome = 'capped';
+  const picker = getMealPicker();
+  const price = aiPrice(picker.model);
+  // Worst case for one call: the prompt (about 4 characters a token, rounded up generously) and a full answer.
+  const reserved = Math.ceil(((SYSTEM.length + 120 * (picked.length + 12)) / 3) * price.input + MAX_OUT_TOKENS * price.output);
+  const held = aiAllowed ? await reserveAiBudget(reserved, now) : false;
+  if (aiAllowed && !held) outcome = 'capped';
   else if (aiAllowed) {
     const shuffled = shuffle(picked, now.getTime() % 100_000);
     const candidates = shuffled.map((c, i): AiCandidate => ({ alias: `c${i + 1}`, branchId: c.branchId, productId: c.productId, entry: c.entry }));
@@ -205,7 +211,6 @@ export const suggestMeals = onCall(opts, handled(async (req: CallableRequest<unk
     for (const c of candidates) if (!placeOf.has(c.branchId)) placeOf.set(c.branchId, placeOf.size + 1);
     const typeOf = (b: string, p: string): DishType | undefined => city.indexes.get(b)?.dishes[p]?.dishType;
     const summary = summaryLines(derived, input.locale, typeOf);
-    const picker = getMealPicker();
     const started = Date.now();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
@@ -233,7 +238,7 @@ export const suggestMeals = onCall(opts, handled(async (req: CallableRequest<unk
       clearTimeout(timer);
     }
   }
-  await recordAiSpend({ outcome, ...usage }, now).catch((e: unknown) => console.error('spend record failed', e instanceof Error ? e.message : e));
+  await recordAiSpend({ outcome, ...usage, ...(held ? { reserved } : {}) }, now).catch((e: unknown) => console.error('spend record failed', e instanceof Error ? e.message : e));
 
   // Names and prices stay out: the client renders them from its live dish indexes.
   return {

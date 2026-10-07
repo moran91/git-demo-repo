@@ -8,6 +8,8 @@ import { toLocal } from '../hours.js';
 export interface SpendDay {
   ai: {
     microUsd: number;
+    /** Worst-case cost held for AI calls in flight (see reserveAiBudget); released as each call settles. */
+    reservedMicroUsd?: number;
     /** Wishes handled by suggestMeals, AI or not. */
     calls: number;
     /** Answered by the AI. */

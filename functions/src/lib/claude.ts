@@ -18,7 +18,7 @@ export interface MealPicker {
 }
 
 export const DEFAULT_AI_MODEL = 'claude-haiku-4-5@20251001';
-const MAX_TOKENS = 500;
+export const MAX_OUT_TOKENS = 500;
 
 let client: AnthropicVertex | null = null;
 
@@ -32,7 +32,7 @@ function vertexPicker(model: string): MealPicker {
     async pick({ system, user, schema, signal }) {
       client ??= new AnthropicVertex({ region: process.env.AI_REGION || 'global', projectId: process.env.GCLOUD_PROJECT ?? process.env.GOOGLE_CLOUD_PROJECT ?? null });
       const res = await client.messages.create(
-        { model, max_tokens: MAX_TOKENS, system, messages: [{ role: 'user', content: user }], output_config: { format: { type: 'json_schema', schema } } },
+        { model, max_tokens: MAX_OUT_TOKENS, system, messages: [{ role: 'user', content: user }], output_config: { format: { type: 'json_schema', schema } } },
         { signal, maxRetries: 0 },
       );
       const text = res.content.map((b) => (b.type === 'text' ? b.text : '')).join('');

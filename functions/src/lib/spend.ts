@@ -8,7 +8,7 @@ const FAST_MS = 3000;
  * One wish's AI cost and outcome, added to today's spendDaily doc with increments only, so
  * concurrent calls never conflict and the admin costs page sees them at once.
  */
-export async function recordAiSpend(r: { outcome: AiOutcome; model?: string; inTok?: number; outTok?: number; ms?: number }, now = new Date()): Promise<void> {
+export async function recordAiSpend(r: { outcome: AiOutcome; model?: string; inTok?: number; outTok?: number; ms?: number; /** Released from reserveAiBudget. */ reserved?: number }, now = new Date()): Promise<void> {
   const inTok = r.inTok ?? 0;
   const outTok = r.outTok ?? 0;
   const price = r.model ? aiPrice(r.model) : { input: 0, output: 0 };
@@ -22,6 +22,7 @@ export async function recordAiSpend(r: { outcome: AiOutcome; model?: string; inT
     {
       ai: {
         microUsd: inc(total),
+        ...(r.reserved ? { reservedMicroUsd: inc(-r.reserved) } : {}),
         calls: inc(1),
         ...(r.outcome === 'ok' ? { ok: inc(1) } : {}),
         ...(r.outcome === 'skipped' ? { skipped: inc(1) } : {}),
@@ -73,9 +74,18 @@ export async function aiCapMicroUsd(): Promise<number> {
   return typeof cfg?.aiDailyCapMicroUsd === 'number' ? cfg.aiDailyCapMicroUsd : DEFAULT_AI_CAP_MICRO_USD;
 }
 
-/** True once today's AI spend reaches the cap: wishes are then answered by code only. */
-export async function aiCapReached(now = new Date()): Promise<boolean> {
-  const [cap, today] = await Promise.all([aiCapMicroUsd(), col.spendDaily(israelDay(now)).get()]);
-  const spent = (today.data() as SpendDay | undefined)?.ai?.microUsd ?? 0;
-  return spent >= cap;
+/**
+ * Holds a call's worst-case cost against today's cap before the call is made, so concurrent wishes
+ * can never spend past the cap together. False when the cap would be passed: the wish is then
+ * answered by code only. recordAiSpend releases the hold and adds the real cost.
+ */
+export async function reserveAiBudget(estimateMicroUsd: number, now = new Date()): Promise<boolean> {
+  const cap = await aiCapMicroUsd();
+  const ref = col.spendDaily(israelDay(now));
+  return db.runTransaction(async (tx) => {
+    const ai = ((await tx.get(ref)).data() as SpendDay | undefined)?.ai;
+    if ((ai?.microUsd ?? 0) + (ai?.reservedMicroUsd ?? 0) + estimateMicroUsd > cap) return false;
+    tx.set(ref, { ai: { reservedMicroUsd: FieldValue.increment(estimateMicroUsd) } }, { merge: true });
+    return true;
+  });
 }

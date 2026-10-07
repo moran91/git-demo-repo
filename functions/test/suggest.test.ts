@@ -95,6 +95,32 @@ describe('suggestMeals with the AI (stub)', () => {
   });
 });
 
+describe('the daily cap under a burst of wishes', () => {
+  it('holds each call\'s worst case against the cap first, so concurrent wishes never spend past it', async () => {
+    const before = await spend();
+    // Below one call's worst case (prompt + a full 500-token answer is over $0.003), though a stub
+    // call really costs less: a check of today's spend alone would let all five through.
+    const cap = (before.ai?.microUsd ?? 0) + (before.ai?.reservedMicroUsd ?? 0) + 2500;
+    await admin.db.doc('config/platform').set({ aiDailyCapMicroUsd: cap }, { merge: true });
+    try {
+      const results = await Promise.all([1, 2, 3, 4, 5].map(() => guest.call<Res>('suggestMeals', wish('שווארמה', { ai: true }))));
+      expect(results.every((r) => r.source === 'rules' && r.meals.length > 0)).toBe(true);
+      const after = await spend();
+      expect(after.ai!.microUsd).toBe(before.ai!.microUsd);
+      expect(after.ai!.reservedMicroUsd ?? 0).toBe(before.ai?.reservedMicroUsd ?? 0);
+      expect(after.ai!.fallback.capped).toBe((before.ai?.fallback?.capped ?? 0) + 5);
+    } finally {
+      await admin.db.doc('config/platform').update({ aiDailyCapMicroUsd: FieldValue.delete() });
+    }
+  });
+
+  it('releases every hold once calls settle', async () => {
+    const before = await spend();
+    await Promise.all([1, 2, 3].map(() => guest.call<Res>('suggestMeals', wish('שווארמה', { ai: true }))));
+    expect((await spend()).ai!.reservedMicroUsd ?? 0).toBe(before.ai?.reservedMicroUsd ?? 0);
+  });
+});
+
 describe('suggestMeals for a signed-in customer', () => {
   it('uses the stored consent: with AI consent the summary sent is kept for the knows-me page', async () => {
     const uid = `suggest-${Date.now()}`;
