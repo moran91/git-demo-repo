@@ -811,6 +811,8 @@ export interface PlatformConfig {
   };
   whatsappOtpEnabled: boolean;
   defaultCityId: string;
+  /** Daily AI spend cap for meal suggestions; absent means DEFAULT_AI_CAP_MICRO_USD ($2). */
+  aiDailyCapMicroUsd?: number;
   updatedAt: string;
 }
 

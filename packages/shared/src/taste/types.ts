@@ -90,6 +90,8 @@ export interface DerivedTaste {
   party: Party | null;
   /** Accepted orders that count toward learning. */
   learnedOrders: number;
+  /** Ids of those orders. */
+  learnedOrderIds: string[];
 }
 
 export interface PopularRef { branchId: string; productId: string }

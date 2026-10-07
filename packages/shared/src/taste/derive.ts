@@ -127,5 +127,5 @@ export function deriveTaste(input: { doc: TasteDoc | null; orders: TasteOrder[];
   for (const key of loved) { const [branchId, productId] = splitDishKey(key); items.push({ key: `loved:${key}`, source: 'rated', branchId, productId }); }
   for (const key of notAgain) { const [branchId, productId] = splitDishKey(key); items.push({ key: `notAgain:${key}`, source: 'rated', branchId, productId }); }
 
-  return { items, affinity, usual, orderedBefore: [...stats.keys()], loved, notAgain, daypart, party, learnedOrders: orders.length };
+  return { items, affinity, usual, orderedBefore: [...stats.keys()], loved, notAgain, daypart, party, learnedOrders: orders.length, learnedOrderIds: orders.map((o) => o.id) };
 }

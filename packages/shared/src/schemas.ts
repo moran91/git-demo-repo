@@ -450,3 +450,24 @@ export const saveDishFeedbackSchema = z
   })
   .strict();
 export type SaveDishFeedbackInput = z.infer<typeof saveDishFeedbackSchema>;
+
+export const REFINES = ['cheaper', 'other', 'spicier'] as const;
+export type Refine = (typeof REFINES)[number];
+
+export const suggestMealsSchema = z
+  .object({
+    wish: z.string().trim().min(1).max(200),
+    locale: localeSchema,
+    cityId: idSchema,
+    /** Signed out only: the visitor's AI consent from this device. Signed in, the stored consent rules. */
+    ai: z.boolean().optional(),
+    /** Signed out with AI consent: the local quiz, as enums only. */
+    anon: z.object({ party: z.enum(PARTIES).optional(), pairs: z.array(tastePairSchema).max(3) }).strict().optional(),
+    /** A refine chip under the results, with the meals it refines. */
+    refine: z.enum(REFINES).optional(),
+    prev: z.object({ branchIds: z.array(idSchema).max(4), minTotalAgorot: z.number().int().min(0).max(10_000_000).optional() }).strict().optional(),
+  })
+  .strict();
+export type SuggestMealsInput = z.infer<typeof suggestMealsSchema>;
+
+export const setAiDailyCapSchema = z.object({ usd: z.number().min(0).max(50) }).strict();
