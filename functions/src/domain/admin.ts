@@ -193,6 +193,7 @@ export const setPlatformConfig = onCall(configOpts, handled(async (req: Callable
       monetization: { subscriptionEnabled: false, commissionPercent: 0, paidPromotionEnabled: false },
       whatsappOtpEnabled: whatsappConfigured(),
       defaultCityId: input.defaultCityId ?? before?.defaultCityId ?? 'beit-jann',
+      ...(before?.aiDailyCapMicroUsd !== undefined ? { aiDailyCapMicroUsd: before.aiDailyCapMicroUsd } : {}),
       updatedAt: nowIso(),
     };
     tx.set(col.config(), after);

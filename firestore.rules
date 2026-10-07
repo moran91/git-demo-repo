@@ -54,6 +54,9 @@ service cloud.firestore {
     // Popular dishes per city and daypart: ranks only, published hourly. Raw counts
     // (popularityDaily) stay server-only through the catch-all deny.
     match /publicPopular/{cityId} { allow read: if true; allow write: if false; }
+    // AI and translation cost ledger: counts and costs only, for the admin costs page.
+    match /spendDaily/{date} { allow read: if isAdmin(); allow write: if false; }
+    match /spendMonthly/{month} { allow read: if isAdmin(); allow write: if false; }
 
     // ---------- users (private) ----------
     match /users/{userId} {

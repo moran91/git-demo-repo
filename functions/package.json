@@ -16,15 +16,16 @@
     "logs": "firebase functions:log"
   },
   "dependencies": {
+    "@anthropic-ai/vertex-sdk": "^0.20.2",
     "firebase-admin": "^14.3.0",
     "firebase-functions": "^7.3.2",
     "sharp": "^0.34.5",
     "zod": "^4.5.4"
   },
   "devDependencies": {
-    "firebase": "^12.18.0",
     "@types/node": "^26.4.1",
     "esbuild": "^0.28.2",
+    "firebase": "^12.18.0",
     "typescript": "^5.9.0",
     "vitest": "^5.0.0"
   }

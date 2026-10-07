@@ -66,7 +66,9 @@ interface Built { meal: Meal; total: number; mainScore: number; fresh: number }
  */
 export function buildMeals(input: { candidates: MealCandidate[]; facts: WishFacts; derived: DerivedTaste; popular: PopularDayparts | null; now: Date }): { meals: Meal[]; noFit: NoFit } {
   const { facts, derived } = input;
-  const usable = input.candidates.filter((d) => d.open && d.entry.available && !d.entry.needsChoice && d.entry.dishType !== 'drinks' && d.score > -Infinity);
+  // Dishes with sizes or required options are kept: the meal sheet adds them with the cheapest
+  // choices, which is the price the index already shows.
+  const usable = input.candidates.filter((d) => d.open && d.entry.available && d.entry.dishType !== 'drinks' && d.score > -Infinity);
   if (usable.length === 0) return { meals: [], noFit: 'closed' };
   const party = partySize(facts, derived);
   const wishActive = usable.some((d) => d.wish !== undefined);

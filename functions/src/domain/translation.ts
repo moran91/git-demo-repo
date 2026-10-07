@@ -16,6 +16,7 @@ import {
 import { REGION, col, db, nowIso, type Tx } from '../lib/firebase.js';
 import { isPubliclyVisible, projectCategoryInTx, projectProductInTx } from '../lib/projections.js';
 import { getTranslator } from '../lib/translator.js';
+import { recordTranslateSpend } from '../lib/spend.js';
 import { syncLinkedProducts } from './catalog.js';
 
 export interface TranslationJob {
@@ -72,7 +73,10 @@ export async function processTranslationJob(id: string): Promise<'done' | 'faile
     const translator = getTranslator();
     for (const [pair, list] of byPair) {
       const [from, to] = pair.split('>') as [Locale, Locale];
-      const out = await translator.translate(list.map((t) => protectNames(t.text, business.name, to)), from, to);
+      const sent = list.map((t) => protectNames(t.text, business.name, to));
+      const out = await translator.translate(sent, from, to);
+      // Billed per character sent; a ledger failure never fails the translation.
+      await recordTranslateSpend(sent.reduce((n, h) => n + h.length, 0)).catch((err: unknown) => console.error('translate spend record failed', err instanceof Error ? err.message : err));
       list.forEach((t, i) => results.push({ path: t.path, to, text: fromTranslatedHtml(out[i] ?? ''), fromText: t.text }));
     }
   } catch (e) {

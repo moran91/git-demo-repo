@@ -60,9 +60,14 @@ describe('buildMeals', () => {
     expect(r).toEqual({ meals: [], noFit: 'closed' });
   });
 
-  it('leaves out dishes that need a choice, unavailable and "not again" dishes', () => {
-    const r = run([c('b1', 'opt', 'pizza', 40, { entry: entry('pizza', 40, { needsChoice: true }) }), c('b1', 'gone', 'pizza', 40, { entry: entry('pizza', 40, { available: false }) }), c('b1', 'bad', 'pizza', 40, { score: -Infinity }), c('b1', 'ok', 'pizza', 40)]);
+  it('leaves out unavailable and "not again" dishes', () => {
+    const r = run([c('b1', 'gone', 'pizza', 40, { entry: entry('pizza', 40, { available: false }), score: 9 }), c('b1', 'bad', 'pizza', 40, { score: -Infinity }), c('b1', 'ok', 'pizza', 40)]);
     expect(r.meals[0]!.items).toEqual([{ productId: 'ok', qty: 1 }]);
+  });
+
+  it('keeps dishes that need a choice (added with the cheapest choices)', () => {
+    const r = run([c('b1', 'sized', 'pizza', 40, { entry: entry('pizza', 40, { needsChoice: true, fromPrice: true }) })]);
+    expect(r.meals[0]!.items).toEqual([{ productId: 'sized', qty: 1 }]);
   });
 
   it('builds the meal around what the wish named, even a non-main type', () => {

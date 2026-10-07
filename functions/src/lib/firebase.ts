@@ -100,4 +100,8 @@ export const col = {
   popularityDaily: (id: string) => db.collection('popularityDaily').doc(id),
   popularityDays: () => db.collection('popularityDaily'),
   publicPopular: (cityId: string) => db.collection('publicPopular').doc(cityId),
+  /** Israeli date → SpendDay (AI and translation cost); admin read only. */
+  spendDaily: (date: string) => db.collection('spendDaily').doc(date),
+  /** YYYY-MM → { translateChars }: how much of the month's free translation allowance is used. */
+  spendMonthly: (month: string) => db.collection('spendMonthly').doc(month),
 };

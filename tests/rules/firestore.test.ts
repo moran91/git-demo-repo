@@ -179,4 +179,17 @@ describe('taste profile', () => {
     await assertFails(getDoc(doc(anon(), 'popularityDaily/beit-jann_2026-10-06')));
     await assertFails(getDoc(doc(as('admin', { admin: true }), 'popularityDaily/beit-jann_2026-10-06')));
   });
+
+  it('the cost ledger is readable by admins only and written by nobody', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'spendDaily/2026-10-07'), { ai: { microUsd: 10 } });
+      await setDoc(doc(ctx.firestore(), 'spendMonthly/2026-10'), { translateChars: 10 });
+    });
+    await assertSucceeds(getDoc(doc(as('admin', { admin: true }), 'spendDaily/2026-10-07')));
+    await assertSucceeds(getDocs(collection(as('admin', { admin: true }), 'spendDaily')));
+    await assertSucceeds(getDoc(doc(as('admin', { admin: true }), 'spendMonthly/2026-10')));
+    await assertFails(getDoc(doc(as('cust1'), 'spendDaily/2026-10-07')));
+    await assertFails(getDoc(doc(anon(), 'spendMonthly/2026-10')));
+    await assertFails(setDoc(doc(as('admin', { admin: true }), 'spendDaily/2026-10-07'), { ai: { microUsd: 0 } }));
+  });
 });

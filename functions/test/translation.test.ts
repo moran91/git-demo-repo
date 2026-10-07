@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
+import { israelDay } from '@qareeb/shared';
 import { admin, asEmail, IDS, sleep, USERS, waitFor, type Client } from './harness.js';
 
 /**
@@ -33,6 +34,11 @@ describe('menu auto-translation', () => {
     expect(idx.dishes[product.id]!.name.en).toBe('[en] פסטה מבחן');
     const jobs = await admin.db.collection('translationJobs').where('path', '==', `businesses/${businessId}/branches/${branchId}/products/${product.id}`).get();
     expect(jobs.size).toBe(0);
+    // The characters sent are counted in today's cost ledger (inside the free allowance, so $0).
+    const spend = (await admin.db.doc(`spendDaily/${israelDay(new Date())}`).get()).data() as { translate: { chars: number; jobs: number; microUsd: number } };
+    expect(spend.translate.chars).toBeGreaterThan(0);
+    expect(spend.translate.microUsd).toBe(0);
+    expect(((await admin.db.doc(`spendMonthly/${israelDay(new Date()).slice(0, 7)}`).get()).data() as { translateChars: number }).translateChars).toBe(spend.translate.chars);
   });
 
   it("never overwrites the owner's own wording and re-translates only machine text when the source changes", async () => {

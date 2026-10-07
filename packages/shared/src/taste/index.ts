@@ -8,3 +8,4 @@ export * from './meals.js';
 export * from './summary.js';
 export * from './validate.js';
 export * from './spend.js';
+export * from './wishMatch.js';
