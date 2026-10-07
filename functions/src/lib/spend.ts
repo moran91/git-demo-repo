@@ -8,7 +8,7 @@ const FAST_MS = 3000;
  * One wish's AI cost and outcome, added to today's spendDaily doc with increments only, so
  * concurrent calls never conflict and the admin costs page sees them at once.
  */
-export async function recordAiSpend(r: { outcome: AiOutcome; model?: string; inTok?: number; outTok?: number; ms?: number; /** Released from reserveAiBudget. */ reserved?: number; anon?: boolean }, now = new Date()): Promise<void> {
+export async function recordAiSpend(r: { outcome: AiOutcome; model?: string; inTok?: number; outTok?: number; ms?: number; /** Released from reserveAiBudget. */ reserved?: number; anon?: boolean; /** An admin model test: costs count, wish statistics do not. */ test?: boolean }, now = new Date()): Promise<void> {
   const inTok = r.inTok ?? 0;
   const outTok = r.outTok ?? 0;
   const price = r.model ? aiPrice(r.model) : { input: 0, output: 0 };
@@ -18,6 +18,14 @@ export async function recordAiSpend(r: { outcome: AiOutcome; model?: string; inT
   const inc = FieldValue.increment;
   const fallback = r.outcome === 'timeout' || r.outcome === 'invalid' || r.outcome === 'error' || r.outcome === 'capped' ? { fallback: { [r.outcome]: inc(1) } } : {};
   const called = r.model && r.outcome !== 'capped' && r.outcome !== 'skipped';
+  if (r.test) {
+    await col.spendDaily(israelDay(now)).set({
+      ai: { microUsd: inc(total), tests: inc(1), inTok: inc(inTok), outTok: inc(outTok), inMicroUsd: inc(inMicro), outMicroUsd: inc(outMicro), ...(r.model ? { byModel: { [r.model]: { microUsd: inc(total) } } } : {}) },
+      ...(total > 0 ? { byHour: { [israelHour(now)]: { aiIn: inc(inMicro), aiOut: inc(outMicro) } } } : {}),
+      updatedAt: nowIso(),
+    }, { merge: true });
+    return;
+  }
   await col.spendDaily(israelDay(now)).set(
     {
       ai: {

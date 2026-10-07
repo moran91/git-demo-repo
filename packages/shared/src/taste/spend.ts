@@ -13,6 +13,8 @@ export interface SpendDay {
     /** Spend and holds of signed-out wishes, limited to a share of the cap. */
     anonMicroUsd?: number;
     anonReservedMicroUsd?: number;
+    /** Admin model tests (their cost is in microUsd; they are not wishes). */
+    tests?: number;
     /** Wishes handled by suggestMeals, AI or not. */
     calls: number;
     /** Answered by the AI. */

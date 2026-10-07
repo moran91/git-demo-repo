@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { collection, doc, documentId, limit as fbLimit, onSnapshot, orderBy as fbOrderBy, query, where } from 'firebase/firestore';
-import { DEFAULT_AI_CAP_MICRO_USD, TRANSLATE_FREE_CHARS, dayTotal, hourTotal, israelDay, israelHour, projectEndOfDay, projectMonth, type PlatformConfig, type SpendDay } from '@qareeb/shared';
+import { AI_MODELS, DEFAULT_AI_CAP_MICRO_USD, aiModelLabel, type AiTestResult, TRANSLATE_FREE_CHARS, dayTotal, hourTotal, israelDay, israelHour, projectEndOfDay, projectMonth, type PlatformConfig, type SpendDay } from '@qareeb/shared';
 import { useI18n, useT } from '@/lib/i18n';
 import { db } from '@/lib/firebase';
 import { call } from '@/lib/api';
 import { errorKey } from '@/lib/errors';
-import { Badge, Button, Skeleton, TextInput, toast } from '@/design/components';
+import { Badge, Button, Skeleton, Spinner, TextInput, toast } from '@/design/components';
+import { Icon } from '@/design/Icon';
 
 /** Rough shekel equivalent beside dollars: the rate qareeb-dev's billing account used in October 2026. */
 const ILS_PER_USD = 3.07;
-const MODEL_NAMES: Record<string, string> = { 'claude-haiku-4-5@20251001': 'Claude Haiku 4.5', 'claude-sonnet-5-5': 'Claude Sonnet 5.5', 'gemini-2.5-flash': 'Gemini 2.5 Flash', 'gemini-3-flash-preview': 'Gemini 3 Flash', stub: 'Stub (emulator)' };
 
 const usd = (micro: number, digits = 2) => `$${(micro / 1_000_000).toFixed(digits)}`;
 const ils = (micro: number) => `≈ ₪${((micro / 1_000_000) * ILS_PER_USD).toFixed(2)}`;
@@ -19,7 +19,7 @@ type Day = SpendDay & { id: string };
 
 /** Live: today's ledger doc, the last 30 days, the month's translation total and the cap. */
 function useSpend() {
-  const [state, setState] = useState<{ today: Day | null; days: Day[]; monthChars: number; cap: number; at: Date | null; error: boolean; loading: boolean }>({ today: null, days: [], monthChars: 0, cap: DEFAULT_AI_CAP_MICRO_USD, at: null, error: false, loading: true });
+  const [state, setState] = useState<{ today: Day | null; days: Day[]; monthChars: number; cap: number; aiModel: string | null; at: Date | null; error: boolean; loading: boolean }>({ today: null, days: [], monthChars: 0, cap: DEFAULT_AI_CAP_MICRO_USD, aiModel: null, at: null, error: false, loading: true });
   const todayId = israelDay(new Date());
   useEffect(() => {
     const fail = () => setState((s) => ({ ...s, error: true, loading: false }));
@@ -28,7 +28,7 @@ function useSpend() {
       // Ids are Israeli dates, so a key range is a date range (descending key scans are unsupported).
       onSnapshot(query(collection(db, 'spendDaily'), where(documentId(), '>=', israelDay(new Date(Date.now() - 31 * 86_400_000))), fbOrderBy(documentId()), fbLimit(32)), (s) => setState((p) => ({ ...p, days: s.docs.map((d) => ({ ...(d.data() as SpendDay), id: d.id })).reverse(), at: new Date() })), fail),
       onSnapshot(doc(db, `spendMonthly/${todayId.slice(0, 7)}`), (s) => setState((p) => ({ ...p, monthChars: (s.data()?.translateChars as number | undefined) ?? 0 })), fail),
-      onSnapshot(doc(db, 'config/platform'), (s) => { const c = s.data() as PlatformConfig | undefined; setState((p) => ({ ...p, cap: typeof c?.aiDailyCapMicroUsd === 'number' ? c.aiDailyCapMicroUsd : DEFAULT_AI_CAP_MICRO_USD })); }, fail),
+      onSnapshot(doc(db, 'config/platform'), (s) => { const c = s.data() as PlatformConfig | undefined; setState((p) => ({ ...p, cap: typeof c?.aiDailyCapMicroUsd === 'number' ? c.aiDailyCapMicroUsd : DEFAULT_AI_CAP_MICRO_USD, aiModel: c?.aiModel ?? null })); }, fail),
     ];
     return () => offs.forEach((o) => o());
   }, [todayId]);
@@ -174,7 +174,7 @@ export function CostsPage() {
             <div className="costs__row costs__row--note"><dt>{t('admin.costs.reason.skipped')}</dt><dd className="num">{ai?.skipped ?? 0}</dd></div>
             <div className="costs__row"><dt>{t('admin.costs.fast')}</dt><dd className="num">{aiCalled ? `${Math.round(((ai?.fast ?? 0) / aiCalled) * 100)}%` : '—'}</dd></div>
             <div className="costs__row"><dt>{t('admin.costs.perWish')}</dt><dd className="num">{aiCalled ? usd(aiSpent / aiCalled, 4) : '—'}</dd></div>
-            <div className="costs__row"><dt>{t('admin.costs.model')}</dt><dd>{models[0] ? MODEL_NAMES[models[0][0]] ?? models[0][0] : t('admin.costs.noModel')}</dd></div>
+            <div className="costs__row"><dt>{t('admin.costs.model')}</dt><dd>{models[0] ? (models[0][0] === 'stub' ? 'Stub (emulator)' : aiModelLabel(models[0][0])) : t('admin.costs.noModel')}</dd></div>
           </dl>
         </section>
       </div>
@@ -196,6 +196,8 @@ export function CostsPage() {
         {hovered ? <p className="achart__readout" aria-live="polite" style={{ margin: 0 }}><bdi>{t('admin.costs.dayValue', { date: dayLabel(hovered.id), amount: usd(hovered.total) })}</bdi>{hovered.ai >= s.cap && s.cap > 0 ? ` · ${t('admin.costs.hitCap')}` : ''}</p> : null}
       </section>
 
+      <AiModelCard configured={s.aiModel} usedToday={models[0]?.[0] ?? null} />
+
       <section className="card stack" aria-labelledby="costs-cap">
         <h2 id="costs-cap">{t('admin.costs.cap')}</h2>
         <form className="row row--end" onSubmit={(e) => void saveCap(e)}>
@@ -207,5 +209,80 @@ export function CostsPage() {
         <p className="muted" style={{ margin: 0 }}>{t('admin.costs.footnote')} <a href={billing} target="_blank" rel="noreferrer">{t('admin.costs.billing')}</a></p>
       </section>
     </div>
+  );
+}
+
+/**
+ * The model that answers wishes. Picking one runs a real meal request against it at once, so the
+ * admin sees whether it works (and why not) before switching; the server re-tests on switch.
+ */
+function AiModelCard({ configured, usedToday }: { configured: string | null; usedToday: string | null }) {
+  const t = useT();
+  const active = configured ?? (usedToday && usedToday !== 'stub' ? usedToday : null);
+  const [picked, setPicked] = useState<string | null>(null);
+  const [results, setResults] = useState<Record<string, AiTestResult | 'testing'>>({});
+  const [saving, setSaving] = useState(false);
+  const test = async (model: string) => {
+    setResults((r) => ({ ...r, [model]: 'testing' }));
+    try {
+      const res = await call<AiTestResult>('testAiModel', { model });
+      setResults((r) => ({ ...r, [model]: res }));
+    } catch (e) {
+      setResults((r) => ({ ...r, [model]: { ok: false, model, ms: 0, reason: 'error', detail: t(errorKey(e)) } }));
+    }
+  };
+  const pick = (model: string) => { setPicked(model); void test(model); };
+  const use = async (model: string) => {
+    setSaving(true);
+    try {
+      const res = await call<AiTestResult & { saved: boolean }>('setAiModel', { model });
+      setResults((r) => ({ ...r, [model]: res }));
+      toast(res.saved ? t('admin.ai.switched', { name: aiModelLabel(model) }) : t('admin.ai.refused', { name: aiModelLabel(model) }), res.saved ? 'default' : 'danger');
+    } catch (e) {
+      toast(t(errorKey(e)), 'danger');
+    } finally {
+      setSaving(false);
+    }
+  };
+  const status = (model: string) => {
+    const r = results[model];
+    if (!r) return null;
+    if (r === 'testing') return <p className="aimodel__status" role="status"><Spinner size={16} /> {t('admin.ai.testing', { name: aiModelLabel(model) })}</p>;
+    if (r.ok) {
+      return (
+        <p className="aimodel__status aimodel__status--ok" role="status">
+          <Icon name="check" size={16} /> {t('admin.ai.ok', { s: (r.ms / 1000).toFixed(1) })}
+          {r.sample ? <span className="aimodel__sample"> · {t('admin.ai.sample', { title: r.sample })}</span> : null}
+        </p>
+      );
+    }
+    return <p className="aimodel__status aimodel__status--fail" role="alert"><Icon name="alert" size={16} /> {t(`admin.ai.fail.${r.reason ?? 'error'}`, { detail: r.detail ?? '' })}</p>;
+  };
+  const current = picked ?? active;
+  const pickedResult = picked ? results[picked] : undefined;
+  return (
+    <section className="card stack" aria-labelledby="ai-model">
+      <h2 id="ai-model">{t('admin.ai.title')}</h2>
+      {!configured && active ? <p className="muted" style={{ margin: 0 }}>{t('admin.ai.default', { name: aiModelLabel(active) })}</p> : null}
+      <div className="aimodel" role="radiogroup" aria-labelledby="ai-model">
+        {AI_MODELS.map((m) => (
+          <div key={m.id} className={`aimodel__row ${current === m.id ? 'is-picked' : ''}`}>
+            <button type="button" role="radio" aria-checked={current === m.id} className="aimodel__pick" onClick={() => pick(m.id)}>
+              <span className="aimodel__dot" aria-hidden="true" />
+              <span className="aimodel__text">
+                <strong>{m.label}</strong>
+                <span className="muted">{t('admin.ai.price', { input: m.inputUsdPerM, output: m.outputUsdPerM })}</span>
+              </span>
+              {active === m.id ? <Badge tone="success">{t('admin.ai.active')}</Badge> : null}
+            </button>
+            {status(m.id)}
+          </div>
+        ))}
+      </div>
+      <div className="row">
+        <Button disabled={!picked || picked === active || !pickedResult || pickedResult === 'testing' || !pickedResult.ok} loading={saving} onClick={() => picked && void use(picked)}>{t('admin.ai.use')}</Button>
+        <Button variant="secondary" disabled={!current || results[current] === 'testing'} onClick={() => current && void test(current)}>{t('admin.ai.retest')}</Button>
+      </div>
+    </section>
   );
 }

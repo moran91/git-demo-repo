@@ -1,5 +1,6 @@
 import { applicationDefault } from 'firebase-admin/app';
 import { AnthropicVertex } from '@anthropic-ai/vertex-sdk';
+import { resolveAiModel, type AiTestReason } from '@qareeb/shared';
 
 /** One structured call: the system rules, the user message, and the JSON schema the answer must follow. */
 export interface MealPickRequest {
@@ -124,9 +125,33 @@ export function pickerFor(model: string): MealPicker {
   return model.startsWith('gemini') ? geminiPicker(model) : vertexPicker(model);
 }
 
-export function getMealPicker(): MealPicker {
-  if (process.env.FUNCTIONS_EMULATOR === 'true') return stubPicker;
-  return pickerFor(process.env.AI_MODEL || DEFAULT_AI_MODEL);
+/** The stub, answering as an admin-picked model. Claude Sonnet 5.5 plays a project without quota for it. */
+function stubAs(model: string): MealPicker {
+  return {
+    model,
+    async pick(req) {
+      if (model === 'claude-sonnet-5-5') throw Object.assign(new Error('429 RESOURCE_EXHAUSTED: Quota exceeded (stub)'), { status: 429 });
+      return stubPicker.pick(req);
+    },
+  };
+}
+
+/** The picker for wishes: the admin's model (config/platform.aiModel) when set, else AI_MODEL from functions/.env. */
+export function getMealPicker(configured?: string): MealPicker {
+  if (process.env.FUNCTIONS_EMULATOR === 'true') return configured ? stubAs(configured) : stubPicker;
+  return pickerFor(resolveAiModel(configured, process.env.AI_MODEL || DEFAULT_AI_MODEL));
+}
+
+/** A failed AI call in words the admin panel can explain. */
+export function classifyAiError(e: unknown, aborted: boolean): { reason: AiTestReason; detail: string } {
+  const status = (e as { status?: number } | null)?.status;
+  const message = e instanceof Error ? e.message : String(e);
+  const detail = message.replace(/\s+/g, ' ').slice(0, 200);
+  if (aborted) return { reason: 'timeout', detail };
+  if (status === 429 || /\b429\b|RESOURCE_EXHAUSTED|quota/i.test(message)) return { reason: 'quota', detail };
+  if (status === 403 || /\b403\b|PERMISSION_DENIED/i.test(message)) return { reason: 'permission', detail };
+  if (status === 404 || /\b404\b|NOT_FOUND/i.test(message)) return { reason: 'not_found', detail };
+  return { reason: 'error', detail };
 }
 
 /** AI_SUGGEST=1 in functions/.env switches the AI on; off, every wish is answered by code. */

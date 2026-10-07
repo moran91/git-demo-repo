@@ -1585,6 +1585,23 @@ export const en = {
   "admin.costs.dayValue": "{date}: {amount}",
   "admin.costs.now": "Now",
   "admin.costs.capLine": "Cap",
+  "admin.ai.title": "AI model",
+  "admin.ai.active": "In use",
+  "admin.ai.price": "${input} input · ${output} output per million tokens",
+  "admin.ai.default": "Server default ({name})",
+  "admin.ai.testing": "Testing {name} with a real meal request…",
+  "admin.ai.ok": "Working · answered in {s} s",
+  "admin.ai.sample": "Sample answer: “{title}”",
+  "admin.ai.fail.quota": "Not working: Google gives this project no quota for this model. Request a quota increase in Google Cloud.",
+  "admin.ai.fail.permission": "Not working: no permission, or the model is not enabled in Model Garden.",
+  "admin.ai.fail.not_found": "Not working: the model is not available in this region.",
+  "admin.ai.fail.timeout": "Not working: no answer within 10 seconds.",
+  "admin.ai.fail.invalid": "It answers, but its meals failed the checks ({detail}).",
+  "admin.ai.fail.error": "Not working: {detail}",
+  "admin.ai.use": "Use this model",
+  "admin.ai.retest": "Test again",
+  "admin.ai.switched": "Wishes now use {name}",
+  "admin.ai.refused": "Not switched: {name} failed the test",
 } as const;
 
 export type TranslationKey = keyof typeof en;

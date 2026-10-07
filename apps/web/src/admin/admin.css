@@ -118,3 +118,19 @@
 .costs__capline span { position: absolute; bottom: 2px; inset-inline-start: 0; font-size: var(--text-caption); color: var(--color-danger-text); background: var(--color-surface); padding-inline-end: var(--space-1); }
 .achart__bar.costs__bar--cap { background: var(--color-danger); }
 @media (max-width: 480px) { .costs__amount { font-size: 40px; } }
+
+/* AI model picker: one row per model, the test result right under the row it belongs to. */
+.aimodel { display: flex; flex-direction: column; gap: var(--space-2); }
+.aimodel__row { border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface); }
+.aimodel__row.is-picked { border-color: var(--color-primary); box-shadow: 0 0 0 1px var(--color-primary); }
+.aimodel__pick { display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: 56px; padding: var(--space-2) var(--space-3); border: 0; background: none; color: inherit; font: inherit; text-align: start; cursor: pointer; border-radius: inherit; }
+.aimodel__pick:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.aimodel__dot { flex: none; width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--color-border-strong); }
+.aimodel__pick[aria-checked='true'] .aimodel__dot { border-color: var(--color-primary); background: radial-gradient(var(--color-primary) 0 45%, transparent 50%); }
+.aimodel__text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.aimodel__text .muted { font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
+.aimodel__status { display: flex; align-items: flex-start; gap: var(--space-2); flex-wrap: wrap; margin: 0; padding: 0 var(--space-3) var(--space-3) calc(var(--space-3) + 18px + var(--space-3)); font-size: var(--text-secondary); line-height: 1.45; }
+.aimodel__status > svg, .aimodel__status > .spinner { flex: none; margin-top: 2px; }
+.aimodel__status--ok { color: var(--color-success-text); }
+.aimodel__status--fail { color: var(--color-danger-text); }
+.aimodel__sample { color: var(--color-text-muted); }

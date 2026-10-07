@@ -2,9 +2,9 @@ import { createHash } from 'node:crypto';
 import { onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { z } from 'zod';
 import {
-  buildMeals, cheapestChoices, daypartOf, deriveTaste, dishSearchFields, emptyTasteDoc, evaluateOpen, parseWish, partySize, scoreDish, setAiDailyCapSchema,
+  aiModelInputSchema, buildMeals, cheapestChoices, daypartOf, deriveTaste, dishSearchFields, emptyTasteDoc, evaluateOpen, parseWish, partySize, scoreDish, setAiDailyCapSchema,
   suggestMealsSchema, summaryLines, validateAiMeals, wishMatchLevel, wishQueries,
-  type AiCandidate, type AiOutcome, type DerivedTaste, type DishFeedback, type DishIndexDoc, type DishType, type Locale, type Meal, type MealCandidate, type NoFit, type Order,
+  type AiCandidate, type AiOutcome, type AiTestResult, type DishIndexEntry, type DerivedTaste, type DishFeedback, type DishIndexDoc, type DishType, type Locale, type Meal, type MealCandidate, type NoFit, type Order,
   type PlatformConfig, type PopularDayparts, type Product, type PublicPopular, type SuggestMealsInput, type TasteDoc,
 } from '@qareeb/shared';
 import { REGION, col, db, nowIso } from '../lib/firebase.js';
@@ -13,7 +13,7 @@ import { parse } from '../lib/validate.js';
 import { requireAdmin, requireCaller } from '../lib/auth.js';
 import { rateLimit } from '../lib/ratelimit.js';
 import { writeAudit } from '../lib/audit.js';
-import { MAX_OUT_TOKENS, aiEnabled, getMealPicker } from '../lib/claude.js';
+import { MAX_OUT_TOKENS, aiEnabled, classifyAiError, getMealPicker } from '../lib/claude.js';
 import { bumpTasteMetrics, recordAiSpend, reserveAiBudget } from '../lib/spend.js';
 import { aiPrice } from '../lib/prices.js';
 import { SYSTEM, schemaFor, userMessage } from '../lib/mealPrompt.js';
@@ -170,7 +170,8 @@ export const suggestMeals = onCall(opts, handled(async (req: CallableRequest<unk
   let usage: { model?: string; inTok?: number; outTok?: number; ms?: number } = {};
   let pickPosition = 0;
   const aiAllowed = aiEnabled() && profile.aiConsent && picked.length > 0 && !closedOnly;
-  const picker = getMealPicker();
+  const config = (await col.config().get()).data() as PlatformConfig | undefined;
+  const picker = getMealPicker(config?.aiModel);
   const price = aiPrice(picker.model);
   // Worst case for one call: the prompt (about 4 characters a token, rounded up generously) and a full answer.
   const reserved = Math.ceil(((SYSTEM.length + 120 * (picked.length + 12)) / 3) * price.input + MAX_OUT_TOKENS * price.output);
@@ -273,4 +274,63 @@ export const trackTaste = onCall({ region: REGION }, handled(async (req: Callabl
   await rateLimit(req.auth ? `track:${req.auth.uid}` : `track:ip:${ipKey}`, 30, 3600);
   await bumpTasteMetrics({ [EVENT_FIELD[input.event]]: 1 });
   return { ok: true };
+}));
+
+// A tiny fixed village for model tests: two places, enough to build two meals for two.
+const TEST_DISHES: Array<[string, string, string, DishType, number]> = [
+  ['p1', 'pz', 'פיצה מרגריטה', 'pizza', 4800], ['p1', 'fr', 'צ׳יפס', 'snacks', 1500],
+  ['p2', 'bg', 'בורגר קלאסי', 'burger', 4900], ['p2', 'sl', 'סלט קיסר', 'salads', 3800],
+];
+const TEST_TIMEOUT_MS = 10_000;
+
+/** One real meal request to the model, the same prompt and checks as a wish, with a longer timeout. */
+async function testModel(model: string): Promise<AiTestResult> {
+  const picker = getMealPicker(model);
+  const candidates: AiCandidate[] = TEST_DISHES.map(([branchId, productId, he, dishType, priceAgorot], i) => {
+    const entry: DishIndexEntry = { name: { he }, priceAgorot, fromPrice: false, dishType, available: true, needsChoice: false, sortOrder: i };
+    return { alias: `c${i + 1}`, branchId, productId, entry };
+  });
+  const facts = parseWish('ארוחה לשניים עד 150');
+  const placeOf = new Map([['p1', 1], ['p2', 2]]);
+  const user = userMessage({ wish: 'ארוחה לשניים עד 150', facts, party: 2, locale: 'he', daypart: 'evening', summary: [], candidates, placeOf, locales: new Map([['p1', 'he' as Locale], ['p2', 'he' as Locale]]) });
+  const started = Date.now();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
+  try {
+    const res = await picker.pick({ system: SYSTEM, user, schema: schemaFor(), signal: controller.signal });
+    const ms = Date.now() - started;
+    await recordAiSpend({ outcome: 'ok', model: picker.model, inTok: res.inTok, outTok: res.outTok, ms, test: true }).catch(() => undefined);
+    const valid = validateAiMeals(res.json, { candidates: new Map(candidates.map((c) => [c.alias, c])), facts, locale: 'he' });
+    if (valid.meals.length === 0) return { ok: false, model, ms, reason: 'invalid', detail: valid.rejected.join(', ') };
+    return { ok: true, model, ms, sample: valid.meals[0]!.title ?? valid.meals.map((m) => m.items.map((i) => i.productId).join('+')).join(' / ') };
+  } catch (e) {
+    return { ok: false, model, ms: Date.now() - started, ...classifyAiError(e, controller.signal.aborted) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Admin: does this model answer a meal request right now? */
+export const testAiModel = onCall({ region: REGION, timeoutSeconds: 30 }, handled(async (req: CallableRequest<unknown>) => {
+  const c = await requireCaller(req);
+  requireAdmin(c);
+  const input = parse(aiModelInputSchema, req.data);
+  await rateLimit(`aitest:${c.uid}`, 30, 3600);
+  return testModel(input.model);
+}));
+
+/** Admin: switch wishes to another model. It is tested first and only saved when it works. */
+export const setAiModel = onCall({ region: REGION, timeoutSeconds: 30 }, handled(async (req: CallableRequest<unknown>) => {
+  const c = await requireCaller(req);
+  requireAdmin(c);
+  const input = parse(aiModelInputSchema, req.data);
+  await rateLimit(`aitest:${c.uid}`, 30, 3600);
+  const result = await testModel(input.model);
+  if (!result.ok) return { ...result, saved: false };
+  await db.runTransaction(async (tx) => {
+    const before = (await tx.get(col.config())).data() as PlatformConfig | undefined;
+    tx.set(col.config(), { aiModel: input.model, updatedAt: nowIso() }, { merge: true });
+    writeAudit(tx, { actorUid: c.uid, action: 'config.aiModel', targetType: 'config', targetId: 'platform', before: { aiModel: before?.aiModel ?? null }, after: { aiModel: input.model } });
+  });
+  return { ...result, saved: true };
 }));

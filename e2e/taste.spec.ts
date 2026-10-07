@@ -186,3 +186,30 @@ test('admin costs page updates live while a wish is answered elsewhere', async (
   expect(res.ok).toBe(true);
   await expect(count).toContainText(`${before + 1} בקשות`);
 });
+
+test('admin picks an AI model: it is tested at once, a failing one cannot be used, a working one switches wishes', async ({ page }) => {
+  await signInAsCustomer(page, 'seed-admin');
+  await page.goto('/admin/costs');
+  const card = page.locator('section', { has: page.getByRole('heading', { name: 'מודל ה-AI' }) });
+  await expect(card).toBeVisible();
+  const use = card.getByRole('button', { name: 'להשתמש במודל הזה' });
+
+  // The emulator stub answers Claude Sonnet 5.5 like a project without quota for it.
+  await card.getByRole('radio', { name: /Claude Sonnet 5\.5/ }).click();
+  await expect(card.getByText(/לא עובד: ל-Google אין מכסה/)).toBeVisible();
+  await expect(use).toBeDisabled();
+
+  await card.getByRole('radio', { name: /Claude Haiku 4\.5/ }).click();
+  await expect(card.getByText(/עובד · ענה תוך/)).toBeVisible();
+  await expect(use).toBeEnabled();
+  await use.click();
+  await expect(page.getByText('הבקשות עונות עכשיו עם Claude Haiku 4.5')).toBeVisible();
+  await expect(card.getByRole('radio', { name: /Claude Haiku 4\.5/ })).toContainText('בשימוש');
+  await expect.poll(async () => (await fsGet('config/platform'))?.aiModel).toBe('claude-haiku-4-5@20251001');
+
+  // Back to the default for the rest of the suite.
+  await card.getByRole('radio', { name: /Gemini 2\.5 Flash/ }).click();
+  await expect(use).toBeEnabled();
+  await use.click();
+  await expect.poll(async () => (await fsGet('config/platform'))?.aiModel).toBe('gemini-2.5-flash');
+});

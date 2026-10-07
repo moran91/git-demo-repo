@@ -813,6 +813,8 @@ export interface PlatformConfig {
   defaultCityId: string;
   /** Daily AI spend cap for meal suggestions; absent means DEFAULT_AI_CAP_MICRO_USD ($2). */
   aiDailyCapMicroUsd?: number;
+  /** The AI model for wishes, picked in the admin panel; absent means functions/.env AI_MODEL. */
+  aiModel?: string;
   updatedAt: string;
 }
 

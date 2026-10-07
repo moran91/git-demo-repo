@@ -267,3 +267,52 @@ describe('budgets use the true minimum price', () => {
     }
   });
 });
+
+describe('switching the AI model from the admin panel', () => {
+  type Test = { ok: boolean; model: string; ms: number; reason?: string; detail?: string; sample?: string };
+  let adminC: Client;
+  let owner: Client;
+  beforeAll(async () => { [adminC, owner] = await Promise.all([asEmail(USERS.admin), asEmail(USERS.owner1)]); });
+  afterAll(async () => {
+    await admin.db.doc('config/platform').update({ aiModel: FieldValue.delete() });
+    await Promise.all([adminC.close(), owner.close()]);
+  });
+
+  it('testing a model makes one real meal request and says whether it works', async () => {
+    const r = await adminC.call<Test>('testAiModel', { model: 'gemini-2.5-flash' });
+    expect(r).toMatchObject({ ok: true, model: 'gemini-2.5-flash' });
+    expect(r.ms).toBeGreaterThanOrEqual(0);
+    expect(r.sample).toBeTruthy();
+    // The emulator's stub answers Claude Sonnet 5.5 like a project without quota for it.
+    const bad = await adminC.call<Test>('testAiModel', { model: 'claude-sonnet-5-5' });
+    expect(bad).toMatchObject({ ok: false, reason: 'quota' });
+  });
+
+  it('only admins test or switch, and only known models', async () => {
+    expect(await expectCode(owner.call('testAiModel', { model: 'gemini-2.5-flash' }))).toBe('forbidden');
+    expect(await expectCode(owner.call('setAiModel', { model: 'gemini-2.5-flash' }))).toBe('forbidden');
+    expect(await expectCode(adminC.call('testAiModel', { model: 'gpt-9' }))).toBe('invalid_argument');
+  });
+
+  it('switching re-tests the model: a working one is saved with an audit entry, a failing one is refused', async () => {
+    const ok = await adminC.call<Test & { saved: boolean }>('setAiModel', { model: 'claude-haiku-4-5@20251001' });
+    expect(ok).toMatchObject({ ok: true, saved: true });
+    expect((await admin.db.doc('config/platform').get()).data()!.aiModel).toBe('claude-haiku-4-5@20251001');
+    const audit = await admin.db.collection('audit').where('action', '==', 'config.aiModel').get();
+    expect(audit.docs.some((d) => d.data().after?.aiModel === 'claude-haiku-4-5@20251001')).toBe(true);
+
+    const refused = await adminC.call<Test & { saved: boolean }>('setAiModel', { model: 'claude-sonnet-5-5' });
+    expect(refused).toMatchObject({ ok: false, saved: false, reason: 'quota' });
+    expect((await admin.db.doc('config/platform').get()).data()!.aiModel).toBe('claude-haiku-4-5@20251001');
+  });
+
+  it('wishes use the chosen model, and saving other settings keeps it', async () => {
+    await adminC.call('setAiModel', { model: 'gemini-2.5-flash' });
+    const before = (await spend()).ai?.byModel?.['gemini-2.5-flash']?.calls ?? 0;
+    const r = await guest.call<Res>('suggestMeals', wish('שווארמה', { ai: true }));
+    expect(r.source).toBe('ai');
+    expect((await spend()).ai!.byModel['gemini-2.5-flash']!.calls).toBe(before + 1);
+    await adminC.call('setPlatformConfig', { defaultCityId: 'beit-jann' });
+    expect((await admin.db.doc('config/platform').get()).data()!.aiModel).toBe('gemini-2.5-flash');
+  });
+});

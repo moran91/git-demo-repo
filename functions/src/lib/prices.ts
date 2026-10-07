@@ -1,16 +1,13 @@
+import { AI_MODELS } from '@qareeb/shared';
+
 /**
  * Price per token in micro-USD (USD per million tokens = micro-USD per token), keyed by the model id
- * the AI client sends. Vertex AI global endpoint, standard price. Update with every model change.
+ * the AI client sends. From the shared model list the admin panel picks from.
  */
 export const AI_PRICES: Record<string, { input: number; output: number }> = {
-  'claude-haiku-4-5@20251001': { input: 1, output: 5 },
-  'claude-sonnet-5-5': { input: 2, output: 10 },
-  // Gemini on Vertex, global endpoint (thinking tokens are billed as output). 3 Flash at its price
-  // until 31 Dec 2026 (then $1.50 / $7.50: update this table).
-  'gemini-3-flash-preview': { input: 0.75, output: 3.75 },
-  'gemini-2.5-flash': { input: 0.3, output: 2.5 },
+  ...Object.fromEntries(AI_MODELS.map((m) => [m.id, { input: m.inputUsdPerM, output: m.outputUsdPerM }])),
   // The emulator stub costs what Haiku would, so the costs page shows realistic numbers in tests.
-  'stub': { input: 1, output: 5 },
+  stub: { input: 1, output: 5 },
 };
 
 /** Unknown models are charged at the most expensive known price, so a cap never under-counts. */

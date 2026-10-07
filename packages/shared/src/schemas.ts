@@ -4,6 +4,7 @@ import { validateInterval } from './hours.js';
 import { MAX_COMBO_ITEMS, MAX_PROMO_PRODUCTS } from './types.js';
 import { DISH_TYPES } from './dishIndex.js';
 import { PAIR_ANSWERS, PARTIES } from './taste/types.js';
+import { AI_MODEL_IDS } from './taste/models.js';
 
 export const localeSchema = z.enum(['he', 'ar', 'en']);
 export const localizedSchema = z
@@ -471,3 +472,5 @@ export const suggestMealsSchema = z
 export type SuggestMealsInput = z.infer<typeof suggestMealsSchema>;
 
 export const setAiDailyCapSchema = z.object({ usd: z.number().min(0).max(50) }).strict();
+
+export const aiModelInputSchema = z.object({ model: z.enum(AI_MODEL_IDS) }).strict();
