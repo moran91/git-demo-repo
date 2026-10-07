@@ -1,5 +1,5 @@
 import { doc, getDoc } from 'firebase/firestore';
-import { availableFulfillmentModes, makeId, priceLine, type CartLine, type CartModifierSelection, type Localized, type OrderLine } from '@qareeb/shared';
+import { availableFulfillmentModes, cheapestChoices, makeId, priceLine, type CartLine, type CartModifierSelection, type Localized, type OrderLine } from '@qareeb/shared';
 import { db } from '@/lib/firebase';
 import { addLine, cartBelongsTo, cartStore, type CartState } from '@/lib/cart';
 import type { PublicProduct } from '../BusinessPage';
@@ -44,18 +44,14 @@ function meta(product: PublicProduct, line: CartLine, modifierNames: Localized[]
  * starting price, so the meal sheet totals these lines, not the index.
  */
 export function defaultLine(product: PublicProduct, qty: number): FilledLine | null {
-  if (!product.available || !product.inStock) return null;
-  const size = [...product.variants].filter((v) => v.available).sort((a, b) => a.priceAgorot - b.priceAgorot)[0];
-  if (product.variants.length > 0 && !size) return null;
-  const modifiers: CartModifierSelection[] = [];
+  if (!product.inStock) return null;
+  // The same cheapest choices the server checked the wish's budget with.
+  const cheapest = cheapestChoices(product);
+  if (!cheapest) return null;
   const names: Localized[] = [];
-  for (const g of product.modifierGroups) {
-    const need = Math.max(g.minSelect, g.required ? 1 : 0);
-    if (need === 0) continue;
-    const opts = g.options.filter((o) => o.available).sort((a, b) => a.priceDeltaAgorot - b.priceDeltaAgorot || a.sortOrder - b.sortOrder).slice(0, need);
-    if (opts.length < need) return null;
-    modifiers.push({ groupId: g.id, optionIds: opts.map((o) => o.id) });
-    names.push(...opts.map((o) => o.name));
+  for (const sel of cheapest.modifiers) {
+    const g = product.modifierGroups.find((x) => x.id === sel.groupId);
+    for (const id of sel.optionIds) { const o = g?.options.find((x) => x.id === id); if (o) names.push(o.name); }
   }
   const step = product.quantityStep || 1;
   const minQ = product.minQuantity || 1;
@@ -63,8 +59,8 @@ export function defaultLine(product: PublicProduct, qty: number): FilledLine | n
   const draft: Omit<CartLine, 'expectedUnitPriceAgorot'> = {
     lineId: makeId(12),
     productId: product.id,
-    ...(size ? { variantId: size.id } : {}),
-    modifiers,
+    ...(cheapest.variantId ? { variantId: cheapest.variantId } : {}),
+    modifiers: cheapest.modifiers,
     quantity,
     ...(product.pricingMode === 'weight' ? { requestedGrams: product.minWeightGrams ?? product.weightStepGrams ?? 100 } : {}),
   };

@@ -86,7 +86,12 @@ export function CravingsHome({ restaurants, cityId, now, indexes, loading }: { r
   const multi = new Set(restaurants.filter((b, _i, all) => all.some((o) => o.businessId === b.businessId && o.id !== b.id)).map((b) => b.id));
   const canAsk = q.length > 0 && (isWish(q) || (results.length === 0 && !loading && hits.length > 0));
   const showWish = asked !== null && asked.wish === q;
-  const ask = () => { if (q) setAsked((a) => ({ wish: q, id: (a?.id ?? 0) + 1 })); };
+  const ask = (text = q) => { if (text) setAsked((a) => ({ wish: text, id: (a?.id ?? 0) + 1 })); };
+  // Enter reads the live text: the deferred copy can still lag a fast typist by a render.
+  const onEnter = () => {
+    const live = query.trim();
+    if (live && (isWish(live) || (live === q && canAsk))) ask(live);
+  };
   const openRows = results.filter((h) => h.open);
   const closedRows = results.filter((h) => !h.open);
   const row = (h: Hit) => <DishRow key={`${h.branchId}/${h.id}`} hit={h} query={search} showBranch={multi.has(h.branchId)} busy={quick.busy === `${h.branchId}/${h.id}`} onAdd={() => void quick.start(h)} />;
@@ -97,7 +102,7 @@ export function CravingsHome({ restaurants, cityId, now, indexes, loading }: { r
         <label className="crave-search__box">
           <Icon name="search" size={24} />
           <span className="visually-hidden">{t('cravings.searchLabel')}</span>
-          <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && canAsk) { e.preventDefault(); ask(); } }} placeholder={t('cravings.search')} autoComplete="off" enterKeyHint="search" />
+          <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onEnter(); } }} placeholder={t('cravings.search')} autoComplete="off" enterKeyHint="search" />
           {query ? <button type="button" className="crave-search__clear" onClick={() => setQuery('')} aria-label={t('cravings.clear')}><Icon name="x" size={18} /></button> : null}
         </label>
       </div>
@@ -117,7 +122,7 @@ export function CravingsHome({ restaurants, cityId, now, indexes, loading }: { r
 
       {active ? (
         <section className="crave-results" aria-live="polite">
-          {canAsk && !showWish ? <AskRow query={q} onAsk={ask} /> : null}
+          {canAsk && !showWish ? <AskRow query={q} onAsk={() => ask()} /> : null}
           {showWish ? <WishResults wish={asked.wish} askId={asked.id} restaurants={restaurants} indexes={indexes} cityId={cityId} now={now} onShowDishes={() => listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} /> : null}
           <div ref={listRef} />
           {resultsFor ? <p className="crave-for">{t('cravings.resultsFor', { q: resultsFor })}</p> : null}

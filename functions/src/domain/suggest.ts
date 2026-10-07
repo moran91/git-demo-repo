@@ -2,10 +2,10 @@ import { createHash } from 'node:crypto';
 import { onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { z } from 'zod';
 import {
-  buildMeals, daypartOf, deriveTaste, dishSearchFields, emptyTasteDoc, evaluateOpen, parseWish, partySize, scoreDish, setAiDailyCapSchema,
+  buildMeals, cheapestChoices, daypartOf, deriveTaste, dishSearchFields, emptyTasteDoc, evaluateOpen, parseWish, partySize, scoreDish, setAiDailyCapSchema,
   suggestMealsSchema, summaryLines, validateAiMeals, wishMatchLevel, wishQueries,
   type AiCandidate, type AiOutcome, type DerivedTaste, type DishFeedback, type DishIndexDoc, type DishType, type Locale, type Meal, type MealCandidate, type NoFit, type Order,
-  type PlatformConfig, type PopularDayparts, type PublicPopular, type SuggestMealsInput, type TasteDoc,
+  type PlatformConfig, type PopularDayparts, type Product, type PublicPopular, type SuggestMealsInput, type TasteDoc,
 } from '@qareeb/shared';
 import { REGION, col, db, nowIso } from '../lib/firebase.js';
 import { handled } from '../lib/errors.js';
@@ -62,6 +62,20 @@ function shuffle<T>(list: T[], seed: number): T[] {
     [out[i], out[j]] = [out[j]!, out[i]!];
   }
   return out;
+}
+
+/** Replaces the index price of dishes that need a choice with their cheapest choices; drops dishes whose choice cannot be made. */
+async function truePrices(list: MealCandidate[]): Promise<void> {
+  const needs = list.filter((c) => c.entry.needsChoice);
+  if (needs.length === 0) return;
+  const snaps = await db.getAll(...needs.map((c) => col.publicProducts(c.branchId).doc(c.productId)));
+  needs.forEach((c, i) => {
+    const product = snaps[i]!.exists ? (snaps[i]!.data() as Product) : null;
+    const cheapest = product ? cheapestChoices(product) : null;
+    if (cheapest) c.entry = { ...c.entry, priceAgorot: cheapest.unitPriceAgorot };
+    else c.score = -Infinity;
+  });
+  for (let i = list.length - 1; i >= 0; i--) if (list[i]!.score === -Infinity) list.splice(i, 1);
 }
 
 const REFINE_WORD: Record<Locale, string> = { he: 'חריף', ar: 'حار', en: 'spicy' };
@@ -141,6 +155,10 @@ export const suggestMeals = onCall(opts, handled(async (req: CallableRequest<unk
   // A wish that names a food keeps to the dishes that match it, plus each place's sides.
   const picked = topBranches.flatMap((b) => b.list.filter((c) => !wishMatched || c.wish !== undefined || (c.entry.dishType && ['snacks', 'salads', 'pastries', 'desserts'].includes(c.entry.dishType))).slice(0, PER_BRANCH));
 
+  // A dish with sizes or required options really costs its cheapest choices, which the index's
+  // starting price leaves out: read those menus so budgets and totals are checked on the true minimum.
+  await truePrices(picked);
+
   // The food asked for exists only at places that are closed now: say so rather than offer other food.
   const closedOnly = queries.length > 0 && !wishMatched && all.some((c) => !c.open && c.wish !== undefined);
   const rules = closedOnly ? { meals: [] as Meal[], noFit: 'closed' as NoFit } : buildMeals({ candidates: picked.length ? picked : all, facts, derived, popular: city.popular, now });
@@ -216,7 +234,9 @@ export const suggestMeals = onCall(opts, handled(async (req: CallableRequest<unk
     aiTimeouts: outcome === 'timeout' ? 1 : 0,
     ...(pickPosition ? { [`aiPickPos${pickPosition}`]: 1 } : {}),
   }, now).catch((e: unknown) => console.error('taste metrics failed', e instanceof Error ? e.message : e));
-  await recordAiSpend({ outcome, ...usage, ...(held ? { reserved } : {}), anon }, now).catch((e: unknown) => console.error('spend record failed', e instanceof Error ? e.message : e));
+  // The hold must be released or it counts against the cap until midnight: retry before giving up.
+  const record = () => recordAiSpend({ outcome, ...usage, ...(held ? { reserved } : {}), anon }, now);
+  await record().catch(() => new Promise((r) => setTimeout(r, 300)).then(record)).catch((e: unknown) => console.error('spend record failed', e instanceof Error ? e.message : e));
 
   // Names and prices stay out: the client renders them from its live dish indexes.
   return {
@@ -250,7 +270,7 @@ const EVENT_FIELD: Record<(typeof TASTE_EVENTS)[number], string> = { meal_added:
 export const trackTaste = onCall({ region: REGION }, handled(async (req: CallableRequest<unknown>) => {
   const input = parse(z.object({ event: z.enum(TASTE_EVENTS) }).strict(), req.data);
   const ipKey = createHash('sha256').update(req.rawRequest?.ip ?? 'unknown').digest('hex').slice(0, 16);
-  await rateLimit(req.auth ? `track:${req.auth.uid}` : `track:ip:${ipKey}`, 120, 3600);
+  await rateLimit(req.auth ? `track:${req.auth.uid}` : `track:ip:${ipKey}`, 30, 3600);
   await bumpTasteMetrics({ [EVENT_FIELD[input.event]]: 1 });
   return { ok: true };
 }));

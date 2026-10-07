@@ -239,3 +239,31 @@ describe('review fixes', () => {
     }
   });
 });
+
+describe('budgets use the true minimum price', () => {
+  it('a dish whose required option costs extra does not fit a budget its starting price would', async () => {
+    const pid = `e2e-mandi-${Date.now()}`;
+    const branch = IDS.branchB;
+    const option = (id: string, delta: number) => ({ id, name: { he: id }, priceDeltaAgorot: delta, available: true, sortOrder: 0 });
+    const product = {
+      id: pid, branchId: branch, businessId: IDS.restaurant, categoryId: 'c-mains', name: { he: 'מנסף מבחן' }, description: {}, dietaryText: {},
+      pricingMode: 'unit', priceAgorot: 3000, unitLabel: {}, quantityStep: 1, minQuantity: 1, variants: [], available: true, inStock: true, trackInventory: false, archived: false, sortOrder: 9,
+      modifierGroups: [{ id: 'rice', name: { he: 'אורז' }, required: true, minSelect: 1, maxSelect: 1, sortOrder: 0, options: [option('big', 1500), option('small', 1000)] }],
+    };
+    await admin.db.doc(`publicBranches/${branch}/products/${pid}`).set(product);
+    await admin.db.doc(`publicBranches/${branch}/index/dishes`).set({ dishes: { [pid]: { name: { he: 'מנסף מבחן' }, priceAgorot: 3000, fromPrice: false, dishType: 'mains', available: true, needsChoice: true, sortOrder: 9 } } }, { merge: true });
+    try {
+      // ₪35 covers the ₪30 starting price, not the ₪40 it really costs (₪30 + ₪10 rice).
+      const tight = await guest.call<Res>('suggestMeals', wish('מנסף מבחן עד 35', { ai: false }));
+      // Either it is left out, or it is only offered as one of the cheapest meals with "budget" named.
+      const offered = tight.meals.some((m) => m.items.some((i) => i.productId === pid));
+      expect(!offered || tight.noFit === 'budget').toBe(true);
+      const roomy = await guest.call<Res>('suggestMeals', wish('מנסף מבחן עד 45', { ai: false }));
+      expect(roomy.meals.some((m) => m.items.some((i) => i.productId === pid))).toBe(true);
+      expect(roomy.noFit).toBe('none');
+    } finally {
+      await admin.db.doc(`publicBranches/${branch}/products/${pid}`).delete();
+      await admin.db.doc(`publicBranches/${branch}/index/dishes`).update({ [`dishes.${pid}`]: FieldValue.delete() });
+    }
+  });
+});

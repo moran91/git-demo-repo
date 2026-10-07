@@ -308,3 +308,31 @@ export const LOYALTY_BOUNDS = {
   redeemValueAgorot: { min: 1, max: 10000 },
   maxDiscountPercent: { min: 0, max: 50 },
 } as const;
+
+/**
+ * The least a unit of this dish can cost: the cheapest available size and, for each group that must
+ * be answered, its cheapest available options up to the minimum. Null when a required choice cannot
+ * be made. Wishes check budgets with this, and meals are added to the cart with exactly these choices.
+ */
+export function cheapestChoices(product: Product): { variantId?: string; modifiers: CartModifierSelection[]; unitPriceAgorot: Agorot } | null {
+  if (product.archived || !product.available) return null;
+  let base = product.priceAgorot;
+  let variantId: string | undefined;
+  if (product.variants.length > 0) {
+    const size = product.variants.filter((v) => v.available).sort((a, b) => a.priceAgorot - b.priceAgorot)[0];
+    if (!size) return null;
+    base = size.priceAgorot;
+    variantId = size.id;
+  }
+  const modifiers: CartModifierSelection[] = [];
+  let delta = 0;
+  for (const g of product.modifierGroups) {
+    const need = Math.max(g.minSelect, g.required ? 1 : 0);
+    if (need === 0) continue;
+    const opts = g.options.filter((o) => o.available).sort((a, b) => a.priceDeltaAgorot - b.priceDeltaAgorot || a.sortOrder - b.sortOrder).slice(0, need);
+    if (opts.length < need) return null;
+    modifiers.push({ groupId: g.id, optionIds: opts.map((o) => o.id) });
+    delta += opts.reduce((s, o) => s + o.priceDeltaAgorot, 0);
+  }
+  return { ...(variantId ? { variantId } : {}), modifiers, unitPriceAgorot: base + delta };
+}
