@@ -9,7 +9,7 @@ import { Badge, Button, Skeleton, TextInput, toast } from '@/design/components';
 
 /** Rough shekel equivalent beside dollars: the rate qareeb-dev's billing account used in October 2026. */
 const ILS_PER_USD = 3.07;
-const MODEL_NAMES: Record<string, string> = { 'claude-haiku-4-5@20251001': 'Claude Haiku 4.5', 'claude-sonnet-5-5': 'Claude Sonnet 5.5', stub: 'Stub (emulator)' };
+const MODEL_NAMES: Record<string, string> = { 'claude-haiku-4-5@20251001': 'Claude Haiku 4.5', 'claude-sonnet-5-5': 'Claude Sonnet 5.5', 'gemini-2.5-flash': 'Gemini 2.5 Flash', 'gemini-3-flash-preview': 'Gemini 3 Flash', stub: 'Stub (emulator)' };
 
 const usd = (micro: number, digits = 2) => `$${(micro / 1_000_000).toFixed(digits)}`;
 const ils = (micro: number) => `≈ ₪${((micro / 1_000_000) * ILS_PER_USD).toFixed(2)}`;

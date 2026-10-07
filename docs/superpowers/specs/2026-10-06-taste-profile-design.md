@@ -399,6 +399,16 @@ Selection rule:
 2. Then p95 latency under 3 s.
 3. Price only breaks ties.
 
+**Measured 2026-10-07** (`npm run eval:suggest -w scripts -- <model>`, 50 wishes, same prompt and validator). Claude Haiku 4.5 is enabled in Model Garden, but Google denied the per-minute quota for it on `qareeb-dev` (0 requests/minute; requests for 60 and 10 were auto-denied), so it could not be measured.
+
+| Model | Constraint pass (all / he / ar / mixed) | No valid AI meal | Titles valid | p50 / p95 | Cost per 50 |
+|---|---|---|---|---|---|
+| Gemini 3 Flash (preview) | 78% / 85% / 75% / 70% | 14% | 94% | 1.69 s / 3.08 s | $0.062 |
+| Gemini 2.5 Flash | 72% / 70% / 80% / 60% | 20% | 96% | 1.16 s / 1.97 s | $0.025 |
+| Gemini 2.5 Flash, prompt with explicit portion and budget rules | 74% / 85% / 70% / 60% | 10% | 100% | 1.23 s / 1.72 s | $0.029 |
+
+Decision: **Gemini 2.5 Flash** (`AI_MODEL=gemini-2.5-flash`). The Arabic and mixed pass rate tied with 3 Flash (22/30), so the p95 rule decided. Switching to Claude Haiku once the quota is granted is the one setting `AI_MODEL=claude-haiku-4-5@20251001`; rerun the eval first.
+
 Open models in Model Garden (Llama, Qwen, Gemma, DeepSeek, gpt-oss) are not free to run: either Google's managed API charges per token, or a self-deployed endpoint bills GPU hours around the clock, which is hundreds of dollars a month at our traffic. One managed open model (Qwen3 235B, the strongest Arabic among them) is added to the eval as a fourth row for comparison only; adopting it would need a second adapter in `lib/claude.ts`.
 
 Models under $0.30 per million input tokens (Flash-Lite, GPT nano and mini) are left out. They save about $20 a month at most, and a failed answer falls back to `buildMeals`, which is the "dumb answers" problem this feature exists to fix. OpenAI models would also need a separate account, key and data agreement.

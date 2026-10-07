@@ -1,3 +1,4 @@
+import { applicationDefault } from 'firebase-admin/app';
 import { AnthropicVertex } from '@anthropic-ai/vertex-sdk';
 
 /** One structured call: the system rules, the user message, and the JSON schema the answer must follow. */
@@ -81,9 +82,51 @@ const stubPicker: MealPicker = {
   },
 };
 
+/**
+ * Gemini on Vertex AI in this project, same service account and bill. JSON-schema structured output
+ * and the least thinking the model allows, so answers stay inside the 4.5 s budget. Thinking tokens
+ * are billed as output, so they are counted as output.
+ */
+function geminiPicker(model: string): MealPicker {
+  return {
+    model,
+    async pick({ system, user, schema, signal }) {
+      const project = process.env.GCLOUD_PROJECT ?? process.env.GOOGLE_CLOUD_PROJECT;
+      const { access_token: token } = await applicationDefault().getAccessToken();
+      const thinkingConfig = model.startsWith('gemini-2') ? { thinkingBudget: 0 } : { thinkingLevel: 'minimal' };
+      const res = await fetch(`https://aiplatform.googleapis.com/v1/projects/${project}/locations/${process.env.AI_REGION || 'global'}/publishers/google/models/${model}:generateContent`, {
+        method: 'POST',
+        signal,
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: [{ role: 'user', parts: [{ text: user }] }],
+          generationConfig: { maxOutputTokens: MAX_OUT_TOKENS, temperature: 0.4, responseMimeType: 'application/json', responseJsonSchema: schema, thinkingConfig },
+        }),
+      });
+      if (!res.ok) throw new Error(`gemini ${res.status}: ${(await res.text()).slice(0, 300)}`);
+      const data = (await res.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>; usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number } };
+      const text = (data.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('');
+      let json: unknown = null;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = null;
+      }
+      const u = data.usageMetadata ?? {};
+      return { json, inTok: u.promptTokenCount ?? 0, outTok: (u.candidatesTokenCount ?? 0) + (u.thoughtsTokenCount ?? 0) };
+    },
+  };
+}
+
+/** The picker for a model id: Gemini ids go to Gemini, everything else to Claude. */
+export function pickerFor(model: string): MealPicker {
+  return model.startsWith('gemini') ? geminiPicker(model) : vertexPicker(model);
+}
+
 export function getMealPicker(): MealPicker {
   if (process.env.FUNCTIONS_EMULATOR === 'true') return stubPicker;
-  return vertexPicker(process.env.AI_MODEL || DEFAULT_AI_MODEL);
+  return pickerFor(process.env.AI_MODEL || DEFAULT_AI_MODEL);
 }
 
 /** AI_SUGGEST=1 in functions/.env switches the AI on; off, every wish is answered by code. */

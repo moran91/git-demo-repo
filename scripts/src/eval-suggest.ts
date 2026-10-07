@@ -4,19 +4,19 @@
  * qareeb-dev (`gcloud auth application-default login`) and the model enabled in Model Garden.
  *
  *   npm run eval:suggest -w scripts                      # Claude Haiku 4.5
- *   npm run eval:suggest -w scripts -- claude-sonnet-5-5 # another model id, same prompt
+ *   npm run eval:suggest -w scripts -- gemini-3-flash-preview # another model id, same prompt
  *
  * 50 fixed wishes (20 Hebrew, 20 Arabic, 10 mixed / Arabizi with typos) against a fixture village.
  * Scores what the selection rule needs: constraint pass rate (budget, party, no drinks, ids only),
  * variety between the two meals, title validity, fallback rate, p95 latency and cost.
  */
-import { AnthropicVertex } from '@anthropic-ai/vertex-sdk';
 import {
   deriveTaste, dishKey, dishSearchFields, parseWish, partySize, scoreDish, validateAiMeals, wishMatchLevel, wishQueries,
   type AiCandidate, type DishIndexEntry, type DishType, type Locale, type MealCandidate,
 } from '@qareeb/shared';
 import { SYSTEM, schemaFor, userMessage } from '../../functions/src/lib/mealPrompt.ts';
-import { AI_PRICES } from '../../functions/src/lib/prices.ts';
+import { aiPrice } from '../../functions/src/lib/prices.ts';
+import { pickerFor } from '../../functions/src/lib/claude.ts';
 
 const MODEL = process.argv[2] ?? 'claude-haiku-4-5@20251001';
 const PROJECT = process.env.GCLOUD_PROJECT ?? 'qareeb-dev';
@@ -57,8 +57,9 @@ for (const p of PLACES) {
 }
 const derived = deriveTaste({ doc: null, orders: [], feedback: [], now });
 
-const client = new AnthropicVertex({ region: process.env.AI_REGION || 'global', projectId: PROJECT });
-const price = AI_PRICES[MODEL] ?? { input: 1, output: 5 };
+process.env.GCLOUD_PROJECT = PROJECT;
+const picker = pickerFor(MODEL);
+const price = aiPrice(MODEL);
 type Row = { wish: string; ok: boolean; meals: number; rejected: string[]; variety: boolean; titlesOk: boolean; ms: number; micro: number; fallback: string | null };
 const rows: Row[] = [];
 
@@ -76,19 +77,14 @@ for (const [wish, locale] of WISHES) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const res = await client.messages.create(
-      { model: MODEL, max_tokens: 500, system: SYSTEM, messages: [{ role: 'user', content: user }], output_config: { format: { type: 'json_schema', schema: schemaFor() } } },
-      { signal: controller.signal, maxRetries: 0 },
-    );
+    const res = await picker.pick({ system: SYSTEM, user, schema: schemaFor(), signal: controller.signal });
     const ms = Date.now() - started;
-    const text = res.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
-    let json: unknown = null;
-    try { json = JSON.parse(text); } catch { /* counted as invalid */ }
+    const json = res.json;
     const raw = (json as { meals?: Array<{ title?: unknown }> } | null)?.meals ?? [];
     const valid = validateAiMeals(json, { candidates: new Map(candidates.map((c) => [c.alias, c])), facts, locale });
     const constraintRejects = valid.rejected.filter((r) => r !== 'title' && r !== 'duplicate');
     rows.push({
-      wish, ms, micro: res.usage.input_tokens * price.input + res.usage.output_tokens * price.output,
+      wish, ms, micro: res.inTok * price.input + res.outTok * price.output,
       ok: constraintRejects.length === 0 && valid.meals.length > 0,
       meals: valid.meals.length, rejected: valid.rejected,
       variety: valid.meals.length < 2 || valid.meals[0]!.branchId !== valid.meals[1]!.branchId,
